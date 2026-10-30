@@ -10,6 +10,10 @@ import {
   setMerchant,
   seedMerchantMemory,
 } from "./ingest/merchants";
+import {
+  classifyUnknownMerchants,
+  claudeConfig,
+} from "./ingest/classify";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -106,6 +110,7 @@ export async function handleChitraguptaApi(
     path === "/api/review-queue" ||
     path === "/api/merchants" ||
     path === "/api/digest" ||
+    path === "/api/classify/run" ||
     path === "/api/aggregates";
   if (needDb) {
     const ensured = requireDb(db);
@@ -149,7 +154,12 @@ async function routeWithDb(
       const results = ingestAll(db, dir, "zonito");
       seedMerchantMemory(db);
       recomputeAggregates(db, "zonito");
-      return json({ ok: true, results });
+      // Classification drains behind ingest; with no key it is an instant
+      // no-op, and failures never fail the ingest itself.
+      const classification = await classifyUnknownMerchants(db).catch(
+        () => null,
+      );
+      return json({ ok: true, results, classification });
     } catch (error) {
       return json(
         {
@@ -163,6 +173,15 @@ async function routeWithDb(
 
   if (path === "/api/review-queue" && request.method === "GET") {
     return json({ ok: true, queue: reviewQueue(db) });
+  }
+
+  if (path === "/api/classify/run" && request.method === "GET") {
+    return json({ ok: true, configured: claudeConfig() !== null });
+  }
+
+  if (path === "/api/classify/run" && request.method === "POST") {
+    const summary = await classifyUnknownMerchants(db);
+    return json({ ok: true, ...summary });
   }
 
   if (path === "/api/merchants" && request.method === "POST") {

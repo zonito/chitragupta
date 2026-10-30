@@ -36,6 +36,14 @@ Copy `.env.example` to `.env` and fill in the paths. The store is created
 on first ingest; page loads serve precomputed aggregates and never rescan
 CSV files.
 
+Optional: `MUSE_API_KEY` is the only API key the app reads. When set,
+merchants the built-in rules cannot classify are sent (name, transaction
+type and count only — never amounts, balances or account details) to the
+Muse API once each and remembered; when unset, classification stays
+rules-only and unknown merchants wait in the review queue.
+`MUSE_API_BASE_URL` optionally points at a gateway instead of
+`https://api.anthropic.com`.
+
 ## Product rules (frozen)
 
 - Household combined view is the default, with per-person views.
