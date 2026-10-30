@@ -27,7 +27,7 @@ function Coach() {
       chart: true,
     });
   }
-  const risen = SUBS.find((s) => s.status.includes("Price increased"));
+  const risen = SUBS.find((s) => s.note?.includes("→"));
   if (risen) {
     const prev = risen.note ? Number(risen.note.replace(/,/g, "").match(/£([\d.]+)/)?.[1]) : NaN;
     insights.push({

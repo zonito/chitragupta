@@ -68,8 +68,14 @@ export interface IncomeEntry {
   type: "Salary" | (string & {});
 }
 export interface Sub {
-  name: string; amount: number; freq: "Monthly" | "Yearly"; last: string; card: string;
-  owner: Owner; status: ("Active" | "Price increased" | "Did not migrate")[]; note?: string;
+  name: string; amount: number; freq: "Weekly" | "Monthly" | "Quarterly" | "Yearly"; last: string; card: string;
+  owner: Owner; status: "Active" | "Ended"; note?: string;
+  /** Number of charges in the recurring amount cluster that defines this sub. */
+  charges: number;
+  /** ISO date of the next expected charge; Active subs only, else null. */
+  nextExpected: string | null;
+  /** Store merchant names grouped into this sub (name variants). */
+  variants: string[];
 }
 export interface CardItem {
   label: string; type: "Virtual" | "Physical"; last4: string; owner: Owner;
@@ -267,8 +273,9 @@ export function sparkFor(c: string, p: Person): number[] {
   return snapshot.sparks[c]?.[p] ?? [];
 }
 
-export const monthlyOf = (s: Sub) => (s.freq === "Monthly" ? s.amount : s.amount / 12);
-export const yearlyOf = (s: Sub) => (s.freq === "Monthly" ? s.amount * 12 : s.amount);
+const PER_YEAR: Record<Sub["freq"], number> = { Weekly: 52, Monthly: 12, Quarterly: 4, Yearly: 1 };
+export const yearlyOf = (s: Sub) => s.amount * PER_YEAR[s.freq];
+export const monthlyOf = (s: Sub) => yearlyOf(s) / 12;
 
 export const gbp = (n: number, dp = true) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", minimumFractionDigits: dp ? 2 : 0, maximumFractionDigits: dp ? 2 : 0 }).format(n);

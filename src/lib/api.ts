@@ -330,6 +330,7 @@ async function routeWithDb(
   if (path === "/api/transactions" && request.method === "GET") {
     const person = url.searchParams.get("person");
     const month = url.searchParams.get("month");
+    const merchant = url.searchParams.get("merchant")?.trim();
     const q = url.searchParams.get("q")?.trim();
     const category = url.searchParams.get("category");
     const limit = Math.min(
@@ -345,6 +346,12 @@ async function routeWithDb(
     if (month) {
       where.push("t.year_month = ?");
       params.push(month);
+    }
+    if (merchant) {
+      // Exact merchant match (unlike q's LIKE over merchant+description) —
+      // the subscription detail view fetches one merchant's charges.
+      where.push("t.merchant = ?");
+      params.push(merchant);
     }
     if (q) {
       where.push("(t.merchant LIKE ? OR t.description LIKE ?)");

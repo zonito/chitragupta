@@ -18,6 +18,7 @@ import {
   type UpcomingPayment,
 } from "./data";
 import { ACCOUNT_TXN_LABEL, uiCategory } from "./txn-map";
+import { detectSubscriptions } from "./subscriptions";
 
 /**
  * Builds the UI snapshot from the real store. Server-only (better-sqlite3);
@@ -249,8 +250,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   }
   upcoming.sort((a, b) => a.day - b.day);
 
-  // Subscriptions: merchants charging in 3+ distinct months with a monthly
-  // or yearly cadence, or remembered as Subscriptions in merchant memory.
+  // Subscriptions: pattern-only detection (recurring amount cluster on a
+  // regular cadence) — see src/lib/subscriptions.ts. Merchant memory's
+  // category no longer admits or excludes anything here.
   const allSpend = db
     .prepare(
       `SELECT fingerprint, person, account, effective_date, year_month, description,
@@ -259,47 +261,23 @@ function buildFromDb(db: Database.Database): DataSnapshot {
        ORDER BY effective_date`,
     )
     .all() as Row[];
-  const spendByMerchant = new Map<string, Row[]>();
-  for (const row of allSpend) {
-    const list = spendByMerchant.get(row.merchant) ?? [];
-    list.push(row);
-    spendByMerchant.set(row.merchant, list);
-  }
-  const subs: Sub[] = [];
-  for (const [merchant, charges] of spendByMerchant) {
-    const distinctMonths = new Set(charges.map((c) => c.year_month));
-    if (distinctMonths.size < 3) continue;
-    const gaps: number[] = [];
-    for (let i = 1; i < charges.length; i++) {
-      gaps.push(
-        (Date.parse(day10(charges[i]!.effective_date)) - Date.parse(day10(charges[i - 1]!.effective_date))) / 86400000,
-      );
-    }
-    const medianGap = median(gaps);
-    const isMonthly = medianGap >= 20 && medianGap <= 40;
-    const isYearly = medianGap >= 300 && medianGap <= 400;
-    const category = uiCategory(resolveCategory(charges[charges.length - 1]!, memory));
-    if (!isMonthly && !isYearly && category !== "Subscriptions") continue;
-    const last = charges[charges.length - 1]!;
-    const prev = charges[charges.length - 2];
-    const status: Sub["status"] = ["Active"];
-    let note: string | undefined;
-    if (prev && Math.abs(last.amount_minor) > Math.abs(prev.amount_minor)) {
-      status.push("Price increased");
-      note = `${gbp(Math.abs(prev.amount_minor) / 100)} → ${gbp(Math.abs(last.amount_minor) / 100)}`;
-    }
-    subs.push({
-      name: merchant,
-      amount: Math.abs(last.amount_minor) / 100,
-      freq: isYearly ? "Yearly" : "Monthly",
-      last: shortDayLabel(last.effective_date),
-      card: ACCOUNT_TXN_LABEL[last.account] ?? last.account,
-      owner: last.account === "Joint" ? "joint" : (last.person as Owner),
-      status,
-      ...(note ? { note } : {}),
-    });
-  }
-  subs.sort((a, b) => b.amount - a.amount);
+  const latestRow = db
+    .prepare(`SELECT MAX(substr(effective_date, 1, 10)) AS d FROM transactions`)
+    .get() as { d: string | null };
+  const subs: Sub[] = detectSubscriptions(
+    allSpend.map((r) => ({
+      merchant: r.merchant,
+      date: r.effective_date,
+      amountMinor: r.amount_minor,
+      account: r.account,
+      person: r.person,
+    })),
+    latestRow.d ?? current,
+    {
+      dateLabel: shortDayLabel,
+      accountLabel: (account) => ACCOUNT_TXN_LABEL[account] ?? account,
+    },
+  );
 
   // New merchants: first-ever spend lands in the current month.
   const firstSeen = db
