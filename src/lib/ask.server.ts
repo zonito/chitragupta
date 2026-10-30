@@ -12,9 +12,9 @@ import { searchRecords } from "./record-search";
 import { apiTxnToTxn, type ApiTxnRow } from "./txn-map";
 import {
   gatewayCallCount,
+  gatewayConfig,
   lastGatewayStatus,
   museComplete,
-  museConfig,
   type GatewayStatus,
 } from "./muse.server";
 
@@ -438,12 +438,12 @@ export async function answerAsk(
     }
   };
   const gateway = (): GatewayStatus =>
-    gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false };
+    gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false, provider: null };
 
   // 0. Plan: the model planner runs first when a key is configured; a
   // reply that fails strict validation is discarded wholesale.
   let modelPlan: AskPlan | null = null;
-  if (museConfig(env) !== null) {
+  if (gatewayConfig(env) !== null) {
     const weekday = new Intl.DateTimeFormat("en-GB", {
       weekday: "long",
       timeZone: "UTC",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   gatewayCallCount,
+  gatewayConfig,
   lastGatewayStatus,
   museComplete,
   museConfig,
@@ -145,6 +146,7 @@ describe("Meta Model API gateway client", () => {
     expect(lastGatewayStatus()).toEqual({
       attempted: true,
       ok: true,
+      provider: "meta",
       status: 200,
     });
   });
@@ -163,5 +165,211 @@ describe("Meta Model API gateway client", () => {
       fetchImpl,
     });
     expect(text).toBeNull();
+  });
+});
+
+const OC_KEY = "oc_sk_test_dummy";
+
+function goFetch(
+  seen: { url?: string; init?: RequestInit | undefined },
+  reply: { content: string | null; finishReason?: string } = {
+    content: "Go reply",
+    finishReason: "stop",
+  },
+) {
+  return (async (url: string | URL | Request, init?: RequestInit) => {
+    seen.url = String(url);
+    seen.init = init;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: { role: "assistant", content: reply.content },
+            finish_reason: reply.finishReason ?? "stop",
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }),
+    } as Response;
+  }) as typeof fetch;
+}
+
+describe("OpenCode Go gateway provider", () => {
+  it("resolves the Go config and takes precedence over the Meta key", () => {
+    expect(gatewayConfig({})).toBeNull();
+    expect(gatewayConfig({ OPENCODE_API_KEY: OC_KEY })).toEqual({
+      provider: "opencode-go",
+      apiKey: OC_KEY,
+      baseUrl: "https://opencode.ai/zen/go/v1",
+      model: "muse-spark-1.3-contributor",
+    });
+    expect(
+      gatewayConfig({ OPENCODE_API_KEY: OC_KEY, OPENCODE_MODEL: "glm-5.2" })
+        ?.model,
+    ).toBe("glm-5.2");
+    // Both keys set: Go wins.
+    expect(
+      gatewayConfig({ OPENCODE_API_KEY: OC_KEY, MUSE_API_KEY: TEST_KEY })
+        ?.provider,
+    ).toBe("opencode-go");
+    // A blank OpenCode key falls through to Meta.
+    expect(
+      gatewayConfig({ OPENCODE_API_KEY: "  ", MUSE_API_KEY: TEST_KEY }),
+    ).toEqual({
+      provider: "meta",
+      apiKey: TEST_KEY,
+      baseUrl: "https://api.meta.ai",
+      model: "muse-spark-1.3-contributor",
+    });
+  });
+
+  it("posts to /chat/completions with Bearer auth, the session header and the token floor", async () => {
+    const seen: { url?: string; init?: RequestInit } = {};
+    const text = await museComplete({
+      system: "Be brief.",
+      prompt: "Say hello",
+      maxTokens: 200,
+      env: { OPENCODE_API_KEY: OC_KEY },
+      fetchImpl: goFetch(seen),
+    });
+    expect(text).toBe("Go reply");
+    expect(seen.url).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+    const headers = seen.init?.headers as Record<string, string>;
+    expect(headers["authorization"]).toBe(`Bearer ${OC_KEY}`);
+    expect(headers["x-opencode-session"]).toBe("chitragupta");
+    expect(headers["content-type"]).toBe("application/json");
+    const body = JSON.parse(String(seen.init?.body)) as {
+      model: string;
+      max_tokens: number;
+      messages: { role: string; content: string }[];
+    };
+    expect(body.model).toBe("muse-spark-1.3-contributor");
+    // The reasoning model needs headroom: a 200 request is floored to 2000.
+    expect(body.max_tokens).toBe(2000);
+    expect(body.messages).toEqual([
+      { role: "system", content: "Be brief." },
+      { role: "user", content: "Say hello" },
+    ]);
+    expect(lastGatewayStatus()).toEqual({
+      attempted: true,
+      ok: true,
+      provider: "opencode-go",
+      status: 200,
+    });
+  });
+
+  it("keeps a generous requested budget and omits an empty system message", async () => {
+    const seen: { url?: string; init?: RequestInit } = {};
+    await museComplete({
+      prompt: "hi",
+      maxTokens: 4096,
+      env: { OPENCODE_API_KEY: OC_KEY },
+      fetchImpl: goFetch(seen),
+    });
+    const body = JSON.parse(String(seen.init?.body)) as {
+      max_tokens: number;
+      messages: { role: string; content: string }[];
+    };
+    expect(body.max_tokens).toBe(4096);
+    expect(body.messages).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("uses the Go route end-to-end when both keys are set", async () => {
+    const seen: { url?: string; init?: RequestInit } = {};
+    const text = await museComplete({
+      prompt: "hi",
+      env: { OPENCODE_API_KEY: OC_KEY, MUSE_API_KEY: TEST_KEY },
+      fetchImpl: goFetch(seen),
+    });
+    expect(text).toBe("Go reply");
+    expect(seen.url).toContain("opencode.ai");
+  });
+
+  it("returns null and records the finish_reason when reasoning eats the budget", async () => {
+    const seen: { url?: string; init?: RequestInit } = {};
+    const text = await museComplete({
+      prompt: "hi",
+      env: { OPENCODE_API_KEY: OC_KEY },
+      fetchImpl: goFetch(seen, { content: null, finishReason: "length" }),
+    });
+    expect(text).toBeNull();
+    const status = lastGatewayStatus();
+    expect(status).toMatchObject({
+      attempted: true,
+      ok: false,
+      provider: "opencode-go",
+      status: 200,
+    });
+    expect(status.error).toContain("no content");
+    expect(status.error).toContain("length");
+  });
+
+  it("returns null on empty content", async () => {
+    const seen: { url?: string; init?: RequestInit } = {};
+    const text = await museComplete({
+      prompt: "hi",
+      env: { OPENCODE_API_KEY: OC_KEY },
+      fetchImpl: goFetch(seen, { content: "  ", finishReason: "stop" }),
+    });
+    expect(text).toBeNull();
+    expect(lastGatewayStatus().ok).toBe(false);
+  });
+
+  it("records a Go HTTP error, redacting BOTH keys from the excerpt", async () => {
+    const errorBody = JSON.stringify({
+      type: "error",
+      error: {
+        type: "MissingSessionID",
+        message: `keys ${OC_KEY} and ${TEST_KEY} rejected`,
+      },
+    });
+    const fetchImpl = (async () =>
+      ({
+        ok: false,
+        status: 400,
+        text: async () => errorBody,
+        json: async () => ({}),
+      }) as unknown as Response) as typeof fetch;
+    const text = await museComplete({
+      prompt: "hi",
+      env: { OPENCODE_API_KEY: OC_KEY, MUSE_API_KEY: TEST_KEY },
+      fetchImpl,
+    });
+    expect(text).toBeNull();
+    const status = lastGatewayStatus();
+    expect(status).toMatchObject({
+      attempted: true,
+      ok: false,
+      provider: "opencode-go",
+      status: 400,
+    });
+    expect(status.error).toContain("MissingSessionID");
+    const serialised = JSON.stringify(status);
+    expect(serialised).not.toContain(OC_KEY);
+    expect(serialised).not.toContain(TEST_KEY);
+  });
+
+  it("records provider meta on a Meta-route failure", async () => {
+    const fetchImpl = (async () =>
+      ({
+        ok: false,
+        status: 402,
+        text: async () => "billing verification failed",
+        json: async () => ({}),
+      }) as unknown as Response) as typeof fetch;
+    const text = await museComplete({
+      prompt: "hi",
+      env: { MUSE_API_KEY: TEST_KEY },
+      fetchImpl,
+    });
+    expect(text).toBeNull();
+    expect(lastGatewayStatus()).toMatchObject({
+      attempted: true,
+      ok: false,
+      provider: "meta",
+      status: 402,
+    });
   });
 });

@@ -3,11 +3,11 @@ import { recomputeAggregates } from "./ingest";
 import { reviewQueue, setMerchant } from "./merchants";
 import {
   gatewayCallCount,
+  gatewayConfig,
   lastGatewayStatus,
   museComplete,
-  museConfig,
+  type GatewayConfig,
   type GatewayStatus,
-  type MuseConfig,
 } from "../muse.server";
 
 /**
@@ -17,10 +17,9 @@ import {
  * name, its dominant movement type, and a transaction count. No amounts
  * (beyond that count), no balances, no account identifiers, no dates.
  *
- * Calls go through the shared Meta Model API gateway client
- * (src/lib/muse.server.ts): MUSE_API_KEY is the key, MUSE_API_BASE_URL
- * defaults to https://api.meta.ai, MUSE_MODEL defaults to
- * muse-spark-1.3-contributor. With no key configured this module is a
+ * Calls go through the shared gateway client (src/lib/muse.server.ts):
+ * OpenCode Go when OPENCODE_API_KEY is set, else the Meta Model API
+ * when MUSE_API_KEY is set. With no key configured this module is a
  * strict no-op: the review queue simply accumulates until a key exists.
  * Classification runs after ingest or via POST /api/classify/run; it
  * never blocks page loads, and a failed call leaves the merchant queued
@@ -39,13 +38,13 @@ export const CLASSIFIABLE_CATEGORIES = [
   "One-off",
 ] as const;
 
-export type ClaudeConfig = MuseConfig;
+export type ClaudeConfig = GatewayConfig;
 
 /** Gateway configuration for classification (kept name for existing callers). */
 export function claudeConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): ClaudeConfig | null {
-  return museConfig(env);
+  return gatewayConfig(env);
 }
 
 export type ClassifySummary = {
@@ -138,11 +137,11 @@ export async function classifyUnknownMerchants(
   if (!config) {
     return {
       ran: false,
-      reason: "MUSE_API_KEY is not set; staying rules-only",
+      reason: "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only",
       classified: 0,
       failed: 0,
       remaining: queue.length,
-      gateway: { attempted: false, ok: false },
+      gateway: { attempted: false, ok: false, provider: null },
     };
   }
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -198,6 +197,6 @@ export async function classifyUnknownMerchants(
     classified,
     failed,
     remaining: reviewQueue(db).length,
-    gateway: gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false },
+    gateway: gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false, provider: null },
   };
 }

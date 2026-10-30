@@ -53,7 +53,7 @@ describe("Muse classification client (Fix 5)", () => {
 
   it("classifies a queued merchant and remembers it as claude-api", async () => {
     const db = seededDb();
-    const seen: { url?: string; init?: RequestInit } = {};
+    const seen: { url?: string; init?: RequestInit | undefined } = {};
     const summary = await classifyUnknownMerchants(db, {
       env: { MUSE_API_KEY: TEST_KEY },
       fetchImpl: okFetch(seen) as typeof fetch,
@@ -100,10 +100,56 @@ describe("Muse classification client (Fix 5)", () => {
     db.close();
   });
 
+  it("classifies through OpenCode Go when only OPENCODE_API_KEY is set", async () => {
+    const db = seededDb();
+    const seen: { url?: string; init?: RequestInit | undefined } = {};
+    const goOkFetch = (async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      seen.url = String(url);
+      seen.init = init;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content:
+                  '{"category":"Shopping","icon":"shopping-bag","colour":"#3b82f6"}',
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+    const summary = await classifyUnknownMerchants(db, {
+      env: { OPENCODE_API_KEY: "oc_sk_test_dummy" },
+      fetchImpl: goOkFetch,
+    });
+    expect(summary).toMatchObject({ ran: true, classified: 1, failed: 0 });
+    expect(summary.gateway).toMatchObject({
+      attempted: true,
+      ok: true,
+      provider: "opencode-go",
+    });
+    expect(seen.url).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+    const headers = seen.init?.headers as Record<string, string>;
+    expect(headers["x-opencode-session"]).toBe("chitragupta");
+    // Classification asks for ~200 tokens; the Go route floors it to 2000.
+    const body = JSON.parse(String(seen.init?.body)) as { max_tokens: number };
+    expect(body.max_tokens).toBe(2000);
+    expect(reviewQueue(db)).toHaveLength(0);
+    db.close();
+  });
+
   it("reports no gateway attempt when no key is configured", async () => {
     const db = seededDb();
     const summary = await classifyUnknownMerchants(db, { env: {} });
-    expect(summary.gateway).toEqual({ attempted: false, ok: false });
+    expect(summary.gateway).toEqual({ attempted: false, ok: false, provider: null });
     db.close();
   });
 

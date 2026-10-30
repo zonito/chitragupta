@@ -36,8 +36,12 @@ Copy `.env.example` to `.env` and fill in the paths. The store is created
 on first ingest; page loads serve precomputed aggregates and never rescan
 CSV files.
 
-Optional: `MUSE_API_KEY` is the only API key the app reads — a Meta
-Model API key (it starts with `LLM_`). When set, merchants the built-in
+Optional: the app reads two alternative gateway keys. `OPENCODE_API_KEY`
+(OpenCode Go) takes precedence when set: classification and Ask are
+served by the Go subscription at `https://opencode.ai/zen/go/v1`,
+with `OPENCODE_MODEL` defaulting to `muse-spark-1.3-contributor`.
+Otherwise `MUSE_API_KEY` — a Meta Model API key (it starts with
+`LLM_`) — is used. When a key is set, merchants the built-in
 rules cannot classify are sent (name, transaction type and count only —
 never amounts, balances or account details) to the model once each and
 remembered; when unset, classification stays rules-only and unknown

@@ -128,6 +128,51 @@ describe("parseAskPlan validation", () => {
 });
 
 describe("planner-driven Ask", () => {
+  it("plans and answers through OpenCode Go when only OPENCODE_API_KEY is set", async () => {
+    const db: Database.Database = transportDb();
+    // Go-shaped mock: the planner is the call whose system MESSAGE (the
+    // first chat message) names the query planner.
+    const goFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        messages: { role: string; content: string }[];
+      };
+      const system = body.messages.find((m) => m.role === "system")?.content ?? "";
+      const isPlanner = system.includes("query planner");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: isPlanner
+                  ? WEEK_PLAN
+                  : "Transport this week came to £19.65 across 2 transactions.",
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+    const result = await answerAsk(db, {
+      question: "Total transport expense this week",
+      today: TODAY,
+      env: { OPENCODE_API_KEY: "oc_sk_test_dummy" },
+      fetchImpl: goFetch,
+    });
+    expect(result.ai).toBe(true);
+    expect(result.figures).toMatchObject({ total: 19.65, count: 2 });
+    expect(result.gateway).toMatchObject({
+      attempted: true,
+      ok: true,
+      status: 200,
+      provider: "opencode-go",
+    });
+    db.close();
+  });
+
   it("totals a transport-this-week plan directly over the pulled set", async () => {
     const db: Database.Database = transportDb();
     const seen: FetchSeen = { systems: [] };
@@ -240,7 +285,7 @@ describe("deterministic relative periods", () => {
       env: {},
     });
     expect(result.ai).toBe(false);
-    expect(result.gateway).toEqual({ attempted: false, ok: false });
+    expect(result.gateway).toEqual({ attempted: false, ok: false, provider: null });
     expect(result.figures).toMatchObject({ total: 19.65, count: 2 });
     expect(result.answer).toContain("Transport");
     expect(result.answer).toContain("£19.65");
