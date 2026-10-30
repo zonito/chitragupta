@@ -46,7 +46,25 @@ async function getDb(): Promise<Database.Database | null> {
       }
       const resolved = storeDir();
       if (!resolved) throw new Error("CHITRAGUPTA_STORE_DIR is not set");
-      return openStore(resolved);
+      const db = openStore(resolved);
+      // A schema migration (store.ts) can leave the derived aggregates
+      // cache empty while transactions survive; rebuild it once here so
+      // read endpoints never serve a silently empty month.
+      const aggCount = db
+        .prepare("SELECT COUNT(*) AS n FROM month_aggregates")
+        .get() as { n: number };
+      if (aggCount.n === 0) {
+        const txnCount = db
+          .prepare("SELECT COUNT(*) AS n FROM transactions")
+          .get() as { n: number };
+        if (txnCount.n > 0) {
+          const persons = db
+            .prepare("SELECT DISTINCT person FROM transactions")
+            .all() as { person: string }[];
+          for (const { person } of persons) recomputeAggregates(db, person);
+        }
+      }
+      return db;
     })();
     dbPromise.catch(() => {
       dbPromise = null;
@@ -186,29 +204,29 @@ async function routeWithDb(
 
   if (path === "/api/digest" && request.method === "GET") {
     const week = url.searchParams.get("week") ?? currentWeek();
-    const month = week.slice(0, 7);
+    // The month is the month of the week's Monday (ISO week), never a
+    // string slice of "2026-W44" (which produced the bogus month "2026-W4"
+    // and an always-empty byMonth).
+    const weekStart = isoWeekMonday(week);
+    const month = weekStart ? weekStart.slice(0, 7) : week.slice(0, 7);
+    const weekEnd = weekStart
+      ? new Date(Date.parse(weekStart) + 7 * 86400000).toISOString().slice(0, 10)
+      : null;
     const monthRows = db
       .prepare(
         `SELECT person, category, SUM(spend_minor) AS spend, SUM(income_minor) AS income,
                 SUM(aside_minor) AS aside, SUM(txn_count) AS txns
-         FROM month_aggregates WHERE year_month = ? GROUP BY person, category`,
+         FROM month_aggregates WHERE year_month = ? AND currency = 'GBP' GROUP BY person, category`,
       )
       .all(month);
-    const weekRows = db
-      .prepare(
-        `SELECT person, category,
-                SUM(CASE WHEN amount_minor < 0 AND movement = 'spend' THEN -amount_minor ELSE 0 END) AS spend,
-                COUNT(*) AS txns
-         FROM transactions WHERE substr(effective_date, 1, 7) = ? GROUP BY person, category`,
-      )
-      .all(month);
-    void weekRows;
-    const weekTxns = db
-      .prepare(
-        `SELECT effective_date, description, merchant, amount_minor, currency, movement, category
-         FROM transactions WHERE strftime('%Y-W%W', effective_date) = ? ORDER BY effective_date DESC LIMIT 200`,
-      )
-      .all(week);
+    const weekTxns = weekStart
+      ? db
+          .prepare(
+            `SELECT effective_date, description, merchant, amount_minor, currency, movement, category
+             FROM transactions WHERE effective_date >= ? AND effective_date < ? ORDER BY effective_date DESC LIMIT 200`,
+          )
+          .all(weekStart, weekEnd)
+      : [];
     const upcoming = db
       .prepare(
         `SELECT merchant, category, COUNT(*) AS times, AVG(-amount_minor) AS avg_minor
@@ -226,9 +244,16 @@ async function routeWithDb(
     const movedAside = db
       .prepare(
         `SELECT COALESCE(SUM(-amount_minor), 0) AS total FROM transactions
-         WHERE movement = 'aside' AND amount_minor < 0 AND substr(effective_date, 1, 7) = ?`,
+         WHERE movement = 'aside' AND amount_minor < 0 AND currency = 'GBP' AND substr(effective_date, 1, 7) = ?`,
       )
       .get(month) as { total: number };
+    const movedAsideForeign = db
+      .prepare(
+        `SELECT currency, COALESCE(SUM(-amount_minor), 0) AS total FROM transactions
+         WHERE movement = 'aside' AND amount_minor < 0 AND currency <> 'GBP' AND substr(effective_date, 1, 7) = ?
+         GROUP BY currency`,
+      )
+      .all(month);
     const newMerchants = db
       .prepare(
         `SELECT merchant, COUNT(*) AS n FROM transactions
@@ -245,6 +270,7 @@ async function routeWithDb(
       upcomingRegulars: upcoming,
       oneOffs,
       movedAsideTotal: movedAside.total,
+      movedAsideForeign,
       unclassifiedMerchants: newMerchants,
     });
   }
@@ -253,13 +279,25 @@ async function routeWithDb(
     const month =
       url.searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
     const person = url.searchParams.get("person") ?? "household";
+    const resolvedPerson = person === "household" ? "zonito" : person;
+    // GBP totals are GBP rows only; foreign-currency amounts are reported
+    // in their own per-currency buckets, never face-value mixed in.
     const rows = db
       .prepare(
         `SELECT category, spend_minor, income_minor, aside_minor, txn_count
-         FROM month_aggregates WHERE person = ? AND year_month = ? ORDER BY spend_minor DESC`,
+         FROM month_aggregates WHERE person = ? AND year_month = ? AND currency = 'GBP'
+         ORDER BY spend_minor DESC`,
       )
-      .all(person === "household" ? "zonito" : person, month);
-    return json({ ok: true, person, month, rows });
+      .all(resolvedPerson, month);
+    const otherCurrencies = db
+      .prepare(
+        `SELECT currency, SUM(spend_minor) AS spend, SUM(income_minor) AS income,
+                SUM(aside_minor) AS aside, SUM(txn_count) AS txns
+         FROM month_aggregates WHERE person = ? AND year_month = ? AND currency <> 'GBP'
+         GROUP BY currency ORDER BY currency`,
+      )
+      .all(resolvedPerson, month);
+    return json({ ok: true, person, month, rows, otherCurrencies });
   }
 
   return null;
@@ -298,6 +336,22 @@ async function routeJev(request: Request): Promise<Response | null> {
       502,
     );
   }
+}
+
+/** Monday (ISO) of a "YYYY-Www" week string, as YYYY-MM-DD; null if malformed. */
+export function isoWeekMonday(week: string): string | null {
+  const m = week.match(/^(\d{4})-W(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const wk = Number(m[2]);
+  if (wk < 1 || wk > 53) return null;
+  // 4 January is always in ISO week 1; walk back to its Monday, then forward.
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const dow = jan4.getUTCDay() || 7; // Mon=1 .. Sun=7
+  const monday = new Date(
+    jan4.getTime() - (dow - 1) * 86400000 + (wk - 1) * 7 * 86400000,
+  );
+  return monday.toISOString().slice(0, 10);
 }
 
 function currentWeek(): string {

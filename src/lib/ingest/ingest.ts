@@ -296,20 +296,21 @@ export function recomputeAggregates(
   // override or Muse classification) → merchant memory → movement fallback.
   db.prepare(`DELETE FROM month_aggregates WHERE person = ?`).run(person);
   db.prepare(
-    `INSERT INTO month_aggregates (person, year_month, category, spend_minor, income_minor, aside_minor, txn_count)
+    `INSERT INTO month_aggregates (person, year_month, category, currency, spend_minor, income_minor, aside_minor, txn_count)
      SELECT t.person, t.year_month,
        COALESCE(t.category, m.category,
          CASE t.movement
            WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
            WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
            WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END),
+       t.currency,
        SUM(CASE WHEN t.amount_minor < 0 AND t.movement = 'spend' THEN -t.amount_minor ELSE 0 END),
        SUM(CASE WHEN t.amount_minor > 0 AND t.movement = 'income' THEN t.amount_minor ELSE 0 END),
        SUM(CASE WHEN t.movement = 'aside' AND t.amount_minor < 0 THEN -t.amount_minor ELSE 0 END),
        COUNT(*)
      FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
      WHERE t.person = ?
-     GROUP BY t.person, t.year_month,
+     GROUP BY t.person, t.year_month, t.currency,
        COALESCE(t.category, m.category,
          CASE t.movement
            WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
