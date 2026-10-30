@@ -4,6 +4,14 @@ import { dirname, join } from "node:path";
 
 export const SCHEMA_VERSION = 1;
 
+// Bump this whenever the ingest classification rules change (parse.ts
+// classifyMovement, ASIDE_PATTERNS, merchant rule seeds). Ingest compares it
+// against the version stamped in the store; a mismatch purges the derived
+// transactions and rebuilds them from the source CSVs, so a store built by
+// older rules can never keep stale rows (e.g. the phantom REVERTED spend a
+// pre-fix store held forever under plain INSERT OR IGNORE).
+export const RULES_VERSION = 1;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,

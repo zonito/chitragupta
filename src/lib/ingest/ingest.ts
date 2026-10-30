@@ -13,6 +13,7 @@ import {
   type SavingsRow,
   type StatementRow,
 } from "./parse";
+import { RULES_VERSION } from "./store";
 
 export type IngestResult = {
   account: IngestAccount;
@@ -324,7 +325,44 @@ export function ingestAll(
 ): IngestResult[] {
   void readdirSync;
   void statSync;
+  ensureFreshStore(db);
   return INGEST_ACCOUNTS.map((account) =>
     ingestAccount(db, person, account, dataDir),
   );
+}
+
+/**
+ * Self-heal across classification-rule changes. The transactions and
+ * month_aggregates tables are a cache of the source CSVs; when the stored
+ * rules version differs from RULES_VERSION, purge both and let the ingest
+ * that follows rebuild them under the current rules. Merchant memory (rules,
+ * claude-api, molang and user corrections) is NOT derived from the CSVs and
+ * survives the purge untouched. The rebuild is recorded as an ingest_runs
+ * row under the reserved account name "__rebuild__". Returns true when a
+ * rebuild was triggered.
+ */
+export function ensureFreshStore(
+  db: import("better-sqlite3").Database,
+): boolean {
+  const row = db
+    .prepare("SELECT value FROM meta WHERE key = 'rules_version'")
+    .get() as { value: string } | undefined;
+  const stored = row?.value ?? null;
+  if (stored === String(RULES_VERSION)) return false;
+  const rebuild = db.transaction(() => {
+    db.exec("DELETE FROM transactions; DELETE FROM month_aggregates;");
+    db.prepare(
+      `INSERT INTO meta (key, value) VALUES ('rules_version', ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+    ).run(String(RULES_VERSION));
+    db.prepare(
+      `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy)
+       VALUES ('__rebuild__', ?, 0, 0, NULL, NULL, ?)`,
+    ).run(
+      new Date().toISOString(),
+      `store rebuilt: rules version ${stored ?? "none"} -> ${RULES_VERSION}; transactions purged, re-ingested from source CSVs`,
+    );
+  });
+  rebuild();
+  return true;
 }

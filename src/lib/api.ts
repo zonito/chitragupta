@@ -105,21 +105,22 @@ async function routeWithDb(
   const path = url.pathname;
 
   if (path === "/api/ingest/status" && request.method === "GET") {
-    const runs = db
-      .prepare(
-        `SELECT account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy
-         FROM ingest_runs WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY account)`,
-      )
-      .all() as IngestResult[] & { started_at: string }[];
-    void runs;
     const rows = db
       .prepare(
         `SELECT account, started_at AS lastIngest, rows_seen AS rowsSeen, rows_added AS rowsAdded,
                 balance_minor AS balanceMinor, currency, discrepancy
-         FROM ingest_runs WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY account)`,
+         FROM ingest_runs
+         WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY account)
+           AND substr(account, 1, 2) <> '__'`,
       )
       .all();
-    return json({ ok: true, accounts: rows });
+    const rebuilds = db
+      .prepare(
+        `SELECT started_at AS at, discrepancy FROM ingest_runs
+         WHERE account = '__rebuild__' ORDER BY id DESC LIMIT 5`,
+      )
+      .all();
+    return json({ ok: true, accounts: rows, rebuilds });
   }
 
   if (path === "/api/ingest/run" && request.method === "POST") {
