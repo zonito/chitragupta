@@ -1,0 +1,223 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@source "../src";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Newsreader", Georgia, serif;
+  --text-hero: 46px;
+  --text-hero--line-height: 50px;
+  --text-title: 28px;
+  --text-title--line-height: 34px;
+  --text-heading: 17px;
+  --text-heading--line-height: 24px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-caption: 13px;
+  --text-caption--line-height: 20px;
+  --text-micro: 11px;
+  --text-micro--line-height: 16px;
+  --text-xs: var(--text-caption);
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: var(--text-heading);
+  --text-xl: var(--text-heading);
+  --text-2xl: var(--text-title);
+  --text-3xl: var(--text-title);
+  --text-4xl: var(--text-title);
+  --text-5xl: var(--text-hero);
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+  --radius-2xl: calc(var(--radius) + 4px);
+  --radius-3xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-ink: var(--accent-ink);
+  --color-aside: var(--aside);
+  --color-hero: var(--hero);
+  --color-hero-foreground: var(--hero-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --shadow-panel: var(--shadow-elevated);
+}
+
+:root {
+  --radius: 0.6875rem;
+  --background: oklch(0.972 0.014 82);
+  --foreground: oklch(0.23 0.02 55);
+  --card: oklch(0.995 0.004 85);
+  --card-foreground: oklch(0.23 0.02 55);
+  --popover: oklch(0.995 0.004 85);
+  --popover-foreground: oklch(0.23 0.02 55);
+  --primary: oklch(0.42 0.095 178);
+  --primary-foreground: oklch(0.99 0.005 180);
+  --secondary: oklch(0.94 0.016 80);
+  --secondary-foreground: oklch(0.3 0.02 55);
+  --muted: oklch(0.945 0.014 80);
+  --muted-foreground: oklch(0.44 0.024 55);
+  --accent: oklch(0.74 0.15 56);
+  --accent-foreground: oklch(0.26 0.05 52);
+  --accent-ink: oklch(0.47 0.115 50);
+  --destructive: oklch(0.52 0.16 28);
+  --destructive-foreground: oklch(0.99 0.01 85);
+  --good: oklch(0.5 0.115 158);
+  --warn: oklch(0.53 0.125 66);
+  --aside: oklch(0.47 0.095 205);
+  --border: oklch(0.88 0.018 78);
+  --input: oklch(0.88 0.018 78);
+  --ring: oklch(0.42 0.095 178);
+  --hero: oklch(0.38 0.085 178);
+  --hero-foreground: oklch(0.99 0.005 180);
+  --tile-foreground: oklch(0.99 0 0);
+  --brand-puregym-foreground: oklch(0.87 0.17 95);
+  --shadow-tint: oklch(0.35 0.045 75 / 0.08);
+  --shadow-elevated: 0 2px 4px var(--shadow-tint), 0 10px 24px -12px var(--shadow-tint);
+  --cat-groceries: oklch(0.55 0.145 150);
+  --cat-eating-out: oklch(0.57 0.155 38);
+  --cat-transport: oklch(0.52 0.115 252);
+  --cat-school: oklch(0.5 0.135 295);
+  --cat-home: oklch(0.57 0.105 72);
+  --cat-subscriptions: oklch(0.54 0.105 192);
+  --cat-holidays: oklch(0.58 0.115 208);
+  --cat-shopping: oklch(0.56 0.155 12);
+  --cat-one-off: oklch(0.55 0.035 55);
+  --brand-netflix: #E50914;
+  --brand-spotify: #1DB954;
+  --brand-ocado: #822673;
+  --brand-amazon: #131921;
+  --brand-tfl: #DC241F;
+  --brand-ikea: #0058A3;
+  --brand-pret: #4A0D18;
+  --brand-octopus: #D6336C;
+  --brand-jet2: #C8102E;
+  --brand-airbnb: #FF5A5F;
+  --brand-disney: #113CCF;
+  --brand-times: #111111;
+  --brand-puregym: #1D1D1B;
+  --brand-john-lewis: #004225;
+  --brand-tesco: #00539F;
+  --brand-waitrose: #003D2B;
+  --brand-deliveroo: #00CCBC;
+  --brand-uber: #000000;
+  --brand-icloud: #3693F3;
+  --brand-microsoft: #D83B01;
+}
+
+.dark {
+  --background: oklch(0.165 0.02 205);
+  --foreground: oklch(0.93 0.012 85);
+  --card: oklch(0.205 0.02 200);
+  --card-foreground: oklch(0.93 0.012 85);
+  --popover: oklch(0.19 0.02 200);
+  --popover-foreground: oklch(0.93 0.012 85);
+  --primary: oklch(0.74 0.115 176);
+  --primary-foreground: oklch(0.16 0.03 180);
+  --secondary: oklch(0.26 0.02 200);
+  --secondary-foreground: oklch(0.88 0.012 85);
+  --muted: oklch(0.25 0.018 200);
+  --muted-foreground: oklch(0.74 0.016 85);
+  --accent: oklch(0.79 0.14 58);
+  --accent-foreground: oklch(0.2 0.04 55);
+  --accent-ink: oklch(0.81 0.12 62);
+  --destructive: oklch(0.68 0.15 28);
+  --destructive-foreground: oklch(0.15 0.02 30);
+  --good: oklch(0.73 0.12 158);
+  --warn: oklch(0.76 0.12 70);
+  --aside: oklch(0.72 0.09 205);
+  --border: oklch(0.3 0.02 200);
+  --input: oklch(0.3 0.02 200);
+  --ring: oklch(0.74 0.115 176);
+  --hero: oklch(0.3 0.07 178);
+  --hero-foreground: oklch(0.99 0.005 180);
+  --tile-foreground: oklch(0.99 0 0);
+  --brand-puregym-foreground: oklch(0.87 0.17 95);
+  --shadow-tint: oklch(0.08 0.018 180 / 0.35);
+  --cat-groceries: oklch(0.7 0.14 150);
+  --cat-eating-out: oklch(0.72 0.15 40);
+  --cat-transport: oklch(0.68 0.11 252);
+  --cat-school: oklch(0.66 0.13 295);
+  --cat-home: oklch(0.72 0.1 75);
+  --cat-subscriptions: oklch(0.69 0.1 192);
+  --cat-holidays: oklch(0.72 0.11 208);
+  --cat-shopping: oklch(0.7 0.15 12);
+  --cat-one-off: oklch(0.7 0.03 60);
+  color-scheme: dark;
+}
+
+@utility ledger-row {
+  border-bottom: 1px dashed var(--color-border);
+  &:last-child { border-bottom: 0; }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  body {
+    background: linear-gradient(180deg, oklch(0.976 0.016 82), oklch(0.936 0.024 72)) fixed;
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .dark body {
+    background: linear-gradient(180deg, oklch(0.185 0.022 205), oklch(0.135 0.024 195)) fixed;
+  }
+}
+
+.hero-panel { background: linear-gradient(135deg, oklch(0.4 0.09 176), oklch(0.31 0.075 186)); color: var(--hero-foreground); box-shadow: 0 12px 32px -12px oklch(0.3 0.08 180 / 0.45); }
+.dark .hero-panel { background: linear-gradient(135deg, oklch(0.32 0.075 176), oklch(0.23 0.06 188)); box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.6); }
+.hero-label { color: oklch(0.87 0.025 182); }
+.hero-comparison { color: oklch(0.9 0.02 182); }
+.hero-number { color: var(--hero-foreground); letter-spacing: -0.01em; line-height: 1.05; font-size: var(--text-hero); }
+.hero-panel .hero-track { background: color-mix(in oklab, var(--hero-foreground) 10%, transparent); }
+.data-bar { transition: width 0.9s cubic-bezier(0.22, 0.61, 0.36, 1); }
+
+/* Existing shared component styles kept so tiles, icons and charts still render. */
+.item-icon { display: inline-flex; width: 28px; height: 28px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
+.recognition-tile { display: inline-flex; width: 36px; height: 36px; flex: 0 0 36px; align-items: center; justify-content: center; border-radius: var(--radius-xl); font-family: var(--font-sans); font-size: var(--text-heading); font-weight: 600; line-height: 1; background: var(--tile-background, var(--muted)); color: var(--tile-ink, var(--foreground)); }
+.route-content .rounded-xl.border.bg-card, .route-content .rounded-2xl.border.bg-card { box-shadow: var(--shadow-elevated); }
+.font-display:not(.brand-wordmark):not(.hero-number) { font-family: var(--font-sans); }
+.ledger-row .num { font-size: var(--text-body); font-weight: 500; color: var(--foreground); }
+.amount { font-size: var(--text-body); font-weight: 500; color: var(--foreground); }
+.font-bold { font-weight: 600; }
+input::placeholder, textarea::placeholder { color: var(--muted-foreground); opacity: 1; }
+.trend-draw { stroke-dasharray: 1; stroke-dashoffset: 0; animation: trend-draw 550ms ease-out both; }
+.chart-grow { transform-origin: bottom; animation: chart-grow 350ms ease-out both; }
+.reduced-number { display: none; }
+@keyframes trend-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes chart-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .data-bar { width: var(--bar-width) !important; }
+  .motion-number { display: none; }
+  .reduced-number { display: inline; }
+}

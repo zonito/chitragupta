@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <style>
+    :root { --primary: oklch(0.40 0.095 178); --accent: oklch(0.79 0.17 52); }
+    @media (prefers-color-scheme: dark) { :root { --primary: oklch(0.76 0.14 178); --accent: oklch(0.81 0.16 52); } }
+  </style>
+  <g stroke="var(--primary)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M16 8C12 5 7 5 3 6V25C7 24 12 24 16 27C20 24 25 24 29 25V6C25 5 20 5 16 8Z"/>
+    <path d="M16 8V27"/>
+  </g>
+  <path fill="var(--accent)" d="M20 21L21 16L28 7C28.7 6.1 30 6 30.8 6.7C31.6 7.3 31.7 8.5 31 9.4L24 18.5Z"/>
+</svg>

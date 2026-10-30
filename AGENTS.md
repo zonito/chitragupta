@@ -1,0 +1,23 @@
+<!-- LOVABLE:BEGIN -->
+> [!IMPORTANT]
+> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
+> published git history — force pushing, or rebasing/amending/squashing commits
+> that are already pushed — as it rewrites history on Lovable's side and the
+> user will likely lose their project history.
+>
+> Commits you push to the connected branch sync back to Lovable and show up in
+> the editor, so keep the branch in a working state.
+<!-- LOVABLE:END -->
+
+- Keep calculator arithmetic and saved-state validation in a browser-safe library separate from the route, so calculations are directly testable without rendering.
+- Restore calculator localStorage values only after mount and save only after restoration, so SSR matches and saved inputs are not overwritten.
+- Theme controls and calculator panels through global semantic tokens; the `.dark` token overrides keep the existing shell and new screen consistent.
+- Theme choice (system/light/dark) lives in ThemeProvider in shell.tsx with a pre-paint head script; desktop (lg+) swaps header/tabs for a sidebar in AppShell — keep mobile classes unprefixed and desktop changes behind lg:.
+- Mock document state lives in a root-mounted DocumentsProvider so Activity attachments and Receipts remain synchronized across navigation; detaching retains the file as unmatched.
+- Logo geometry lives in the reusable Logo component and matching public SVG favicon; keep their paths synchronized so the app and browser icon share one identity.
+- Spending-category colours resolve through CATEGORY_COLOR to global theme tokens; CategoryChip and inherited Sparkline colour keep repeated data visualizations consistent.
+- Shared item-icons maps categories and destinations to semantic palette tokens and informative glyphs; identity surfaces, shadows and serif eligibility are governed globally so routes preserve their data and structure.
+- Shared motion primitives own mounted data-bar transitions and first-view numeric counts; text stays stationary without entrance animations, and one global reduced-motion guard keeps final states instant.
+- Global semantic type tokens define the UI scale and tabular money inheritance; explicit num classes mark money containers, and only brand-wordmark and hero-number may render the display family.
+- Shared recognition tiles resolve explicit merchant aliases to brand tokens and otherwise reuse CATEGORY_ICON; neutral account tiles classify account/card names centrally so recognition stays consistent across screens.
+- Ask record search stays in a browser-safe library and reads live shared documents plus recorded transaction metadata; do not invent missing events or duplicate a linked payment and file.
