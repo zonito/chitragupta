@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Paperclip, Upload, FileText } from "lucide-react";
 import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { CATEGORIES, docFor, docName, shareOf, spendTotalInMonth, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { ALL_TXNS, CATEGORIES, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { fetchApiTransactions } from "@/lib/txn-map";
 
 export const Route = createFileRoute("/activity")({
   head: () => meta("Activity", "Every transaction this month, grouped by day, with search and filters."),
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/activity")({
 
 const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
 
-function Activity() {
+export function Activity() {
   const { person } = usePerson();
   const { documents } = useDocuments();
   const [q, setQ] = useState("");
@@ -23,23 +24,52 @@ function Activity() {
   const [month, setMonth] = useState(() => currentMonthKey());
   const [open, setOpen] = useState<Txn | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Category>>({});
+  // The snapshot carries two months of rows; older months are fetched
+  // from /api/transactions on first use and cached for the session.
+  const [fetchedMonths, setFetchedMonths] = useState<Record<string, Txn[]>>({});
+
+  const snapshotMonthKeys = useMemo(() => new Set(ALL_TXNS.map((t) => t.monthKey)), []);
+  const inSnapshot = snapshotMonthKeys.has(month);
+  const monthLoaded = inSnapshot || month in fetchedMonths;
+  const monthTxns = inSnapshot ? txnsInMonth(month) : (fetchedMonths[month] ?? []);
+
+  useEffect(() => {
+    if (inSnapshot || month in fetchedMonths) return;
+    let cancelled = false;
+    // No person parameter: fetch the whole month, then the same
+    // shareOf / who filtering below applies, exactly as snapshot months.
+    fetchApiTransactions({ month, limit: "1000" })
+      .then((rows) => {
+        if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [month]: rows }));
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [month]: [] }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [month, inSnapshot, fetchedMonths]);
+
+  const monthSpend = monthTxns
+    .filter((t) => t.kind === "spend")
+    .reduce((s, t) => s + shareOf(t, person), 0);
 
   const list = useMemo(
     () =>
-      txnsInMonth(month)
+      monthTxns
         .map((t) => ({ ...t, category: overrides[t.id] ?? t.category }))
         .filter((t) => shareOf(t, person) > 0)
         .filter((t) => who === "all" || t.owner === who)
         .filter((t) => cat === "all" || t.category === cat)
         .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
         .sort((a, b) => b.day - a.day),
-    [person, q, who, cat, month, overrides],
+    [person, q, who, cat, monthTxns, overrides],
   );
   const days = [...new Set(list.map((t) => t.day))];
 
   return (
     <div className="lg:max-w-3xl">
-      <PageTitle sub={`${gbp(spendTotalInMonth(person, month))} spent · transfers and savings not counted`}>Activity</PageTitle>
+      <PageTitle sub={`${gbp(monthSpend)} spent · transfers and savings not counted`}>Activity</PageTitle>
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
@@ -57,7 +87,7 @@ function Activity() {
         </select>
       </div>
 
-      {days.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">Nothing here.</p>}
+      {days.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">{monthLoaded ? "Nothing here." : "Loading…"}</p>}
       {days.map((d) => (
         <div key={d} className="mb-5">
           <Label>{dayLabel(d, false, month)}</Label>

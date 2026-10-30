@@ -17,6 +17,7 @@ import {
   type Txn,
   type UpcomingPayment,
 } from "./data";
+import { ACCOUNT_TXN_LABEL, uiCategory } from "./txn-map";
 
 /**
  * Builds the UI snapshot from the real store. Server-only (better-sqlite3);
@@ -51,14 +52,6 @@ type Row = {
   category: string | null;
 };
 
-const ACCOUNT_TXN_LABEL: Record<string, string> = {
-  Main: "Revolut Main · Zonito",
-  Pro: "Revolut Pro · Zonito",
-  "USD-Invest": "Revolut USD-Invest · Zonito",
-  Joint: "Joint Bills · Revolut",
-  "Savings-9000000002": "Revolut Savings · Zonito",
-  "Savings-9000000001": "Revolut Savings · Zonito",
-};
 const ACCOUNT_LIST_LABEL: Record<string, string> = {
   Main: "Revolut Main",
   Pro: "Revolut Pro",
@@ -67,11 +60,6 @@ const ACCOUNT_LIST_LABEL: Record<string, string> = {
   "Savings-9000000002": "Revolut Savings 0002",
   "Savings-9000000001": "Revolut Savings 0001",
 };
-
-const UI_CATEGORIES = new Set([
-  "Groceries", "Eating out", "Transport", "School", "Home",
-  "Subscriptions", "Holidays", "Shopping", "One-off",
-]);
 
 function resolveCategory(row: Row, memory: Map<string, string>): string {
   if (row.category) return row.category;
@@ -89,11 +77,6 @@ function resolveCategory(row: Row, memory: Map<string, string>): string {
     default:
       return "One-off";
   }
-}
-
-function uiCategory(name: string): Category {
-  if (name === "Transfer" || name === "Moved aside") return name;
-  return (UI_CATEGORIES.has(name) ? name : "One-off") as Category;
 }
 
 function monthLabel(key: string): string {
@@ -388,7 +371,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   return {
     configured: true,
     monthKey: current,
-    months: included.map((key) => ({ key, label: monthLabel(key) })),
+    // Every month in the store, newest first — the picker and Ask route
+    // older months to /api/transactions; txns below stay at two months.
+    months: monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),
     txns,
     income,
     upcoming: upcoming.slice(0, 12),

@@ -5,6 +5,11 @@ const normalise = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/g
 const stem = (word: string) => /^(service|serviced|servicing)$/.test(word) ? "service" : /^(warranty|warranties)$/.test(word) ? "warranty" : word;
 const words = (text: string) => normalise(text).split(/\s+/).map(stem);
 
+/** The content terms a question reduces to (stop-words removed, stemmed). */
+export function questionTerms(question: string): string[] {
+  return words(question).filter((word) => word && !STOP_WORDS.has(word));
+}
+
 export type RecordMatch = {
   id: string;
   merchant: string;
@@ -17,7 +22,7 @@ export type RecordMatch = {
 
 /** Search only recorded metadata, never infer an unrecorded purchase or service. */
 export function searchRecords(question: string, person: Person, documents: readonly Doc[] = DOCS, transactions: readonly Txn[] = TXNS) {
-  const terms = words(question).filter((word) => word && !STOP_WORDS.has(word));
+  const terms = questionTerms(question);
   const matches = (text: string) => {
     const haystack = words(text);
     return terms.length > 0 && terms.every((term) => haystack.some((word) => word === term));

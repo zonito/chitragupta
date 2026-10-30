@@ -51,6 +51,31 @@ describe("snapshot builder", () => {
     expect(snap.accounts[0]?.name).toBe("Revolut Main");
   });
 
+  it("lists every month in the store while txns stay at the two newest months", () => {
+    dir = mkdtempSync(join(tmpdir(), "chitragupta-snap-"));
+    const db = openStore(dir);
+    const insert = db.prepare(
+      `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
+         description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
+       VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, 'GBP', 0, 'spend', NULL)`,
+    );
+    insert.run("m1", "2022-08-15", "2022-08", "Old Shop", "Old Shop", -1000);
+    insert.run("m2", "2023-01-15", "2023-01", "Old Shop", "Old Shop", -1100);
+    insert.run("m3", "2025-06-15", "2025-06", "Old Shop", "Old Shop", -1200);
+    insert.run("m4", "2026-09-15", "2026-09", "Recent Shop", "Recent Shop", -1300);
+    insert.run("m5", "2026-10-15", "2026-10", "Recent Shop", "Recent Shop", -1400);
+    db.close();
+
+    process.env["CHITRAGUPTA_STORE_DIR"] = dir;
+    const snap = buildSnapshot();
+    expect(snap.months.map((m) => m.key)).toEqual([
+      "2026-10", "2026-09", "2025-06", "2023-01", "2022-08",
+    ]);
+    expect(snap.months.at(-1)).toEqual({ key: "2022-08", label: "August 2022" });
+    // Instant first paint is unchanged: only the two newest months of rows.
+    expect([...new Set(snap.txns.map((t) => t.monthKey))].sort()).toEqual(["2026-09", "2026-10"]);
+  });
+
   it("returns the honest empty snapshot when no store is configured", () => {
     delete process.env["CHITRAGUPTA_STORE_DIR"];
     const snap = buildSnapshot();

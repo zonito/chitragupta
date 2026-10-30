@@ -87,8 +87,8 @@ export interface NewMerchant { merchant: string; category: Category; amount: num
 export interface DataSnapshot {
   configured: boolean;
   monthKey: string; // current month, YYYY-MM ("" when no data)
-  months: { key: string; label: string }[]; // months with transactions included below, newest first
-  txns: Txn[]; // current + previous month
+  months: { key: string; label: string }[]; // every month with transactions in the store, newest first
+  txns: Txn[]; // current + previous month only; older months load on demand via /api/transactions
   income: IncomeEntry[]; // current month
   upcoming: UpcomingPayment[];
   subs: Sub[];

@@ -1,13 +1,15 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog } from "lucide-react";
-import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthLabel, CATEGORY_COLOR, type Category } from "@/lib/data";
+import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, CATEGORY_COLOR, type Category, type Txn } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { DestinationIcon } from "@/components/item-icons";
 import { MerchantTile } from "@/components/tiles";
 import { useDocuments } from "@/components/documents";
 import { searchRecords } from "@/lib/record-search";
+import { parseAskQuery } from "@/lib/ask-query";
+import { fetchApiTransactions } from "@/lib/txn-map";
 import type { Person } from "@/lib/data";
 
 const Ctx = createContext<{ person: Person; setPerson: (p: Person) => void }>({ person: "household", setPerson: () => {} });
@@ -241,9 +243,10 @@ const TRIP_QUESTION = "What have holidays cost this month?";
 const OCADO_QUESTION = "How much on Ocado this month?";
 const BOILER_QUESTION = "When did we last get the boiler serviced?";
 const WARRANTY_QUESTION = "When does the washing machine warranty end?";
-const EXAMPLES = ["How much on groceries this year?", "What did we spend in India in August?", WARRANTY_QUESTION, TRIP_QUESTION, OCADO_QUESTION, BOILER_QUESTION];
+const INDIA_QUESTION = "What did we spend in India in August?";
+const EXAMPLES = ["How much on groceries this year?", INDIA_QUESTION, WARRANTY_QUESTION, TRIP_QUESTION, OCADO_QUESTION, BOILER_QUESTION];
 
-function AskButton() {
+export function AskButton() {
   const { person } = usePerson();
   const { documents } = useDocuments();
   const [open, setOpen] = useState(false);
@@ -251,20 +254,80 @@ function AskButton() {
   const [workedExample, setWorkedExample] = useState<"ocado" | "trip" | "records">("ocado");
   const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Full-history search state: the snapshot only carries two months, so
+  // records questions fetch matching rows from /api/transactions.
+  const [history, setHistory] = useState<{ question: string; txns: Txn[] } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const isTrip = workedExample === "trip";
   const answer = isTrip ? tripAnswer(person) : ocadoAnswer(person);
-  const recordAnswer = searchRecords(submittedQuestion, person, documents);
-  const latest = recordAnswer.latest;
+
+  const runHistorySearch = async (question: string) => {
+    const plan = parseAskQuery(question, currentMonthKey());
+    setSearching(true);
+    setSearchFailed(false);
+    setHistory(null);
+    try {
+      const params: Record<string, string> = { limit: "1000" };
+      if (plan.month) params["month"] = plan.month;
+      if (plan.category) params["category"] = plan.category;
+      else if (plan.apiQuery) params["q"] = plan.apiQuery;
+      const txns = await fetchApiTransactions(params);
+      setHistory({ question, txns });
+    } catch {
+      setSearchFailed(true);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const submitQuestion = (question: string) => {
     if (!question.trim()) return;
     setExpanded(null);
     if (/ocado/i.test(question) && !/last|receipt|document/i.test(question)) setWorkedExample("ocado");
     else if (/holiday/i.test(question) && /cost|spend|spent|total/i.test(question)) setWorkedExample("trip");
     else {
-      setSubmittedQuestion(question.trim());
+      const trimmed = question.trim();
+      setSubmittedQuestion(trimmed);
       setWorkedExample("records");
+      void runHistorySearch(trimmed);
     }
   };
+
+  // Records answers search the fetched full-history rows once they land;
+  // before that (or if the fetch failed) the snapshot search runs, which
+  // only sees the current month. Month-scoped questions never fall back
+  // to a different month's records.
+  const plan = workedExample === "records" && submittedQuestion
+    ? parseAskQuery(submittedQuestion, currentMonthKey())
+    : null;
+  const historyRows = history && history.question === submittedQuestion ? history.txns : null;
+  let recordAnswer = searchRecords(submittedQuestion, person, documents);
+  let usedHistory = false;
+  if (historyRows) {
+    const scoped = searchRecords(
+      plan && plan.terms.length > 0 ? plan.terms.join(" ") : submittedQuestion,
+      person,
+      documents,
+      historyRows,
+    );
+    if (plan?.month || scoped.records.length > 0 || recordAnswer.records.length === 0) {
+      recordAnswer = scoped;
+      usedHistory = true;
+    }
+  }
+  const latest = recordAnswer.latest;
+  const matchedTxns = usedHistory && plan?.month
+    ? [...new Map(recordAnswer.records.filter((r) => r.transaction).map((r) => [r.transaction!.id, r.transaction!] as const)).values()]
+    : [];
+  const monthTotal = matchedTxns.reduce((s, t) => s + shareOf(t, person), 0);
+  const monthLabel = plan?.month ? (monthOptions().find((m) => m.key === plan.month)?.label ?? plan.month) : "";
+  const monthOnly = Boolean(usedHistory && plan?.month && plan.terms.length === 0);
+  const monthOnlyRows = monthOnly && historyRows
+    ? historyRows.filter((t) => t.kind === "spend" && shareOf(t, person) > 0)
+    : [];
+  const monthOnlyTotal = monthOnlyRows.reduce((s, t) => s + shareOf(t, person), 0);
+  const noHolidays = isTrip && answer.orders.length === 0;
   return (
     <>
       <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 mx-auto flex max-w-md justify-end px-5 lg:bottom-8 lg:max-w-none lg:px-8">
@@ -287,19 +350,42 @@ function AskButton() {
               setQ(e);
               if (e === TRIP_QUESTION) setWorkedExample("trip");
               if (e === OCADO_QUESTION) setWorkedExample("ocado");
-              if (e === BOILER_QUESTION || e === WARRANTY_QUESTION) submitQuestion(e);
+              if (e === BOILER_QUESTION || e === WARRANTY_QUESTION || e === INDIA_QUESTION) submitQuestion(e);
             }} className="h-auto whitespace-normal rounded-lg border bg-card px-3 py-1.5 text-left text-xs font-normal text-muted-foreground shadow-none">{e}</Button>)}
           </div>
           <Label>You asked</Label>
           <p className="mb-3 text-body leading-relaxed">"{workedExample === "records" ? submittedQuestion : isTrip ? TRIP_QUESTION : OCADO_QUESTION}"</p>
           {workedExample === "records" ? (
+            searching ? (
+              <Panel>
+                <p className="num text-body leading-relaxed">Searching your records…</p>
+              </Panel>
+            ) : monthOnly ? (
+              <Panel>
+                <div className="num text-title font-semibold">{gbp(monthOnlyTotal)}</div>
+                <p className="mb-4 text-caption leading-relaxed text-muted-foreground">Spent in {monthLabel} across {monthOnlyRows.length} {monthOnlyRows.length === 1 ? "transaction" : "transactions"}.</p>
+                {monthOnlyRows.slice(0, 8).map((t) => (
+                  <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-sm">
+                    <span className="min-w-0"><span className="block">{t.merchant}</span><span className="mt-0.5 block text-xs text-muted-foreground">{dayLabel(t.day, true, t.monthKey)}</span></span>
+                    <span className="num shrink-0">{gbp(shareOf(t, person))}</span>
+                  </div>
+                ))}
+              </Panel>
+            ) : (
             <Panel>
+              {searchFailed && <p className="mb-3 text-caption leading-relaxed text-muted-foreground">Full history could not be searched just now — showing this month only.</p>}
               <div aria-live="polite" className="num text-body leading-relaxed">
                 {latest ? recordAnswer.warrantyQuestion
                   ? latest.document?.warrantyEnds ? `The recorded warranty ends ${latest.document.warrantyEnds}.` : "The matching records do not include a warranty end date."
                   : `The latest matching record is ${latest.merchant}, dated ${latest.date} — ${gbp(latest.amount)}${person !== "household" && latest.transaction?.owner === "joint" ? " (your share)" : ""}.`
                   : `No matching transactions or documents in ${person === "household" ? "the household" : "your"} records. This does not mean it never happened; it is not recorded here.`}
               </div>
+              {usedHistory && plan?.month && matchedTxns.length > 0 && (
+                <p className="num mt-2 text-body leading-relaxed">Total in {monthLabel}: {gbp(monthTotal)} across {matchedTxns.length} {matchedTxns.length === 1 ? "transaction" : "transactions"}.</p>
+              )}
+              {usedHistory && plan?.month && recordAnswer.records.length === 0 && (
+                <p className="num mt-2 text-body leading-relaxed">Total in {monthLabel}: {gbp(0)}.</p>
+              )}
               {latest && (
                 <div className="mt-4">
                   <Label>Matching records</Label>
@@ -325,10 +411,11 @@ function AskButton() {
                 </div>
               )}
             </Panel>
+            )
           ) : <Panel>
-            {answer.fallback && <Label>Household answer</Label>}
+            {answer.fallback && !noHolidays && <Label>Household answer</Label>}
             <div className="num text-title font-semibold">{gbp(answer.total, !isTrip)}</div>
-            <p className="mb-4 text-caption leading-relaxed text-muted-foreground">{answer.fallback ? "Nothing on your own accounts — this is the household picture." : isTrip ? `${answer.orders.length} ${answer.orders.length === 1 ? "booking" : "bookings"} in Holidays this month.` : `${answer.orders.length} orders this month.`}</p>
+            <p className="mb-4 text-caption leading-relaxed text-muted-foreground">{noHolidays ? "No Holidays charges this month." : answer.fallback ? "Nothing on your own accounts — this is the household picture." : isTrip ? `${answer.orders.length} ${answer.orders.length === 1 ? "booking" : "bookings"} in Holidays this month.` : `${answer.orders.length} orders this month.`}</p>
             {answer.orders.map((t) => (
               <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-sm">
                 <span className="min-w-0">{isTrip ? <><span className="block">{t.merchant}</span><span className="mt-0.5 block text-xs text-muted-foreground">{dayLabel(t.day)}</span></> : dayLabel(t.day)}</span>
