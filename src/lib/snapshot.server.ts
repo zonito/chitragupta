@@ -100,8 +100,11 @@ function monthLabel(key: string): string {
   const d = new Date(`${key}-02T00:00:00Z`);
   return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
 }
+/** Store effective_date is usually YYYY-MM-DD but some rows carry a full
+ * "YYYY-MM-DD HH:MM:SS" timestamp; consumers here only ever need the day. */
+const day10 = (iso: string) => iso.slice(0, 10);
 function shortDayLabel(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
+  const d = new Date(`${day10(iso)}T00:00:00Z`);
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(d);
 }
 function shiftMonth(key: string, delta: number): string {
@@ -130,7 +133,8 @@ export function buildSnapshot(): DataSnapshot {
   }
   try {
     return buildFromDb(db);
-  } catch {
+  } catch (error) {
+    console.error("chitragupta: snapshot build failed", error);
     return { ...EMPTY_SNAPSHOT, configured: true };
   } finally {
     db.close();
@@ -169,7 +173,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   for (const row of rawRows) {
     const owner: Owner = row.account === "Joint" ? "joint" : (row.person as Owner);
     const amount = Math.abs(row.amount_minor) / 100;
-    const day = Number(row.effective_date.slice(8, 10));
+    const day = Number(day10(row.effective_date).slice(8, 10));
     if (row.movement === "income") {
       if (row.year_month === current && row.amount_minor > 0) {
         income.push({
@@ -184,7 +188,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     const kind = row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer";
     txns.push({
       id: row.fingerprint,
-      date: row.effective_date,
+      date: day10(row.effective_date),
       day,
       monthKey: row.year_month,
       merchant: row.merchant,
@@ -285,7 +289,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     const gaps: number[] = [];
     for (let i = 1; i < charges.length; i++) {
       gaps.push(
-        (Date.parse(charges[i]!.effective_date) - Date.parse(charges[i - 1]!.effective_date)) / 86400000,
+        (Date.parse(day10(charges[i]!.effective_date)) - Date.parse(day10(charges[i - 1]!.effective_date))) / 86400000,
       );
     }
     const medianGap = median(gaps);
@@ -370,11 +374,14 @@ function buildFromDb(db: Database.Database): DataSnapshot {
         `SELECT COUNT(*) AS n, COALESCE(SUM(-amount_minor), 0) AS total, MAX(effective_date) AS last
          FROM transactions WHERE merchant = ? AND movement = 'spend'`,
       )
-      .get(item.merchant) as { n: number; total: number; last: string };
+      .get(item.merchant) as { n: number; total: number; last: string | null };
+    const detail = stats.last
+      ? `${gbp(stats.total / 100)} · ${stats.n} charge${stats.n === 1 ? "" : "s"} · last ${shortDayLabel(stats.last)}`
+      : "No card payments — transfers or income only";
     return {
       name: item.merchant,
       category: "One-off" as Category,
-      detail: `${gbp(stats.total / 100)} · ${stats.n} charge${stats.n === 1 ? "" : "s"} · last ${shortDayLabel(stats.last)}`,
+      detail,
     };
   });
 
