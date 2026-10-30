@@ -8,9 +8,13 @@ import { openStore } from "@/lib/ingest/store";
 const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"]?.trim() || null;
 const describeAcceptance = DATA_DIR ? describe : describe.skip;
 
+// Current values (derived by re-ingesting the repro Originals on
+// 30 Oct 2026): the Pro export gained 3 TfL rows (£12.45 × 3) in the
+// 30 Oct merge, so Pro is 4,265 rows ending at £158.33, the store holds
+// 8,612 rows, and October 2026 GBP spend is £1,952.38.
 const EXPECTED_ROWS: Record<string, number> = {
   Main: 2770,
-  Pro: 4262,
+  Pro: 4265,
   "USD-Invest": 482,
   Joint: 173,
   "Savings-9000000002": 567,
@@ -18,11 +22,11 @@ const EXPECTED_ROWS: Record<string, number> = {
 };
 
 describeAcceptance("acceptance numbers from the real Originals", () => {
-  it("ingests 8,609 transactions with per-account counts (REVERTED excluded)", () => {
+  it("ingests 8,612 transactions with per-account counts (REVERTED excluded)", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
     const results = ingestAll(db, DATA_DIR!, "zonito");
     const total = results.reduce((n, r) => n + r.rowsSeen, 0);
-    expect(total).toBe(8609);
+    expect(total).toBe(8612);
     for (const r of results) {
       expect(r.rowsSeen).toBe(EXPECTED_ROWS[r.account]);
     }
@@ -31,7 +35,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
         n: number;
       }
     ).n;
-    expect(count).toBe(8609);
+    expect(count).toBe(8612);
     db.close();
   }, 120_000);
 
@@ -64,7 +68,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
       .get() as {
       n: number;
     };
-    expect(total.n).toBe(8609);
+    expect(total.n).toBe(8612);
     db.close();
   }, 120_000);
 
@@ -95,7 +99,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
     const results = ingestAll(db, DATA_DIR!, "zonito");
     const byAccount = Object.fromEntries(results.map((r) => [r.account, r]));
     expect(byAccount["Main"]!.balanceMinor).toBe(14274);
-    expect(byAccount["Pro"]!.balanceMinor).toBe(19568);
+    expect(byAccount["Pro"]!.balanceMinor).toBe(15833);
     expect(byAccount["Joint"]!.balanceMinor).toBe(0);
     expect(byAccount["Savings-9000000002"]!.balanceMinor).toBe(80563);
     expect(byAccount["Savings-9000000001"]!.balanceMinor).toBe(27164);
@@ -118,7 +122,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
         n: number;
       }
     ).n;
-    expect(count).toBe(8609);
+    expect(count).toBe(8612);
     db.close();
   }, 180_000);
 
