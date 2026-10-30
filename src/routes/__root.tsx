@@ -12,7 +12,6 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { PersonProvider, AppShell, ThemeProvider, THEME_SCRIPT } from "../components/shell";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { DocumentsProvider } from "../components/documents";
 
 function NotFoundComponent() {
@@ -41,7 +40,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    console.error(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (

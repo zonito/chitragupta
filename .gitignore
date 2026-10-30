@@ -1,0 +1,24 @@
+node_modules/
+.output/
+dist/
+*.local/
+
+# Local env and data — never commit real paths, keys, or stores.
+.env
+.env.*
+!.env.example
+data/
+*.csv
+!**/fixtures/**/*.csv
+
+# Statements, exports, and local stores — code only in git.
+*.sqlite
+*.sqlite-*
+*.db
+
+# OS and editor noise.
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
