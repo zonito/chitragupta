@@ -181,13 +181,17 @@ export function classifyMovement(
   type: string,
   description: string,
   amountMinor: number,
-  _currency: string,
+  currency: string,
+  state = "COMPLETED",
 ): MoneyMovement {
   const t = type.toLowerCase();
   const d = description.toLowerCase();
-  if (t === "reverted") return "internal";
+  // REVERTED lives in the State column, not Type: excluded rows carry no
+  // balance and must never become movements. The classifier takes the state
+  // explicitly so the rule is visible at the call site, not buried in SQL.
+  if (state.toUpperCase() === "REVERTED") return "internal";
   if (t === EXCHANGE_TYPE) return "internal";
-  if (/^(withdrawal|deposit)$/i.test(description.trim()) && _currency === "GBP")
+  if (/^(withdrawal|deposit)$/i.test(description.trim()) && currency === "GBP")
     return "internal";
   if (ASIDE_PATTERNS.some((p) => p.test(d))) return "aside";
   if (/(^|\b)(to|from)\b.*\b(pocket|savings)\b/i.test(description))

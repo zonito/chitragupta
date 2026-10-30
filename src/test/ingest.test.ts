@@ -5,6 +5,7 @@ import {
   parseAccountCsv,
   parseSavingsCsv,
 } from "@/lib/ingest/parse";
+import { savingsIsoDate } from "@/lib/ingest/ingest";
 
 describe("CSV parsing", () => {
   it("parses account statements and skips the header", () => {
@@ -26,6 +27,12 @@ describe("CSV parsing", () => {
     );
     expect(rows).toHaveLength(2);
     expect(rows[1]!.balance).toBe("£4.50");
+  });
+
+  it("normalises savings dates to ISO for aggregates", () => {
+    expect(savingsIsoDate("Jan 25, 2026")).toBe("2026-01-25");
+    expect(savingsIsoDate("Oct 29, 2026")).toBe("2026-10-29");
+    expect(savingsIsoDate("Jul 14, 2023")).toBe("2023-07-14");
   });
 });
 
@@ -62,7 +69,9 @@ describe("netting rules", () => {
   });
 
   it("bare savings Withdrawal/Deposit legs are internal pocket moves", () => {
-    expect(classifyMovement("Deposit", "Withdrawal", -2118361, "GBP")).toBe("internal");
+    expect(classifyMovement("Deposit", "Withdrawal", -2118361, "GBP")).toBe(
+      "internal",
+    );
     expect(classifyMovement("Deposit", "Deposit", 350, "GBP")).toBe("internal");
   });
 
@@ -92,10 +101,31 @@ describe("netting rules", () => {
     ).toBe("internal");
   });
 
-  it("reverted rows are never movements", () => {
-    expect(classifyMovement("Reverted", "Anything", -999, "GBP")).toBe(
-      "internal",
-    );
+  it("State=REVERTED rows are never movements, whatever the Type", () => {
+    expect(
+      classifyMovement(
+        "Card Payment",
+        "Frn* Hold.free-Now.com",
+        -1650,
+        "GBP",
+        "REVERTED",
+      ),
+    ).toBe("internal");
+    expect(
+      classifyMovement(
+        "Card Payment",
+        "Fbpay Meta Store",
+        -42499,
+        "USD",
+        "REVERTED",
+      ),
+    ).toBe("internal");
+    expect(
+      classifyMovement("Card Payment", "Housekeep", -3000, "GBP", "REVERTED"),
+    ).toBe("internal");
+    expect(
+      classifyMovement("Card Payment", "TfL", -150, "GBP", "COMPLETED"),
+    ).toBe("spend");
   });
 
   it("fees and interest keep their own categories", () => {

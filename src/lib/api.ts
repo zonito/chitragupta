@@ -75,6 +75,12 @@ export async function handleChitraguptaApi(
   const path = url.pathname;
   if (!path.startsWith("/api/")) return null;
 
+  // Jev is stateless and needs no store: route it before the DB gate so it
+  // stays reachable (and fail-open) even with no store configured.
+  if (path === "/api/jev/ask") {
+    return routeJev(request);
+  }
+
   const db = await getDb();
   const needDb =
     path === "/api/ingest/status" ||
@@ -255,41 +261,42 @@ async function routeWithDb(
     return json({ ok: true, person, month, rows });
   }
 
-  if (path === "/api/jev/ask" && request.method === "POST") {
-    const tunnel =
-      process.env["VARUNA_TUNNEL_URL"]?.trim() ?? "http://127.0.0.1:8400";
-    try {
-      const body = await request.text();
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8_000);
-      try {
-        const res = await fetch(`${tunnel}/v1/varuna/jev/ask`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-          signal: controller.signal,
-        });
-        const text = await res.text();
-        return new Response(text, {
-          status: res.status,
-          headers: { "content-type": "application/json; charset=utf-8" },
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-    } catch (error) {
-      return json(
-        {
-          ok: false,
-          jev: "unavailable",
-          error: error instanceof Error ? error.message : String(error),
-        },
-        502,
-      );
-    }
-  }
-
   return null;
+}
+
+async function routeJev(request: Request): Promise<Response | null> {
+  if (request.method !== "POST") return null;
+  const tunnel =
+    process.env["VARUNA_TUNNEL_URL"]?.trim() ?? "http://127.0.0.1:8400";
+  try {
+    const body = await request.text();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const res = await fetch(`${tunnel}/v1/varuna/jev/ask`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body,
+      });
+      const text = await res.text();
+      return new Response(text, {
+        status: res.status,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    return json(
+      {
+        ok: false,
+        jev: "unavailable",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      502,
+    );
+  }
 }
 
 function currentWeek(): string {

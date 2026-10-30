@@ -59,6 +59,32 @@ function effectiveDateOf(r: StatementRow): string {
   return r.completedDate || r.startedDate;
 }
 
+const SAVINGS_MONTHS: Record<string, string> = {
+  Jan: "01",
+  Feb: "02",
+  Mar: "03",
+  Apr: "04",
+  May: "05",
+  Jun: "06",
+  Jul: "07",
+  Aug: "08",
+  Sep: "09",
+  Oct: "10",
+  Nov: "11",
+  Dec: "12",
+};
+
+export function savingsIsoDate(dateStr: string): string {
+  // Savings CSVs use "Jul 14, 2023" (quoted in the file, quotes stripped at
+  // parse). Returns ISO YYYY-MM-DD; unparseable input passes through so the
+  // row stays visible instead of silently vanishing.
+  const m = dateStr.trim().match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
+  if (!m) return dateStr.trim();
+  const num = SAVINGS_MONTHS[m[1]!];
+  if (!num) return dateStr.trim();
+  return `${m[3]}-${num}-${String(Number(m[2])).padStart(2, "0")}`;
+}
+
 function monthOf(dateStr: string): string {
   const trimmed = dateStr.trim();
   const iso = trimmed.match(/^(\d{4})-(\d{2})-\d{2}/);
@@ -165,8 +191,8 @@ export function ingestAccount(
         savingsFingerprint(account, r),
         person,
         account,
-        r.date,
-        monthOf(r.date),
+        savingsIsoDate(r.date),
+        monthOf(savingsIsoDate(r.date)),
         r.description,
         merchantOf(r.description),
         amountMinor,
@@ -186,7 +212,9 @@ export function ingestAccount(
       currency = "GBP";
     }
   } else {
-    const arows = rows as StatementRow[];
+    const arows = (rows as StatementRow[]).filter(
+      (r) => r.state !== "REVERTED",
+    );
     const items: unknown[][] = [];
     const lastByCurrency = new Map<string, { date: string; bal: number }>();
     for (const r of arows) {
@@ -199,6 +227,7 @@ export function ingestAccount(
         r.description,
         amountMinor,
         r.currency,
+        r.state,
       );
       items.push([
         statementFingerprint(account, r),
@@ -240,9 +269,11 @@ export function ingestAccount(
   ).run(
     account,
     startedAt,
+    // rows_seen counts source rows that survive the REVERTED exclusion and
+    // savings exact-dupe removal — i.e. rows the importer actually stores.
     isSavingsAccount(account)
       ? uniqueSavingsCount(rows as SavingsRow[], account)
-      : rows.length,
+      : (rows as StatementRow[]).filter((r) => r.state !== "REVERTED").length,
     rowsAdded,
     balanceMinor,
     currency,
@@ -252,7 +283,7 @@ export function ingestAccount(
   recomputeAggregates(db, person);
   const rowsSeen = isSavingsAccount(account)
     ? uniqueSavingsCount(rows as SavingsRow[], account)
-    : rows.length;
+    : (rows as StatementRow[]).filter((r) => r.state !== "REVERTED").length;
   return { account, rowsSeen, rowsAdded, balanceMinor, currency, discrepancy };
 }
 
