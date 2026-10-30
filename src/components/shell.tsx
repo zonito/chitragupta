@@ -8,7 +8,7 @@ import { DestinationIcon } from "@/components/item-icons";
 import { MerchantTile } from "@/components/tiles";
 import { useDocuments } from "@/components/documents";
 import { searchRecords } from "@/lib/record-search";
-import { parseAskQuery } from "@/lib/ask-query";
+import { parseAskQuery, type AskFigures } from "@/lib/ask-query";
 import { fetchApiTransactions } from "@/lib/txn-map";
 import type { Person } from "@/lib/data";
 
@@ -259,8 +259,20 @@ export function AskButton() {
   const [history, setHistory] = useState<{ question: string; txns: Txn[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
+  // AI Ask: every submit also goes to POST /api/ask, which pulls the
+  // matching records server-side, computes the figures in code and has
+  // the model write prose around them. When it answers, its panel
+  // replaces the deterministic one; on any endpoint failure the
+  // deterministic panels below simply stay — they are the fallback.
+  const [askedText, setAskedText] = useState("");
+  const [aiResult, setAiResult] = useState<{ question: string; answer: string; figures: AskFigures; ai: boolean } | null>(null);
+  useEffect(() => {
+    setAiResult(null);
+    setAskedText("");
+  }, [person]);
   const isTrip = workedExample === "trip";
   const answer = isTrip ? tripAnswer(person) : ocadoAnswer(person);
+  const displayAi = aiResult && askedText !== "" && aiResult.question === askedText ? aiResult : null;
 
   const runHistorySearch = async (question: string) => {
     const plan = parseAskQuery(question, currentMonthKey());
@@ -281,17 +293,36 @@ export function AskButton() {
     }
   };
 
+  const runAiAsk = async (question: string) => {
+    try {
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question, person }),
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { ok?: unknown; answer?: unknown; figures?: unknown; ai?: unknown };
+      if (body.ok !== true || typeof body.answer !== "string" || !body.figures || typeof body.figures !== "object") return;
+      setAiResult({ question, answer: body.answer, figures: body.figures as AskFigures, ai: body.ai === true });
+    } catch {
+      // Endpoint unreachable: the deterministic panels already answer.
+    }
+  };
+
   const submitQuestion = (question: string) => {
     if (!question.trim()) return;
+    const trimmed = question.trim();
     setExpanded(null);
+    setAiResult(null);
+    setAskedText(trimmed);
     if (/ocado/i.test(question) && !/last|receipt|document/i.test(question)) setWorkedExample("ocado");
     else if (/holiday/i.test(question) && /cost|spend|spent|total/i.test(question)) setWorkedExample("trip");
     else {
-      const trimmed = question.trim();
       setSubmittedQuestion(trimmed);
       setWorkedExample("records");
       void runHistorySearch(trimmed);
     }
+    void runAiAsk(trimmed);
   };
 
   // Records answers search the fetched full-history rows once they land;
@@ -348,14 +379,32 @@ export function AskButton() {
           <div className="mb-6 flex flex-wrap gap-2">
             {EXAMPLES.map((e) => <Button key={e} variant="outline" onClick={() => {
               setQ(e);
-              if (e === TRIP_QUESTION) setWorkedExample("trip");
-              if (e === OCADO_QUESTION) setWorkedExample("ocado");
+              if (e === TRIP_QUESTION) { setWorkedExample("trip"); setAiResult(null); setAskedText(""); }
+              if (e === OCADO_QUESTION) { setWorkedExample("ocado"); setAiResult(null); setAskedText(""); }
               if (e === BOILER_QUESTION || e === WARRANTY_QUESTION || e === INDIA_QUESTION) submitQuestion(e);
             }} className="h-auto whitespace-normal rounded-lg border bg-card px-3 py-1.5 text-left text-xs font-normal text-muted-foreground shadow-none">{e}</Button>)}
           </div>
           <Label>You asked</Label>
-          <p className="mb-3 text-body leading-relaxed">"{workedExample === "records" ? submittedQuestion : isTrip ? TRIP_QUESTION : OCADO_QUESTION}"</p>
-          {workedExample === "records" ? (
+          <p className="mb-3 text-body leading-relaxed">"{displayAi ? askedText : workedExample === "records" ? submittedQuestion : isTrip ? TRIP_QUESTION : OCADO_QUESTION}"</p>
+          {displayAi ? (
+            <Panel>
+              <div aria-live="polite" className="num text-body leading-relaxed">{displayAi.answer}</div>
+              <div className="num mt-4 text-title font-semibold">{gbp(displayAi.figures.total)}</div>
+              <p className="text-caption leading-relaxed text-muted-foreground">Across {displayAi.figures.count} matching {displayAi.figures.count === 1 ? "transaction" : "transactions"}{displayAi.figures.month ? ` · ${monthOptions().find((m) => m.key === displayAi.figures.month)?.label ?? displayAi.figures.month}` : ""}.</p>
+              {displayAi.figures.latest && <p className="num mt-2 text-body leading-relaxed">Latest: {displayAi.figures.latest.merchant}, {displayAi.figures.latest.date} — {gbp(displayAi.figures.latest.amount)}.</p>}
+              {displayAi.figures.perMonth && (
+                <div className="mt-3">
+                  {displayAi.figures.perMonth.map((m) => (
+                    <div key={m.month} className="ledger-row flex justify-between gap-3 py-2 text-sm">
+                      <span>{monthOptions().find((o) => o.key === m.month)?.label ?? m.month}</span>
+                      <span className="num shrink-0">{gbp(m.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {displayAi.figures.truncated && <p className="mt-2 text-caption leading-relaxed text-muted-foreground">Totals cover the most recent 200 matches.</p>}
+            </Panel>
+          ) : workedExample === "records" ? (
             searching ? (
               <Panel>
                 <p className="num text-body leading-relaxed">Searching your records…</p>

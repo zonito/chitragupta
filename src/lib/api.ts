@@ -14,6 +14,7 @@ import {
   classifyUnknownMerchants,
   claudeConfig,
 } from "./ingest/classify";
+import { answerAsk } from "./ask.server";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -112,7 +113,8 @@ export async function handleChitraguptaApi(
     path === "/api/digest" ||
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
-    path === "/api/aggregates";
+    path === "/api/aggregates" ||
+    path === "/api/ask";
   if (needDb) {
     const ensured = requireDb(db);
     if (ensured instanceof Response) return ensured;
@@ -220,6 +222,36 @@ async function routeWithDb(
       }
     }
     return json({ ok: true, merchant: body.merchant, category: body.category });
+  }
+
+  if (path === "/api/ask" && request.method === "POST") {
+    let body: { question?: string; person?: string };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const question = body.question?.trim();
+    if (!question) {
+      return json({ ok: false, error: "question is required" }, 400);
+    }
+    // answerAsk never throws for gateway problems (it falls back to the
+    // deterministic answer); a throw here is a store problem.
+    try {
+      const result = await answerAsk(db, {
+        question,
+        ...(body.person ? { person: body.person } : {}),
+      });
+      return json({ ok: true, ...result });
+    } catch (error) {
+      return json(
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        500,
+      );
+    }
   }
 
   if (path === "/api/digest" && request.method === "GET") {

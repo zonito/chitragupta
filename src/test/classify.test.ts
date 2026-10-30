@@ -59,12 +59,15 @@ describe("Muse classification client (Fix 5)", () => {
       fetchImpl: okFetch(seen) as typeof fetch,
     });
     expect(summary).toMatchObject({ ran: true, classified: 1, failed: 0, remaining: 0 });
-    expect(seen.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(seen.url).toBe("https://api.meta.ai/v1/messages");
     const headers = seen.init?.headers as Record<string, string>;
-    expect(headers["x-api-key"]).toBe(TEST_KEY);
+    expect(headers["authorization"]).toBe(`Bearer ${TEST_KEY}`);
+    expect(headers["x-api-key"]).toBeUndefined();
     const body = JSON.parse(String(seen.init?.body)) as {
+      model: string;
       messages: { content: string }[];
     };
+    expect(body.model).toBe("muse-spark-1.3-contributor");
     const prompt = body.messages[0]!.content;
     expect(prompt).toContain("Mystery Shop");
     // Privacy contract: no amounts, balances or account identifiers.
@@ -103,6 +106,18 @@ describe("Muse classification client (Fix 5)", () => {
       MUSE_API_BASE_URL: "https://gateway.example.com/",
     });
     expect(config?.baseUrl).toBe("https://gateway.example.com");
+    expect(config?.model).toBe("muse-spark-1.3-contributor");
     expect(claudeConfig({})).toBeNull();
+  });
+
+  it("defaults to the Meta gateway and the contributor model", async () => {
+    const config = claudeConfig({ MUSE_API_KEY: "LLM_example" });
+    expect(config?.baseUrl).toBe("https://api.meta.ai");
+    expect(config?.model).toBe("muse-spark-1.3-contributor");
+    const custom = claudeConfig({
+      MUSE_API_KEY: "LLM_example",
+      MUSE_MODEL: "muse-spark-1.2-contributor",
+    });
+    expect(custom?.model).toBe("muse-spark-1.2-contributor");
   });
 });

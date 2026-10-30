@@ -27,22 +27,32 @@ const apiRow = (over: Partial<ApiTxnRow>): ApiTxnRow => ({
   ...over,
 });
 
+// The component also POSTs every submit to /api/ask; these stubs make
+// that endpoint fail so the tests exercise the deterministic path, which
+// is the fallback the endpoint failure is designed to leave in place.
+const ASK_DOWN = { ok: false, status: 503, json: async () => ({}) };
+
 function stubTransactions(rows: ApiTxnRow[]) {
-  const fetchMock = vi.fn(async (_url: string) => ({
-    ok: true,
-    json: async () => ({ ok: true, count: rows.length, transactions: rows }),
-  }));
+  const fetchMock = vi.fn(async (url: string) =>
+    String(url).includes("/api/ask")
+      ? ASK_DOWN
+      : {
+          ok: true,
+          json: async () => ({ ok: true, count: rows.length, transactions: rows }),
+        },
+  );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
 function stubTransactionsDeferred(rows: ApiTxnRow[]) {
   let release: ((value: unknown) => void) | undefined;
-  const fetchMock = vi.fn(
-    (_url: string) =>
-      new Promise((resolve) => {
-        release = resolve;
-      }),
+  const fetchMock = vi.fn((url: string) =>
+    String(url).includes("/api/ask")
+      ? Promise.resolve(ASK_DOWN)
+      : new Promise((resolve) => {
+          release = resolve;
+        }),
   );
   vi.stubGlobal("fetch", fetchMock);
   return {

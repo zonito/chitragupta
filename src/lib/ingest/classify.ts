@@ -1,6 +1,11 @@
 import type Database from "better-sqlite3";
 import { recomputeAggregates } from "./ingest";
 import { reviewQueue, setMerchant } from "./merchants";
+import {
+  museComplete,
+  museConfig,
+  type MuseConfig,
+} from "../muse.server";
 
 /**
  * Muse classification for merchants the deterministic rules cannot place.
@@ -9,13 +14,14 @@ import { reviewQueue, setMerchant } from "./merchants";
  * name, its dominant movement type, and a transaction count. No amounts
  * (beyond that count), no balances, no account identifiers, no dates.
  *
- * The key is read from MUSE_API_KEY (Zonito's .env names it that, not
- * ANTHROPIC_API_KEY). MUSE_API_BASE_URL optionally points at a gateway
- * instead of api.anthropic.com; MUSE_API_MODEL overrides the model.
- * With no key configured this module is a strict no-op: the review queue
- * simply accumulates until a key exists. Classification runs after ingest
- * or via POST /api/classify/run; it never blocks page loads, and a failed
- * call leaves the merchant queued for the next run.
+ * Calls go through the shared Meta Model API gateway client
+ * (src/lib/muse.server.ts): MUSE_API_KEY is the key, MUSE_API_BASE_URL
+ * defaults to https://api.meta.ai, MUSE_MODEL defaults to
+ * muse-spark-1.3-contributor. With no key configured this module is a
+ * strict no-op: the review queue simply accumulates until a key exists.
+ * Classification runs after ingest or via POST /api/classify/run; it
+ * never blocks page loads, and a failed call leaves the merchant queued
+ * for the next run.
  */
 
 export const CLASSIFIABLE_CATEGORIES = [
@@ -30,18 +36,13 @@ export const CLASSIFIABLE_CATEGORIES = [
   "One-off",
 ] as const;
 
-export type ClaudeConfig = { apiKey: string; baseUrl: string; model: string };
+export type ClaudeConfig = MuseConfig;
 
+/** Gateway configuration for classification (kept name for existing callers). */
 export function claudeConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): ClaudeConfig | null {
-  const apiKey = env["MUSE_API_KEY"]?.trim();
-  if (!apiKey) return null;
-  const baseUrl = (
-    env["MUSE_API_BASE_URL"]?.trim() || "https://api.anthropic.com"
-  ).replace(/\/+$/, "");
-  const model = env["MUSE_API_MODEL"]?.trim() || "claude-haiku-4-5";
-  return { apiKey, baseUrl, model };
+  return museConfig(env);
 }
 
 export type ClassifySummary = {
@@ -92,10 +93,10 @@ function parseClassification(text: string): Classification | null {
 }
 
 async function classifyOne(
-  config: ClaudeConfig,
   merchant: string,
   movement: string,
   count: number,
+  env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch,
 ): Promise<Classification | null> {
   const prompt = [
@@ -105,28 +106,13 @@ async function classifyOne(
     `Seen ${count} time(s).`,
     `Reply with ONLY a JSON object: {"category": one of ${JSON.stringify(CLASSIFIABLE_CATEGORIES)}, "icon": a short lowercase icon name (e.g. "shopping-bag", "coffee", "train"), "colour": a hex colour like "#3b82f6"}.`,
   ].join("\n");
-  const res = await fetchImpl(`${config.baseUrl}/v1/messages`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": config.apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: 200,
-      messages: [{ role: "user", content: prompt }],
-    }),
+  const text = await museComplete({
+    prompt,
+    maxTokens: 200,
+    env,
+    fetchImpl,
   });
-  if (!res.ok) return null;
-  const body = (await res.json()) as {
-    content?: { type?: string; text?: string }[];
-  };
-  const text = (body.content ?? [])
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text!)
-    .join("");
-  return parseClassification(text);
+  return text ? parseClassification(text) : null;
 }
 
 export async function classifyUnknownMerchants(
@@ -138,7 +124,8 @@ export async function classifyUnknownMerchants(
   } = {},
 ): Promise<ClassifySummary> {
   const queue = reviewQueue(db);
-  const config = claudeConfig(opts.env ?? process.env);
+  const env = opts.env ?? process.env;
+  const config = claudeConfig(env);
   if (!config) {
     return {
       ran: false,
@@ -154,10 +141,10 @@ export async function classifyUnknownMerchants(
   for (const item of queue.slice(0, opts.limit ?? 50)) {
     try {
       const result = await classifyOne(
-        config,
         item.merchant,
         dominantMovement(db, item.merchant),
         item.count,
+        env,
         fetchImpl,
       );
       if (!result) {

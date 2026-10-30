@@ -36,13 +36,18 @@ Copy `.env.example` to `.env` and fill in the paths. The store is created
 on first ingest; page loads serve precomputed aggregates and never rescan
 CSV files.
 
-Optional: `MUSE_API_KEY` is the only API key the app reads. When set,
-merchants the built-in rules cannot classify are sent (name, transaction
-type and count only — never amounts, balances or account details) to the
-Muse API once each and remembered; when unset, classification stays
-rules-only and unknown merchants wait in the review queue.
-`MUSE_API_BASE_URL` optionally points at a gateway instead of
-`https://api.anthropic.com`.
+Optional: `MUSE_API_KEY` is the only API key the app reads — a Meta
+Model API key (it starts with `LLM_`). When set, merchants the built-in
+rules cannot classify are sent (name, transaction type and count only —
+never amounts, balances or account details) to the model once each and
+remembered; when unset, classification stays rules-only and unknown
+merchants wait in the review queue. The same key powers Ask
+(`POST /api/ask`): the app pulls the matching records, computes every
+figure in code, and the model writes prose around those figures; with
+no key (or on any gateway failure) Ask answers deterministically from
+the same computed figures. `MUSE_API_BASE_URL` defaults to
+`https://api.meta.ai` and `MUSE_MODEL` to
+`muse-spark-1.3-contributor`.
 
 ## Product rules (frozen)
 

@@ -34,6 +34,27 @@ const SINGLE_WORD_CATEGORIES: Record<string, string> = {
   shopping: "Shopping",
 };
 
+/**
+ * The code-computed figures behind an Ask answer (POST /api/ask). Every
+ * number the answer may state comes from this object — the model writes
+ * prose around them and never produces a figure of its own. Amounts are
+ * pounds, already scoped to the requested person via shareOf.
+ */
+export interface AskFigures {
+  /** Total of the matched spend set. */
+  total: number;
+  /** Number of transactions in the matched spend set. */
+  count: number;
+  /** The most recent matching record, when one exists. */
+  latest: { merchant: string; date: string; amount: number } | null;
+  /** Per-month totals, present only when the matched set spans months. */
+  perMonth: { month: string; total: number; count: number }[] | null;
+  /** YYYY-MM when the question named a month, else null. */
+  month: string | null;
+  /** True when the match pull hit the row cap, so totals are a floor. */
+  truncated: boolean;
+}
+
 export interface AskQueryPlan {
   /** YYYY-MM when the question names a month, else undefined. */
   month?: string;
