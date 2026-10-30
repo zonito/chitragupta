@@ -60,7 +60,29 @@ function effectiveDateOf(r: StatementRow): string {
 }
 
 function monthOf(dateStr: string): string {
-  return dateStr.slice(0, 7);
+  const trimmed = dateStr.trim();
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-\d{2}/);
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  const written = trimmed.match(/^([A-Za-z]{3})\s+\d{1,2},\s*(\d{4})$/);
+  if (written) {
+    const months: Record<string, string> = {
+      Jan: "01",
+      Feb: "02",
+      Mar: "03",
+      Apr: "04",
+      May: "05",
+      Jun: "06",
+      Jul: "07",
+      Aug: "08",
+      Sep: "09",
+      Oct: "10",
+      Nov: "11",
+      Dec: "12",
+    };
+    const num = months[written[1]!];
+    if (num) return `${written[2]}-${num}`;
+  }
+  return trimmed.slice(0, 7);
 }
 
 function uniqueSavingsCount(
@@ -238,17 +260,29 @@ export function recomputeAggregates(
   db: import("better-sqlite3").Database,
   person: string,
 ): void {
+  // Category resolution order: explicit transaction category (user/molang
+  // override or Muse classification) → merchant memory → movement fallback.
   db.prepare(`DELETE FROM month_aggregates WHERE person = ?`).run(person);
   db.prepare(
     `INSERT INTO month_aggregates (person, year_month, category, spend_minor, income_minor, aside_minor, txn_count)
-     SELECT person, year_month,
-       COALESCE(category, CASE movement WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off' WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees' WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END),
-       SUM(CASE WHEN amount_minor < 0 AND movement IN ('spend') THEN -amount_minor ELSE 0 END),
-       SUM(CASE WHEN amount_minor > 0 AND movement IN ('income') THEN amount_minor ELSE 0 END),
-       SUM(CASE WHEN movement = 'aside' AND amount_minor < 0 THEN -amount_minor ELSE 0 END),
+     SELECT t.person, t.year_month,
+       COALESCE(t.category, m.category,
+         CASE t.movement
+           WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
+           WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
+           WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END),
+       SUM(CASE WHEN t.amount_minor < 0 AND t.movement = 'spend' THEN -t.amount_minor ELSE 0 END),
+       SUM(CASE WHEN t.amount_minor > 0 AND t.movement = 'income' THEN t.amount_minor ELSE 0 END),
+       SUM(CASE WHEN t.movement = 'aside' AND t.amount_minor < 0 THEN -t.amount_minor ELSE 0 END),
        COUNT(*)
-     FROM transactions WHERE person = ?
-     GROUP BY person, year_month, COALESCE(category, CASE movement WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off' WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees' WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`,
+     FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+     WHERE t.person = ?
+     GROUP BY t.person, t.year_month,
+       COALESCE(t.category, m.category,
+         CASE t.movement
+           WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
+           WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
+           WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`,
   ).run(person);
 }
 

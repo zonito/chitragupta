@@ -123,6 +123,7 @@ async function routeWithDb(
     try {
       const results = ingestAll(db, dir, "zonito");
       seedMerchantMemory(db);
+      recomputeAggregates(db, "zonito");
       return json({ ok: true, results });
     } catch (error) {
       return json(

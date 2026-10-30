@@ -61,6 +61,11 @@ describe("netting rules", () => {
     ).toBe("aside");
   });
 
+  it("bare savings Withdrawal/Deposit legs are internal pocket moves", () => {
+    expect(classifyMovement("Deposit", "Withdrawal", -2118361, "GBP")).toBe("internal");
+    expect(classifyMovement("Deposit", "Deposit", 350, "GBP")).toBe("internal");
+  });
+
   it("own-account and pocket transfers are internal", () => {
     expect(classifyMovement("Transfer", "To GBP Pro", -20000, "GBP")).toBe(
       "internal",

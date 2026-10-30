@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS merchant_memory (
 export function openStore(storeDir: string): Database.Database {
   mkdirSync(storeDir, { recursive: true });
   const db = new Database(join(storeDir, "chitragupta.sqlite"));
-  db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   const row = db
     .prepare("SELECT value FROM meta WHERE key = 'schema_version'")

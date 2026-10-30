@@ -187,6 +187,8 @@ export function classifyMovement(
   const d = description.toLowerCase();
   if (t === "reverted") return "internal";
   if (t === EXCHANGE_TYPE) return "internal";
+  if (/^(withdrawal|deposit)$/i.test(description.trim()) && _currency === "GBP")
+    return "internal";
   if (ASIDE_PATTERNS.some((p) => p.test(d))) return "aside";
   if (/(^|\b)(to|from)\b.*\b(pocket|savings)\b/i.test(description))
     return "aside";
