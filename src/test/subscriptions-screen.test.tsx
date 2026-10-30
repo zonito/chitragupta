@@ -12,19 +12,30 @@ import type { ApiTxnRow } from "@/lib/txn-map";
  * subscription's transactions, paginated 10 per page in the UI.
  */
 
-const sub = (over: Partial<Sub>): Sub => ({
-  name: "Streamly",
-  amount: 9.99,
-  freq: "Monthly",
-  last: "5 Oct",
-  card: "Revolut Main · Zonito",
-  owner: "zonito",
-  status: "Active",
-  charges: 14,
-  nextExpected: "2026-11-05",
-  variants: ["Streamly"],
-  ...over,
-});
+const sub = (over: Partial<Sub>): Sub => {
+  const merged: Sub = {
+    name: "Streamly",
+    amount: 9.99,
+    freq: "Monthly",
+    last: "5 Oct",
+    card: "Revolut Main · Zonito",
+    owner: "zonito",
+    status: "Active",
+    charges: 14,
+    chargeIds: [],
+    nextExpected: "2026-11-05",
+    variants: ["Streamly"],
+    ...over,
+  };
+  if (!over.chargeIds) {
+    const slug = merged.name.toLowerCase().replace(/\s+/g, "-");
+    merged.chargeIds = Array.from(
+      { length: merged.charges },
+      (_, i) => `${slug}-${i + 1}`,
+    );
+  }
+  return merged;
+};
 
 const row = (n: number): ApiTxnRow => ({
   id: `streamly-${n}`,
@@ -67,11 +78,15 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      const merchant = new URLSearchParams(url.split("?")[1]).get("merchant");
-      const transactions =
-        merchant === "Streamly"
-          ? Array.from({ length: 14 }, (_, i) => row(i + 1))
-          : [];
+      // The detail view fetches a subscription's own charges by id.
+      const ids = new Set(
+        (new URLSearchParams(url.split("?")[1]).get("ids") ?? "")
+          .split(",")
+          .filter(Boolean),
+      );
+      const transactions = Array.from({ length: 14 }, (_, i) => row(i + 1)).filter(
+        (r) => ids.has(r.id),
+      );
       return { ok: true, json: async () => ({ ok: true, transactions }) };
     }),
   );
@@ -83,7 +98,7 @@ afterEach(() => {
 });
 
 describe("Subscriptions screen", () => {
-  it("renders Monthly, Yearly and Ended sections", () => {
+  it("renders Monthly and Yearly sections with the Ended section present", () => {
     render(
       <PersonProvider>
         <Subs />
@@ -91,10 +106,28 @@ describe("Subscriptions screen", () => {
     );
     expect(screen.getByRole("heading", { name: "Monthly" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Yearly" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Ended" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Ended/ })).toBeTruthy();
     expect(screen.getByText("Streamly")).toBeTruthy();
     expect(screen.getByText("Prime Yearly")).toBeTruthy();
+  });
+
+  it("keeps Ended cards hidden until the section is expanded, and hides them again on collapse", () => {
+    render(
+      <PersonProvider>
+        <Subs />
+      </PersonProvider>,
+    );
+    const toggle = screen.getByRole("button", { name: /Ended/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Old Gym")).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("Old Gym")).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Old Gym")).toBeNull();
   });
 
   it("opens a card's transactions paginated 10 per page", async () => {

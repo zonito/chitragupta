@@ -68,9 +68,16 @@ CREATE TABLE IF NOT EXISTS merchant_memory (
 );
 `;
 
+export const STORE_FILENAME = "chitragupta.sqlite";
+
 export function openStore(storeDir: string): Database.Database {
-  mkdirSync(storeDir, { recursive: true });
-  const db = new Database(join(storeDir, "chitragupta.sqlite"));
+  return openStoreFile(join(storeDir, STORE_FILENAME));
+}
+
+/** Open (creating if needed) the store database at an exact file path. */
+export function openStoreFile(path: string): Database.Database {
+  mkdirSync(dirname(path), { recursive: true });
+  const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   const row = db

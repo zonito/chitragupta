@@ -162,6 +162,23 @@ async function routeWithDb(
       const classification = await classifyUnknownMerchants(db).catch(
         () => null,
       );
+      // A partial failure (one account's file unreadable, say) reports
+      // ok: false with the failed accounts named, never a bare success.
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length > 0) {
+        const detail = failed
+          .map(
+            (r) =>
+              `${r.account}${r.file ? ` (${r.file})` : ""}: ${r.error ?? "failed"}`,
+          )
+          .join("; ");
+        return json({
+          ok: false,
+          error: `${failed.length} of ${results.length} accounts failed: ${detail}`,
+          results,
+          classification,
+        });
+      }
       return json({ ok: true, results, classification });
     } catch (error) {
       return json(
@@ -333,12 +350,23 @@ async function routeWithDb(
     const merchant = url.searchParams.get("merchant")?.trim();
     const q = url.searchParams.get("q")?.trim();
     const category = url.searchParams.get("category");
+    const ids = (url.searchParams.get("ids") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 1000);
     const limit = Math.min(
       Math.max(Number(url.searchParams.get("limit") ?? 200) || 200, 1),
       1000,
     );
     const where: string[] = [];
     const params: unknown[] = [];
+    if (ids.length > 0) {
+      // Exact fingerprint match: the subscription detail view asks for a
+      // subscription's own charge rows by id, nothing else.
+      where.push(`t.fingerprint IN (${ids.map(() => "?").join(", ")})`);
+      params.push(...ids);
+    }
     if (person && person !== "household") {
       where.push("t.person = ?");
       params.push(person);

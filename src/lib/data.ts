@@ -72,6 +72,10 @@ export interface Sub {
   owner: Owner; status: "Active" | "Ended"; note?: string;
   /** Number of charges in the recurring amount cluster that defines this sub. */
   charges: number;
+  /** Store fingerprints of those cluster charges, in charge order. The
+   *  detail view fetches exactly these rows, so its count always matches
+   *  `charges` and unrelated same-merchant purchases never appear. */
+  chargeIds: string[];
   /** ISO date of the next expected charge; Active subs only, else null. */
   nextExpected: string | null;
   /** Store merchant names grouped into this sub (name variants). */

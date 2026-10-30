@@ -16,6 +16,7 @@ const SECTION_ORDER: Sub["freq"][] = ["Monthly", "Yearly", "Quarterly", "Weekly"
 export function Subs() {
   const { person } = usePerson();
   const [selected, setSelected] = useState<Sub | null>(null);
+  const [endedOpen, setEndedOpen] = useState(false);
   const list = SUBS.filter((s) => person === "household" || s.owner === person);
   const active = list.filter((s) => s.status === "Active");
   const ended = list.filter((s) => s.status === "Ended");
@@ -51,10 +52,27 @@ export function Subs() {
 
       {ended.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-heading font-semibold">Ended</h2>
-          <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
-            {ended.map((s) => <SubCard key={s.name} sub={s} person={person} onOpen={() => setSelected(s)} />)}
-          </div>
+          <h2 className="mb-3 text-heading font-semibold">
+            <button
+              type="button"
+              aria-expanded={endedOpen}
+              onClick={() => setEndedOpen((open) => !open)}
+              className="flex items-center gap-2"
+            >
+              Ended
+              <span className="num text-caption font-normal text-muted-foreground">
+                {ended.length} subscription{ended.length === 1 ? "" : "s"}
+              </span>
+              <span aria-hidden="true" className="text-caption text-muted-foreground">
+                {endedOpen ? "▾" : "▸"}
+              </span>
+            </button>
+          </h2>
+          {endedOpen && (
+            <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+              {ended.map((s) => <SubCard key={s.name} sub={s} person={person} onOpen={() => setSelected(s)} />)}
+            </div>
+          )}
         </section>
       )}
 
@@ -109,16 +127,18 @@ function SubDetail({ sub }: { sub: Sub }) {
     let cancelled = false;
     (async () => {
       try {
-        const perVariant = await Promise.all(
-          sub.variants.map((v) => fetchApiTransactions({ merchant: v, limit: "1000" })),
-        );
+        // Exactly this subscription's own cluster charges, by fingerprint:
+        // the count always matches the card, and unrelated purchases from
+        // the same merchant (Supercharging, app purchases) never appear.
+        const rows = await fetchApiTransactions({
+          ids: sub.chargeIds.join(","),
+          limit: "1000",
+        });
         if (cancelled) return;
-        const byId = new Map<string, Txn>();
-        for (const t of perVariant.flat()) if (!byId.has(t.id)) byId.set(t.id, t);
-        const merged = [...byId.values()].sort(
+        const sorted = [...rows].sort(
           (a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
         );
-        setTxns(merged);
+        setTxns(sorted);
       } catch {
         if (!cancelled) setFailed(true);
       }

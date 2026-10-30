@@ -266,6 +266,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     .get() as { d: string | null };
   const subs: Sub[] = detectSubscriptions(
     allSpend.map((r) => ({
+      id: r.fingerprint,
       merchant: r.merchant,
       date: r.effective_date,
       amountMinor: r.amount_minor,

@@ -16,7 +16,14 @@ const c = (
   amountMinor: number,
   account = "Main",
   person = "zonito",
-): SubCharge => ({ merchant, date, amountMinor, account, person });
+): SubCharge => ({
+  id: `${merchant}|${date}|${amountMinor}|${account}`,
+  merchant,
+  date,
+  amountMinor,
+  account,
+  person,
+});
 
 const LATEST = "2026-10-30";
 
@@ -61,6 +68,11 @@ describe("detectSubscriptions", () => {
       nextExpected: "2026-11-04",
       variants: ["Lebara", "Lebara mobile"],
     });
+    // chargeIds are exactly the cluster charges' fingerprints, so the
+    // detail view can fetch precisely those rows.
+    expect(subs[0]!.chargeIds).toHaveLength(5);
+    expect(new Set(subs[0]!.chargeIds).size).toBe(5);
+    expect(subs[0]!.chargeIds).toContain("Lebara|2026-10-05|-500|Main");
   });
 
   it("finds a repeated £4.99 monthly cluster among varying food orders", () => {
@@ -83,6 +95,10 @@ describe("detectSubscriptions", () => {
       status: "Active",
       charges: 4,
     });
+    // Only the £4.99 cluster charges are the subscription's own; the food
+    // orders at other amounts must not be among its chargeIds.
+    expect(subs[0]!.chargeIds).toHaveLength(4);
+    expect(subs[0]!.chargeIds.every((id) => id.includes("|-499|"))).toBe(true);
   });
 
   it("accepts a yearly pair ~365 days apart as Yearly with only 2 charges", () => {

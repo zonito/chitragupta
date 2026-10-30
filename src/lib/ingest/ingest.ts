@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   INGEST_ACCOUNTS,
   classifyMovement,
@@ -13,7 +13,7 @@ import {
   type SavingsRow,
   type StatementRow,
 } from "./parse";
-import { RULES_VERSION } from "./store";
+import { openStoreFile, RULES_VERSION, STORE_FILENAME } from "./store";
 
 export type IngestResult = {
   account: IngestAccount;
@@ -22,22 +22,29 @@ export type IngestResult = {
   balanceMinor: number | null;
   currency: string | null;
   discrepancy: string | null;
+  /** False when this account's source file could not be read or parsed. */
+  ok: boolean;
+  /** The Originals file this account reads (null when none could be named). */
+  file: string | null;
+  /** Failure detail when ok is false. */
+  error?: string;
 };
 
-function readOriginals(
+/**
+ * The Originals file an account reads, by name only. Throws when the
+ * Originals folder cannot be listed or holds no matching file.
+ */
+export function findOriginalFile(
   dataDir: string,
   account: IngestAccount,
-): { rows: StatementRow[] | SavingsRow[]; file: string } {
+): string {
   const dir = join(dataDir, "Originals");
   const files = readdirSync(dir).filter((f) => f.endsWith(".csv"));
   if (isSavingsAccount(account)) {
     const tag = account.split("-")[1]!;
     const match = files.find((f) => f.includes("savings") && f.includes(tag));
     if (!match) throw new Error(`no Originals savings file for ${account}`);
-    return {
-      rows: parseSavingsCsv(readFileSync(join(dir, match), "utf8")),
-      file: match,
-    };
+    return match;
   }
   const productHint: Record<string, string[]> = {
     Main: ["f5660e"],
@@ -50,9 +57,18 @@ function readOriginals(
     (f) => f.includes("account-statement") && hints.some((h) => f.includes(h)),
   );
   if (!match) throw new Error(`no Originals account file for ${account}`);
+  return match;
+}
+
+function readOriginals(
+  dataDir: string,
+  account: IngestAccount,
+): { rows: StatementRow[] | SavingsRow[]; file: string } {
+  const file = findOriginalFile(dataDir, account);
+  const text = readFileSync(join(dataDir, "Originals", file), "utf8");
   return {
-    rows: parseAccountCsv(readFileSync(join(dir, match), "utf8")),
-    file: match,
+    rows: isSavingsAccount(account) ? parseSavingsCsv(text) : parseAccountCsv(text),
+    file,
   };
 }
 
@@ -135,7 +151,7 @@ export function ingestAccount(
   account: IngestAccount,
   dataDir: string,
 ): IngestResult {
-  const { rows } = readOriginals(dataDir, account);
+  const { rows, file } = readOriginals(dataDir, account);
   const startedAt = new Date().toISOString();
   let rowsAdded = 0;
   let balanceMinor: number | null = null;
@@ -285,7 +301,65 @@ export function ingestAccount(
   const rowsSeen = isSavingsAccount(account)
     ? uniqueSavingsCount(rows as SavingsRow[], account)
     : (rows as StatementRow[]).filter((r) => r.state !== "REVERTED").length;
-  return { account, rowsSeen, rowsAdded, balanceMinor, currency, discrepancy };
+  return {
+    account,
+    rowsSeen,
+    rowsAdded,
+    balanceMinor,
+    currency,
+    discrepancy,
+    ok: true,
+    file,
+  };
+}
+
+/**
+ * ingestAccount with per-file fault tolerance: a source file that cannot
+ * be read or parsed (a Google Drive placeholder that has not materialised
+ * is the classic case) fails THIS account only, named in the result, and
+ * never aborts the other accounts. The failed attempt is recorded in
+ * ingest_runs so the ingest status shows it.
+ */
+export function ingestAccountSafe(
+  db: import("better-sqlite3").Database,
+  person: string,
+  account: IngestAccount,
+  dataDir: string,
+): IngestResult {
+  let file: string | null = null;
+  try {
+    file = findOriginalFile(dataDir, account);
+  } catch {
+    // No name could be determined; the read below fails with the detail.
+  }
+  try {
+    return ingestAccount(db, person, account, dataDir);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      db.prepare(
+        `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy)
+         VALUES (?, ?, 0, 0, NULL, NULL, ?)`,
+      ).run(
+        account,
+        new Date().toISOString(),
+        `ingest failed${file ? ` for ${file}` : ""}: ${message}`,
+      );
+    } catch {
+      // Recording the failure must never mask the failure itself.
+    }
+    return {
+      account,
+      rowsSeen: 0,
+      rowsAdded: 0,
+      balanceMinor: null,
+      currency: null,
+      discrepancy: null,
+      ok: false,
+      file,
+      error: message,
+    };
+  }
 }
 
 export function recomputeAggregates(
@@ -319,39 +393,144 @@ export function recomputeAggregates(
   ).run(person);
 }
 
-export function ingestAll(
+/** Ingest every account, each fault-tolerant (see ingestAccountSafe). */
+export function ingestAccounts(
   db: import("better-sqlite3").Database,
   dataDir: string,
   person = "zonito",
 ): IngestResult[] {
-  void readdirSync;
-  void statSync;
-  ensureFreshStore(db);
   return INGEST_ACCOUNTS.map((account) =>
-    ingestAccount(db, person, account, dataDir),
+    ingestAccountSafe(db, person, account, dataDir),
   );
 }
 
-/**
- * Self-heal across classification-rule changes. The transactions and
- * month_aggregates tables are a cache of the source CSVs; when the stored
- * rules version differs from RULES_VERSION, purge both and let the ingest
- * that follows rebuild them under the current rules. Merchant memory (rules,
- * claude-api, molang and user corrections) is NOT derived from the CSVs and
- * survives the purge untouched. The rebuild is recorded as an ingest_runs
- * row under the reserved account name "__rebuild__". Returns true when a
- * rebuild was triggered.
- */
-export function ensureFreshStore(
+function storedRulesVersion(
   db: import("better-sqlite3").Database,
-): boolean {
+): string | null {
   const row = db
     .prepare("SELECT value FROM meta WHERE key = 'rules_version'")
     .get() as { value: string } | undefined;
-  const stored = row?.value ?? null;
-  if (stored === String(RULES_VERSION)) return false;
-  const rebuild = db.transaction(() => {
+  return row?.value ?? null;
+}
+
+const TXN_COLUMNS =
+  "fingerprint, person, account, effective_date, year_month, description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category, source, created_at";
+const AGG_COLUMNS =
+  "person, year_month, category, currency, spend_minor, income_minor, aside_minor, txn_count";
+const RUN_COLUMNS =
+  "account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy, finished_at";
+const MEMORY_COLUMNS = "merchant, category, colour, icon, source, updated_at";
+
+/**
+ * Merchant memory is NOT derived from the CSVs (rules, claude-api, molang
+ * and user corrections), so a rebuild must not lose it. The rebuild's temp
+ * store gets a copy up front so its ingest computes aggregates against the
+ * same categories the live store would.
+ */
+function carryMerchantMemory(
+  from: import("better-sqlite3").Database,
+  to: import("better-sqlite3").Database,
+): void {
+  const rows = from
+    .prepare(`SELECT ${MEMORY_COLUMNS} FROM merchant_memory`)
+    .all() as Record<string, unknown>[];
+  if (rows.length === 0) return;
+  const insert = to.prepare(
+    `INSERT OR REPLACE INTO merchant_memory (${MEMORY_COLUMNS})
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const copy = to.transaction((items: Record<string, unknown>[]) => {
+    for (const r of items) {
+      insert.run(
+        r["merchant"],
+        r["category"],
+        r["colour"],
+        r["icon"],
+        r["source"],
+        r["updated_at"],
+      );
+    }
+  });
+  copy(rows);
+}
+
+function removeStoreFiles(path: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    try {
+      rmSync(path + suffix, { force: true });
+    } catch {
+      // best effort: a leftover temp file is inert
+    }
+  }
+}
+
+/**
+ * Self-heal across classification-rule changes, atomically. The
+ * transactions and month_aggregates tables are a cache of the source
+ * CSVs; when the stored rules version differs from RULES_VERSION they are
+ * rebuilt under the current rules — but never by purging in place (the
+ * 30 Oct 2026 incident: a purge committed, then the rebuild died on an
+ * unreadable Google Drive file and left the live store near-empty).
+ *
+ * Instead the whole ingest runs into a TEMPORARY store file beside the
+ * live one, with the live store's merchant memory carried into it first.
+ * Only when every account ingested cleanly are the rebuilt tables copied
+ * into the live store, inside a single transaction; the live file itself
+ * is never replaced, so the long-lived handle every caller holds (the API
+ * layer caches one connection) stays valid and the live store's own meta
+ * and ingest_runs history survive, with the rebuild's runs appended and a
+ * "__rebuild__" marker row recorded, as before. On any account failure
+ * the temp file is deleted, the live store is left exactly as it was
+ * (still stamped with the old rules version, so the next ingest retries
+ * the rebuild), and the results name the failed account's file.
+ */
+function rebuildStore(
+  db: import("better-sqlite3").Database,
+  dataDir: string,
+  person: string,
+): IngestResult[] {
+  const livePath = db.name;
+  if (!livePath || livePath === ":memory:") {
+    // No file to protect: an in-memory store is rebuilt by the ingest
+    // itself (INSERT OR IGNORE cannot resurrect purged rows, so purge
+    // first, as the pre-atomic code did).
     db.exec("DELETE FROM transactions; DELETE FROM month_aggregates;");
+    db.prepare(
+      `INSERT INTO meta (key, value) VALUES ('rules_version', ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+    ).run(String(RULES_VERSION));
+    return ingestAccounts(db, dataDir, person);
+  }
+  const stored = storedRulesVersion(db);
+  const tmpPath = join(dirname(livePath), `${STORE_FILENAME}.rebuild`);
+  removeStoreFiles(tmpPath);
+  const tmp = openStoreFile(tmpPath);
+  let results: IngestResult[];
+  try {
+    carryMerchantMemory(db, tmp);
+    results = ingestAccounts(tmp, dataDir, person);
+    tmp.pragma("wal_checkpoint(TRUNCATE)");
+  } finally {
+    tmp.close();
+  }
+  if (results.some((r) => !r.ok)) {
+    removeStoreFiles(tmpPath);
+    return results;
+  }
+  const swap = db.transaction(() => {
+    db.exec("DELETE FROM transactions; DELETE FROM month_aggregates;");
+    db.exec(
+      `INSERT INTO transactions (${TXN_COLUMNS})
+       SELECT ${TXN_COLUMNS} FROM rebuild_src.transactions`,
+    );
+    db.exec(
+      `INSERT INTO month_aggregates (${AGG_COLUMNS})
+       SELECT ${AGG_COLUMNS} FROM rebuild_src.month_aggregates`,
+    );
+    db.exec(
+      `INSERT INTO ingest_runs (${RUN_COLUMNS})
+       SELECT ${RUN_COLUMNS} FROM rebuild_src.ingest_runs`,
+    );
     db.prepare(
       `INSERT INTO meta (key, value) VALUES ('rules_version', ?)
        ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
@@ -361,9 +540,26 @@ export function ensureFreshStore(
        VALUES ('__rebuild__', ?, 0, 0, NULL, NULL, ?)`,
     ).run(
       new Date().toISOString(),
-      `store rebuilt: rules version ${stored ?? "none"} -> ${RULES_VERSION}; transactions purged, re-ingested from source CSVs`,
+      `store rebuilt: rules version ${stored ?? "none"} -> ${RULES_VERSION}; rebuilt in a temp store and swapped in atomically`,
     );
   });
-  rebuild();
-  return true;
+  db.exec(`ATTACH '${tmpPath.replace(/'/g, "''")}' AS rebuild_src`);
+  try {
+    swap();
+  } finally {
+    db.exec("DETACH rebuild_src");
+    removeStoreFiles(tmpPath);
+  }
+  return results;
+}
+
+export function ingestAll(
+  db: import("better-sqlite3").Database,
+  dataDir: string,
+  person = "zonito",
+): IngestResult[] {
+  if (storedRulesVersion(db) === String(RULES_VERSION)) {
+    return ingestAccounts(db, dataDir, person);
+  }
+  return rebuildStore(db, dataDir, person);
 }

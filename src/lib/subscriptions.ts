@@ -28,6 +28,8 @@ import { gbp, type Owner, type Sub } from "./data";
  */
 
 export interface SubCharge {
+  /** Store fingerprint of the transaction this charge came from. */
+  id: string;
   merchant: string;
   /** ISO date; a full "YYYY-MM-DD HH:MM:SS" timestamp is tolerated. */
   date: string;
@@ -207,6 +209,7 @@ export function detectSubscriptions(
       owner: (last.account === "Joint" ? "joint" : last.person) as Owner,
       status: active ? "Active" : "Ended",
       charges: cluster.length,
+      chargeIds: cluster.map((c) => c.id),
       nextExpected: active ? addDays(lastDate, Math.round(best.medianGap)) : null,
       variants,
       ...(note ? { note } : {}),
