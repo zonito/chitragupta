@@ -244,7 +244,7 @@ const OCADO_QUESTION = "How much on Ocado this month?";
 const BOILER_QUESTION = "When did we last get the boiler serviced?";
 const WARRANTY_QUESTION = "When does the washing machine warranty end?";
 const INDIA_QUESTION = "What did we spend in India in August?";
-const EXAMPLES = ["How much on groceries this year?", INDIA_QUESTION, WARRANTY_QUESTION, TRIP_QUESTION, OCADO_QUESTION, BOILER_QUESTION];
+const EXAMPLES = [OCADO_QUESTION, INDIA_QUESTION, BOILER_QUESTION];
 
 export function AskButton() {
   const { person } = usePerson();

@@ -100,6 +100,42 @@ describe("Muse classification client (Fix 5)", () => {
     db.close();
   });
 
+  it("reports no gateway attempt when no key is configured", async () => {
+    const db = seededDb();
+    const summary = await classifyUnknownMerchants(db, { env: {} });
+    expect(summary.gateway).toEqual({ attempted: false, ok: false });
+    db.close();
+  });
+
+  it("surfaces the first gateway failure's status in the summary, never the key", async () => {
+    const db = seededDb();
+    const key = "LLM_classify_secret";
+    const summary = await classifyUnknownMerchants(db, {
+      env: { MUSE_API_KEY: key },
+      fetchImpl: (async () =>
+        ({
+          ok: false,
+          status: 401,
+          text: async () => "unauthorised",
+          json: async () => ({}),
+        }) as unknown as Response) as typeof fetch,
+    });
+    expect(summary).toMatchObject({
+      ran: true,
+      classified: 0,
+      failed: 1,
+      remaining: 1,
+    });
+    expect(summary.gateway).toMatchObject({
+      attempted: true,
+      ok: false,
+      status: 401,
+    });
+    expect(summary.gateway.error).toContain("unauthorised");
+    expect(JSON.stringify(summary)).not.toContain(key);
+    db.close();
+  });
+
   it("honours a gateway base URL override", async () => {
     const config = claudeConfig({
       MUSE_API_KEY: "LLM_example",

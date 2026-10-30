@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { museComplete, museConfig } from "@/lib/muse.server";
+import {
+  gatewayCallCount,
+  lastGatewayStatus,
+  museComplete,
+  museConfig,
+} from "@/lib/muse.server";
 
 const TEST_KEY = "LLM_test_key";
 
@@ -90,6 +95,58 @@ describe("Meta Model API gateway client", () => {
       fetchImpl,
     });
     expect(text).toBeNull();
+  });
+
+  it("records the failure status and error excerpt, never the key", async () => {
+    const fetchImpl = (async () =>
+      ({
+        ok: false,
+        status: 401,
+        text: async () => "bad key supplied",
+        json: async () => ({}),
+      }) as unknown as Response) as typeof fetch;
+    const before = gatewayCallCount();
+    const text = await museComplete({
+      prompt: "hi",
+      env: { MUSE_API_KEY: TEST_KEY },
+      fetchImpl,
+    });
+    expect(text).toBeNull();
+    expect(gatewayCallCount()).toBe(before + 1);
+    const status = lastGatewayStatus();
+    expect(status).toMatchObject({ attempted: true, ok: false, status: 401 });
+    expect(status.error).toContain("bad key supplied");
+    expect(JSON.stringify(status)).not.toContain(TEST_KEY);
+  });
+
+  it("records a thrown error without a status", async () => {
+    const fetchImpl = (async () => {
+      throw new Error("network down");
+    }) as typeof fetch;
+    await museComplete({
+      prompt: "hi",
+      env: { MUSE_API_KEY: TEST_KEY },
+      fetchImpl,
+    });
+    const status = lastGatewayStatus();
+    expect(status.attempted).toBe(true);
+    expect(status.ok).toBe(false);
+    expect(status.status).toBeUndefined();
+    expect(status.error).toContain("network down");
+  });
+
+  it("records a successful call", async () => {
+    const seen: { url?: string; init?: RequestInit } = {};
+    await museComplete({
+      prompt: "hi",
+      env: { MUSE_API_KEY: TEST_KEY },
+      fetchImpl: capturingFetch(seen),
+    });
+    expect(lastGatewayStatus()).toEqual({
+      attempted: true,
+      ok: true,
+      status: 200,
+    });
   });
 
   it("returns null when the call times out", async () => {

@@ -2,8 +2,11 @@ import type Database from "better-sqlite3";
 import { recomputeAggregates } from "./ingest";
 import { reviewQueue, setMerchant } from "./merchants";
 import {
+  gatewayCallCount,
+  lastGatewayStatus,
   museComplete,
   museConfig,
+  type GatewayStatus,
   type MuseConfig,
 } from "../muse.server";
 
@@ -51,6 +54,12 @@ export type ClassifySummary = {
   classified: number;
   failed: number;
   remaining: number;
+  /**
+   * Diagnostics for the gateway calls this run made: the first failure's
+   * status/error when any call failed, else the last call's outcome.
+   * attempted:false when no call was made (no key configured).
+   */
+  gateway: GatewayStatus;
 };
 
 type Classification = { category: string; icon: string | null; colour: string | null };
@@ -133,11 +142,27 @@ export async function classifyUnknownMerchants(
       classified: 0,
       failed: 0,
       remaining: queue.length,
+      gateway: { attempted: false, ok: false },
     };
   }
   const fetchImpl = opts.fetchImpl ?? fetch;
   let classified = 0;
   let failed = 0;
+  // Gateway diagnostics for this run: poll the shared client's call
+  // counter after each merchant so the summary can surface the FIRST
+  // failure's status/error instead of a bare failed count.
+  let gatewaySeen = gatewayCallCount();
+  let gatewayLast: GatewayStatus | undefined;
+  let gatewayFailure: GatewayStatus | undefined;
+  const pollGateway = () => {
+    const count = gatewayCallCount();
+    if (count > gatewaySeen) {
+      gatewaySeen = count;
+      const status = lastGatewayStatus();
+      gatewayLast = status;
+      if (!status.ok && !gatewayFailure) gatewayFailure = status;
+    }
+  };
   for (const item of queue.slice(0, opts.limit ?? 50)) {
     try {
       const result = await classifyOne(
@@ -147,6 +172,7 @@ export async function classifyUnknownMerchants(
         env,
         fetchImpl,
       );
+      pollGateway();
       if (!result) {
         failed++;
         continue;
@@ -172,5 +198,6 @@ export async function classifyUnknownMerchants(
     classified,
     failed,
     remaining: reviewQueue(db).length,
+    gateway: gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false },
   };
 }

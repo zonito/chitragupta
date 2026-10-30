@@ -150,8 +150,13 @@ describe("Ask trip caption", () => {
       ...SAMPLE_SNAPSHOT,
       txns: SAMPLE_TXNS.filter((t) => t.category !== "Holidays"),
     });
+    // The holidays question is no longer an example chip (only three
+    // chips remain); typing and submitting it reaches the same panel.
+    stubTransactions([]);
     renderAsk();
-    fireEvent.click(screen.getByRole("button", { name: "What have holidays cost this month?" }));
+    const input = screen.getByLabelText("Question about your records");
+    fireEvent.change(input, { target: { value: "What have holidays cost this month?" } });
+    fireEvent.submit(input.closest("form")!);
     expect(screen.getByText("No Holidays charges this month.")).toBeTruthy();
     expect(screen.queryByText(/Nothing on your own accounts/)).toBeNull();
   });

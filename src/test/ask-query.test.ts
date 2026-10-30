@@ -54,3 +54,62 @@ describe("parseAskQuery", () => {
     expect(plan.terms).toContain("mayfield");
   });
 });
+
+describe("parseAskQuery relative periods", () => {
+  // Friday 30 Oct 2026: its Monday-to-Sunday week is 26 Oct – 1 Nov.
+  const TODAY = "2026-10-30";
+
+  it("routes 'this week' to the Monday-Sunday week containing today", () => {
+    const plan = parseAskQuery("Total transport expense this week", "2026-10", TODAY);
+    expect(plan.from).toBe("2026-10-26");
+    expect(plan.to).toBe("2026-11-01");
+    expect(plan.month).toBeUndefined();
+    expect(plan.category).toBe("Transport");
+    // Framing words never survive as terms.
+    expect(plan.terms).toEqual(["transport"]);
+  });
+
+  it("gives the same week on its Monday and its Sunday", () => {
+    for (const day of ["2026-10-26", "2026-11-01"]) {
+      const plan = parseAskQuery("Transport this week", "2026-10", day);
+      expect(plan.from).toBe("2026-10-26");
+      expect(plan.to).toBe("2026-11-01");
+    }
+  });
+
+  it("routes 'last week' to the previous Monday-Sunday week", () => {
+    const plan = parseAskQuery("How much on transport last week?", "2026-10", TODAY);
+    expect(plan.from).toBe("2026-10-19");
+    expect(plan.to).toBe("2026-10-25");
+    expect(plan.category).toBe("Transport");
+  });
+
+  it("routes 'this year' to 1 January through today", () => {
+    const plan = parseAskQuery("How much on groceries this year?", "2026-10", TODAY);
+    expect(plan.from).toBe("2026-01-01");
+    expect(plan.to).toBe("2026-10-30");
+    expect(plan.month).toBeUndefined();
+    expect(plan.category).toBe("Groceries");
+  });
+
+  it("routes 'last month' to the previous calendar month", () => {
+    const plan = parseAskQuery("What did we spend last month?", "2026-10", TODAY);
+    expect(plan.month).toBe("2026-09");
+    expect(plan.from).toBeUndefined();
+    expect(plan.terms).toEqual([]);
+  });
+
+  it("routes 'this month' to the current calendar month", () => {
+    const plan = parseAskQuery("What did we spend this month?", "2026-10", TODAY);
+    expect(plan.month).toBe("2026-10");
+    expect(plan.terms).toEqual([]);
+  });
+
+  it("routes 'last 30 days' to the 30 days ending today", () => {
+    const plan = parseAskQuery("How much on transport in the last 30 days?", "2026-10", TODAY);
+    expect(plan.from).toBe("2026-10-01");
+    expect(plan.to).toBe("2026-10-30");
+    expect(plan.category).toBe("Transport");
+    expect(plan.terms).toEqual(["transport"]);
+  });
+});
