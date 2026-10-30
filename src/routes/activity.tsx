@@ -5,7 +5,7 @@ import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/compon
 import { Button } from "@/components/ui/button";
 import { useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { TXNS, CATEGORIES, docFor, docName, shareOf, spendTotal, gbp, dayLabel, ownerName, type Txn, type Category } from "@/lib/data";
+import { CATEGORIES, docFor, docName, shareOf, spendTotalInMonth, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 
 export const Route = createFileRoute("/activity")({
   head: () => meta("Activity", "Every transaction this month, grouped by day, with search and filters."),
@@ -20,27 +20,26 @@ function Activity() {
   const [q, setQ] = useState("");
   const [who, setWho] = useState("all");
   const [cat, setCat] = useState("all");
-  const [month, setMonth] = useState("oct");
+  const [month, setMonth] = useState(() => currentMonthKey());
   const [open, setOpen] = useState<Txn | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Category>>({});
 
   const list = useMemo(
     () =>
-      month !== "oct"
-        ? []
-        : TXNS.map((t) => ({ ...t, category: overrides[t.id] ?? t.category }))
-            .filter((t) => shareOf(t, person) > 0)
-            .filter((t) => who === "all" || t.owner === who)
-            .filter((t) => cat === "all" || t.category === cat)
-            .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
-            .sort((a, b) => b.day - a.day),
+      txnsInMonth(month)
+        .map((t) => ({ ...t, category: overrides[t.id] ?? t.category }))
+        .filter((t) => shareOf(t, person) > 0)
+        .filter((t) => who === "all" || t.owner === who)
+        .filter((t) => cat === "all" || t.category === cat)
+        .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
+        .sort((a, b) => b.day - a.day),
     [person, q, who, cat, month, overrides],
   );
   const days = [...new Set(list.map((t) => t.day))];
 
   return (
     <div className="lg:max-w-3xl">
-      <PageTitle sub={`${gbp(spendTotal(person))} spent · transfers and savings not counted`}>Activity</PageTitle>
+      <PageTitle sub={`${gbp(spendTotalInMonth(person, month))} spent · transfers and savings not counted`}>Activity</PageTitle>
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
@@ -54,14 +53,14 @@ function Activity() {
           {[...CATEGORIES, "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
         </select>
         <select className={sel} value={month} onChange={(e) => setMonth(e.target.value)}>
-          <option value="oct">October 2026</option><option value="sep">September 2026</option>
+          {monthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
         </select>
       </div>
 
-      {days.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">Nothing here. {month !== "oct" && "September isn't loaded in this mockup."}</p>}
+      {days.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">Nothing here.</p>}
       {days.map((d) => (
         <div key={d} className="mb-5">
-          <Label>{dayLabel(d)}</Label>
+          <Label>{dayLabel(d, false, month)}</Label>
           <div className="rounded-xl border bg-card px-4">
             {list.filter((t) => t.day === d).map((t) => (
               <button key={t.id} onClick={() => setOpen(t)} className="ledger-row flex w-full items-center justify-between gap-3 py-3 text-left">
@@ -95,7 +94,7 @@ function Activity() {
             </div>
             <dl className="text-body">
               {[
-                ["Date", dayLabel(open.day, true)],
+                ["Date", dayLabel(open.day, true, open.monthKey)],
                 ["Account", open.account],
                 ["Who", ownerName(open.owner)],
                 ...(open.fx ? [["Original", open.fx]] : []),
@@ -157,7 +156,7 @@ function TransactionReceipt({ transaction }: { transaction: Txn }) {
       {choosing && (
         <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border-2 border-dashed bg-muted/40 p-4 text-center">
           <Upload className="h-5 w-5 text-muted-foreground" />
-          <p className="text-caption text-muted-foreground">Photo or PDF · mock only, nothing is uploaded</p>
+          <p className="text-caption text-muted-foreground">Photo or PDF · attached to this transaction in the app</p>
           <div className="flex flex-wrap justify-center gap-1">
             <Button variant="outline" size="sm" onClick={() => choose()}>Choose sample PDF</Button>
             <Button variant="ghost" size="sm" onClick={() => input.current?.click()}>Choose photo / PDF</Button>

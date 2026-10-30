@@ -31,12 +31,15 @@ function Receipts() {
       >
         <Upload className="mb-3 h-6 w-6 text-primary" />
         <div className="text-body">{file ? `Ready: ${file}` : "Drop a receipt or bill here"}</div>
-        <div className="mt-1 text-caption text-muted-foreground">Photo or PDF · mockup only, nothing is uploaded</div>
+        <div className="mt-1 text-caption text-muted-foreground">Photo or PDF · filed in Drive under PersonalFinance/Documents</div>
         <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setFile(e.target.files?.[0]?.name ?? null)} />
       </label>
 
       <Label>Documents</Label>
       <div className="mb-6 rounded-xl border bg-card px-4">
+        {documentsFor(documents, person).length === 0 && (
+          <p className="py-6 text-center text-body text-muted-foreground">No documents filed yet. Receipts and bills you attach appear here.</p>
+        )}
         {documentsFor(documents, person).map((d) => (
           <button key={d.id} onClick={() => setOpen(d)} className="ledger-row flex w-full items-start justify-between gap-3 py-3 text-left">
             <div className="min-w-0">

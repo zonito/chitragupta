@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePerson, Panel, Label, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, COACH_NOTE, gbp, TXNS, upcomingFor, upcomingShare, upcomingTotal, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthName, nextMonthName, gbp, TXNS, upcomingFor, upcomingShare, upcomingTotal, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 
 export const Route = createFileRoute("/")({
-  head: () => meta("This month", "October at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note."),
+  head: () => meta("This month", "This month at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note."),
   component: Index,
 });
 
@@ -19,13 +19,13 @@ function Index() {
     <div className="space-y-5 lg:grid lg:grid-cols-2 lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-6 lg:space-y-0">
       <div className="space-y-5 lg:space-y-6">
       <div className="hero-panel rounded-xl p-5">
-        <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">Spent in October</div>
+        <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">Spent in {currentMonthName()}</div>
         <div className="hero-number font-display num text-hero"><CountUpMoney value={total} /></div>
         <p className="hero-comparison num mt-2 text-caption">
           {gbp(Math.abs(diff), false)} {diff >= 0 ? "more" : "less"} than a typical month ({gbp(usual, false)})
         </p>
-        <div className="mt-3 space-y-1.5" role="img" aria-label={`October ${gbp(total, false)}; typical month ${gbp(usual, false)}`}>
-          {[{ name: "October", value: total, colour: "bg-accent" }, { name: "Typical", value: usual, colour: "bg-hero-foreground/35" }].map((bar) => (
+        <div className="mt-3 space-y-1.5" role="img" aria-label={`${currentMonthName()} ${gbp(total, false)}; typical month ${gbp(usual, false)}`}>
+          {[{ name: currentMonthName(), value: total, colour: "bg-accent" }, { name: "Typical", value: usual, colour: "bg-hero-foreground/35" }].map((bar) => (
             <div key={bar.name} className="flex items-center gap-2" aria-hidden="true">
               <span className="w-10 shrink-0 text-micro text-hero-foreground">{bar.name}</span>
               <div className="hero-track h-1.5 flex-1 rounded-lg"><AnimatedBar percent={bar.value / Math.max(total, usual, 1) * 100} className={bar.colour} /></div>
@@ -37,7 +37,7 @@ function Index() {
       <Link to="/coach" className="block">
         <Panel className="bg-accent/8!">
           <Label>Coach</Label>
-          <p className="num text-body leading-relaxed">{COACH_NOTE[person]}</p>
+          <p className="num text-body leading-relaxed">{coachNote(person)}</p>
         </Panel>
       </Link>
 
@@ -57,7 +57,7 @@ function Index() {
       </Panel>
 
       <Panel>
-        <Label>Money in · October</Label>
+        <Label>Money in · {currentMonthName()}</Label>
         <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
         <div className="mt-3">
           {incomeFor(person).map((entry) => (
@@ -80,7 +80,7 @@ function Index() {
       </div>
 
       <Panel className="lg:col-start-1 lg:row-start-3">
-        <Label>Coming up · November</Label>
+        <Label>Coming up · {nextMonthName()}</Label>
         <p className="text-heading font-semibold leading-relaxed"><span className="num">{gbp(upcomingTotal(person), false)}</span> of regulars already known</p>
         <div className="mt-3">
           {upcomingFor(person).slice(0, 4).map((payment) => (
@@ -103,7 +103,7 @@ function Index() {
         <div className="mt-3 flex flex-wrap gap-1.5" aria-hidden="true">
           {Array.from({ length: small.count }, (_, i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-primary/60" />)}
         </div>
-        <div className="mt-2 h-1 rounded-lg bg-muted" role="img" aria-label={`${gbp(small.total)} in small spends out of ${gbp(total)} spent in October`}>
+        <div className="mt-2 h-1 rounded-lg bg-muted" role="img" aria-label={`${gbp(small.total)} in small spends out of ${gbp(total)} spent in ${currentMonthName()}`}>
           <AnimatedBar percent={total > 0 ? small.total / total * 100 : 0} className="bg-primary/60" />
         </div>
       </Panel>

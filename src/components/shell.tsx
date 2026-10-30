@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog } from "lucide-react";
-import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, CATEGORY_COLOR, type Category } from "@/lib/data";
+import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthLabel, CATEGORY_COLOR, type Category } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { DestinationIcon } from "@/components/item-icons";
@@ -114,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ThemeToggle />
         </div>
         <div>
-          <div className="mb-2 text-xs text-muted-foreground">October 2026</div>
+          <div className="mb-2 text-xs text-muted-foreground">{currentMonthLabel()}</div>
           <PersonSwitch />
         </div>
         <nav className="-mx-2 flex flex-col gap-0.5 overflow-y-auto">
@@ -134,7 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mb-3 flex items-center justify-between">
             <span className="brand-wordmark flex items-center gap-2 font-display text-xl italic text-primary"><Logo size={24} />Chitragupta</span>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">October 2026</span>
+              <span className="text-xs text-muted-foreground">{currentMonthLabel()}</span>
               <ThemeToggle />
             </div>
           </div>
@@ -237,7 +237,7 @@ export const meta = (title: string, description: string) => ({
   ],
 });
 
-const TRIP_QUESTION = "What has the Tenerife trip cost so far?";
+const TRIP_QUESTION = "What have holidays cost this month?";
 const OCADO_QUESTION = "How much on Ocado this month?";
 const BOILER_QUESTION = "When did we last get the boiler serviced?";
 const WARRANTY_QUESTION = "When does the washing machine warranty end?";
@@ -259,7 +259,7 @@ function AskButton() {
     if (!question.trim()) return;
     setExpanded(null);
     if (/ocado/i.test(question) && !/last|receipt|document/i.test(question)) setWorkedExample("ocado");
-    else if (/tenerife/i.test(question) && /cost|spend|spent|total/i.test(question)) setWorkedExample("trip");
+    else if (/holiday/i.test(question) && /cost|spend|spent|total/i.test(question)) setWorkedExample("trip");
     else {
       setSubmittedQuestion(question.trim());
       setWorkedExample("records");
@@ -328,10 +328,10 @@ function AskButton() {
           ) : <Panel>
             {answer.fallback && <Label>Household answer</Label>}
             <div className="num text-title font-semibold">{gbp(answer.total, !isTrip)}</div>
-            <p className="mb-4 text-caption leading-relaxed text-muted-foreground">{answer.fallback ? "Nothing on your own accounts — this is the household picture." : isTrip ? `${answer.orders.length === 2 ? "Two bookings" : "One booking"} so far — ${person === "nikhila" ? "the Lisbon stay" : person === "zonito" ? "flights" : "flights and the Lisbon stay"}. The trip itself is in February.` : `${answer.orders.length} orders, all on ${person === "nikhila" ? "your Monzo" : "Nikhila's Monzo"}. About usual.`}</p>
+            <p className="mb-4 text-caption leading-relaxed text-muted-foreground">{answer.fallback ? "Nothing on your own accounts — this is the household picture." : isTrip ? `${answer.orders.length} ${answer.orders.length === 1 ? "booking" : "bookings"} in Holidays this month.` : `${answer.orders.length} orders this month.`}</p>
             {answer.orders.map((t) => (
               <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-sm">
-                <span className="min-w-0">{isTrip ? <><span className="block">{t.merchant}</span><span className="mt-0.5 block text-xs text-muted-foreground">{dayLabel(t.day)}</span></> : `${t.day} Oct`}</span>
+                <span className="min-w-0">{isTrip ? <><span className="block">{t.merchant}</span><span className="mt-0.5 block text-xs text-muted-foreground">{dayLabel(t.day)}</span></> : dayLabel(t.day)}</span>
                 <span className="num shrink-0">{gbp(shareOf(t, answer.answerPerson))}</span>
               </div>
             ))}

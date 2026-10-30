@@ -13,6 +13,8 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { PersonProvider, AppShell, ThemeProvider, THEME_SCRIPT } from "../components/shell";
 import { DocumentsProvider } from "../components/documents";
+import { EMPTY_SNAPSHOT, hydrateData } from "../lib/data";
+import { getSnapshot } from "../lib/snapshot";
 
 function NotFoundComponent() {
   return (
@@ -75,6 +77,16 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // The snapshot is built on the server from the real store (precomputed
+  // aggregates + indexed queries; never a CSV scan) and hydrated into the
+  // data module before any screen renders, so SSR HTML carries real figures.
+  loader: async () => {
+    try {
+      return await getSnapshot();
+    } catch {
+      return EMPTY_SNAPSHOT;
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -114,6 +126,9 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const snap = Route.useLoaderData();
+  // Hydrate before <Outlet/> renders any child screen, on server and client.
+  hydrateData(snap);
 
   return (
     <QueryClientProvider client={queryClient}>

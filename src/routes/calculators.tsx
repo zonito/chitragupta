@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { PageTitle, Panel, Label, meta } from "@/components/shell";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { gbp, TXNS } from "@/lib/data";
+import { gbp, TXNS, currentMonthLabel } from "@/lib/data";
 import { calculatorDefaults, CALCULATOR_STORAGE_KEY, restoreCalculators, costPerUse, habitTotals, subscriptionTotals, priceRise, costPerDay, smallSpendFact, type CalculatorState } from "@/lib/calculators";
 import { SettlingValue } from "@/components/motion";
 
@@ -87,7 +87,7 @@ function Calculators() {
         <Results items={[{ label: "Per month", value: habit.month }, { label: "Per year", value: habit.year }, { label: "Over 5 years", value: habit.fiveYears }]} />
         <p className="mt-3 text-caption text-muted-foreground">52 weeks a year · monthly average</p>
         <aside className="mt-5 border-t pt-4 text-body leading-relaxed">
-          <Label>Household · October 2026</Label>
+          <Label>Household · {currentMonthLabel()}</Label>
           Small spends under £10 this month: <span className="num font-medium">{gbp(fact.total)}</span> across {fact.count} spends.
         </aside>
       </Panel>

@@ -111,6 +111,7 @@ export async function handleChitraguptaApi(
     path === "/api/merchants" ||
     path === "/api/digest" ||
     path === "/api/classify/run" ||
+    path === "/api/transactions" ||
     path === "/api/aggregates";
   if (needDb) {
     const ensured = requireDb(db);
@@ -292,6 +293,62 @@ async function routeWithDb(
       movedAsideForeign,
       unclassifiedMerchants: newMerchants,
     });
+  }
+
+  if (path === "/api/transactions" && request.method === "GET") {
+    const person = url.searchParams.get("person");
+    const month = url.searchParams.get("month");
+    const q = url.searchParams.get("q")?.trim();
+    const category = url.searchParams.get("category");
+    const limit = Math.min(
+      Math.max(Number(url.searchParams.get("limit") ?? 200) || 200, 1),
+      1000,
+    );
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (person && person !== "household") {
+      where.push("t.person = ?");
+      params.push(person);
+    }
+    if (month) {
+      where.push("t.year_month = ?");
+      params.push(month);
+    }
+    if (q) {
+      where.push("(t.merchant LIKE ? OR t.description LIKE ?)");
+      params.push(`%${q}%`, `%${q}%`);
+    }
+    const rows = db
+      .prepare(
+        `SELECT t.fingerprint AS id, t.person, t.account, t.effective_date AS date,
+                t.year_month AS month, t.description, t.merchant,
+                t.amount_minor AS amountMinor, t.currency, t.movement,
+                COALESCE(t.category, m.category,
+                  CASE t.movement
+                    WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
+                    WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
+                    WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END) AS category
+         FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY t.effective_date DESC LIMIT ?`,
+      )
+      .all(...params, limit) as {
+      id: string;
+      person: string;
+      account: string;
+      date: string;
+      month: string;
+      description: string;
+      merchant: string;
+      amountMinor: number;
+      currency: string;
+      movement: string;
+      category: string;
+    }[];
+    const filtered = category
+      ? rows.filter((r) => r.category === category)
+      : rows;
+    return json({ ok: true, count: filtered.length, transactions: filtered });
   }
 
   if (path === "/api/aggregates" && request.method === "GET") {

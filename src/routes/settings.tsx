@@ -17,7 +17,21 @@ function Settings() {
   const [status, setStatus] = useState<Record<string, "kept" | "dismissed">>({});
   const queue = MERCHANT_REVIEW.filter((m) => !status[m.name]);
   const handled = MERCHANT_REVIEW.filter((m) => status[m.name]);
-  const review = (name: string, verdict: "kept" | "dismissed") => setStatus((s) => ({ ...s, [name]: verdict }));
+  const review = (name: string, verdict: "kept" | "dismissed") => {
+    setStatus((s) => ({ ...s, [name]: verdict }));
+    // Keeping a merchant confirms its category in merchant memory, so the
+    // choice survives reloads and future imports classify it the same way.
+    if (verdict === "kept") {
+      const item = MERCHANT_REVIEW.find((m) => m.name === name);
+      if (item) {
+        void fetch("/api/merchants", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ merchant: name, category: item.category, source: "user" }),
+        }).catch(() => {});
+      }
+    }
+  };
   return (
     <div className="space-y-5 lg:max-w-2xl">
       <PageTitle>Settings</PageTitle>

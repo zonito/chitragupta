@@ -1,4 +1,4 @@
-import { TXNS, DOCS, shareOf, isMatched, type Doc, type Person, type Txn } from "@/lib/data";
+import { TXNS, DOCS, shareOf, isMatched, dateLabel, type Doc, type Person, type Txn } from "@/lib/data";
 
 const STOP_WORDS = new Set("when did do does we i our my your the a an last latest get got has have was were is it been for from on in at to of and how much find show me please end ends expire expires expiration expiry buy bought purchase purchased pay paid cost so far this month about".split(" "));
 const normalise = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -37,7 +37,10 @@ export function searchRecords(question: string, person: Person, documents: reado
     const linked = matchingDocs.length ? matchingDocs : attached;
     for (const doc of linked) addedDocs.add(doc.id);
     // A linked document and its payment are one record, not two separate purchases.
-    const base = { merchant: txn.merchant, date: `${txn.day} Oct 2026`, timestamp: Date.UTC(2026, 9, txn.day), amount: shareOf(txn, person), transaction: txn };
+    // The transaction's own month + day is its position; for store-built rows
+    // that always equals txn.date.
+    const iso = `${txn.monthKey}-${String(txn.day).padStart(2, "0")}`;
+    const base = { merchant: txn.merchant, date: dateLabel(iso), timestamp: Date.parse(`${iso}T00:00:00Z`), amount: shareOf(txn, person), transaction: txn };
     if (linked.length) for (const document of linked) results.push({ ...base, id: `${txn.id}-${document.id}`, document });
     else results.push({ ...base, id: `txn-${txn.id}` });
   }

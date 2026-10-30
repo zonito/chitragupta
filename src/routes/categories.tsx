@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { usePerson, PageTitle, Sheet, Sparkline, Label, meta } from "@/components/shell";
-import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, MONTHS6, CATEGORY_COLOR, CATEGORIES } from "@/lib/data";
+import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, MONTHS6, CATEGORY_COLOR, CATEGORIES } from "@/lib/data";
 import { AnimatedBar } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/item-icons";
 import { MerchantTile } from "@/components/tiles";
 
 export const Route = createFileRoute("/categories")({
-  head: () => meta("Categories", "October spending by category, with merchants and a six-month trend."),
+  head: () => meta("Categories", "Spending by category this month, with merchants and a six-month trend."),
   component: Categories,
 });
 
@@ -30,7 +30,7 @@ function Categories() {
 
   return (
     <div>
-      <PageTitle sub={`${gbp(spendTotal(person))} in October`}>Categories</PageTitle>
+      <PageTitle sub={`${gbp(spendTotal(person))} in ${currentMonthName()}`}>Categories</PageTitle>
       <div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-x-12 lg:gap-y-6 lg:space-y-0">
         {cats.map((c) => (
           <Button variant="ghost" key={c.category} onClick={() => setOpen(c.category)} className="panel-enter block h-auto w-full whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent">
@@ -56,7 +56,7 @@ function Categories() {
               </div>
               <div className="text-right" style={{ color: CATEGORY_COLOR[open] }}>
                 <Sparkline data={sparkFor(open, person)} className="" />
-                <div className="text-micro text-muted-foreground">{MONTHS6[0]} – {MONTHS6[5]}</div>
+                <div className="text-micro text-muted-foreground">{MONTHS6[0] ?? ""} – {MONTHS6[5] ?? ""}</div>
               </div>
             </div>
             <div className="mt-6"><Label>Merchants</Label></div>
