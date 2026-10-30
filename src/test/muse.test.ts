@@ -246,8 +246,8 @@ describe("OpenCode Go gateway provider", () => {
       messages: { role: string; content: string }[];
     };
     expect(body.model).toBe("muse-spark-1.3-contributor");
-    // The reasoning model needs headroom: a 200 request is floored to 2000.
-    expect(body.max_tokens).toBe(2000);
+    // The reasoning model needs headroom: a 200 request is floored to 4000.
+    expect(body.max_tokens).toBe(4000);
     expect(body.messages).toEqual([
       { role: "system", content: "Be brief." },
       { role: "user", content: "Say hello" },

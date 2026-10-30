@@ -14,8 +14,9 @@
  *    OPENCODE_MODEL overrides it), billed to the subscription instead
  *    of pay-as-you-go. The model reasons heavily and reasoning tokens
  *    count against max_tokens — at 200 it spent the whole budget
- *    thinking and returned no content — so this route enforces a floor
- *    of 2000 on max_tokens.
+ *    thinking and returned no content, and ambiguous classification
+ *    prompts measured ~1,850 reasoning tokens, right at the edge of a
+ *    2000 floor — so this route enforces a floor of 4000 on max_tokens.
  * 2. Meta Model API: POST {base}/v1/messages (Anthropic-Messages
  *    shaped) with `Authorization: Bearer <MUSE_API_KEY>` (there is no
  *    x-api-key header; keys start with "LLM_"). The base defaults to
@@ -79,7 +80,7 @@ export const OPENCODE_SESSION_ID = "chitragupta";
  * budget on reasoning tokens before any visible content, so a small
  * budget (classification asks for ~200) returns no content at all.
  */
-export const OPENCODE_MIN_MAX_TOKENS = 2000;
+export const OPENCODE_MIN_MAX_TOKENS = 4000;
 
 /**
  * The active gateway configuration: OpenCode Go when OPENCODE_API_KEY

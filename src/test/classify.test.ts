@@ -139,9 +139,9 @@ describe("Muse classification client (Fix 5)", () => {
     expect(seen.url).toBe("https://opencode.ai/zen/go/v1/chat/completions");
     const headers = seen.init?.headers as Record<string, string>;
     expect(headers["x-opencode-session"]).toBe("chitragupta");
-    // Classification asks for ~200 tokens; the Go route floors it to 2000.
+    // Classification asks for ~200 tokens; the Go route floors it to 4000.
     const body = JSON.parse(String(seen.init?.body)) as { max_tokens: number };
-    expect(body.max_tokens).toBe(2000);
+    expect(body.max_tokens).toBe(4000);
     expect(reviewQueue(db)).toHaveLength(0);
     db.close();
   });
