@@ -68,7 +68,8 @@ const ASK_SYSTEM = [
 const PLANNER_SYSTEM = [
   "You are the query planner for Chitragupta, a household expense tracker.",
   "Convert the user's question into ONE JSON object and reply with ONLY that JSON object — no prose, no code fences, no explanation.",
-  'Shape: {"kind":"total"|"latest"|"records"|"top","category":<category|null>,"query":<string|null>,"from":"YYYY-MM-DD"|null,"to":"YYYY-MM-DD"|null,"month":"YYYY-MM"|null,"limit":<number|null>}',
+  'Shape: {"kind":"total"|"latest"|"records"|"top","person":<"zonito"|"nikhila"|"household"|null>,"category":<category|null>,"query":<string|null>,"from":"YYYY-MM-DD"|null,"to":"YYYY-MM-DD"|null,"month":"YYYY-MM"|null,"limit":<number|null>}',
+  '- person: the household member the question is about. Set it when the question names one ("from Nikhila", "Nikhila\'s biggest payments", "spending for Zonito"), or "household" when the question explicitly asks for the household as a whole; otherwise null. A named person scopes the figures to that person even when they are not the current view. Never set person from "my", "our" or "we" — those name nobody. Never put a person\'s name in query.',
   `- category must be one of ${JSON.stringify(CATEGORIES)} when the question is about that spending category, else null.`,
   '- kind "total": the user wants amounts summed — how much, a total, the cost of a category, merchant or period.',
   '- kind "latest": the user asks when something last happened, or for the most recent matching record.',
@@ -89,6 +90,12 @@ export interface AskResult {
 /** A validated query plan, from the model planner. */
 export interface AskPlan {
   kind: "total" | "latest" | "records" | "top";
+  /**
+   * The person the question names, when it names one. Present only
+   * when the planner set it (and it validated); the computation then
+   * runs for this person, overriding the current view.
+   */
+  person?: Person;
   category: string | null;
   query: string | null;
   /** Inclusive range start, YYYY-MM-DD. */
@@ -131,6 +138,7 @@ export function parseAskPlan(text: string): AskPlan | null {
   if (!parsed || typeof parsed !== "object") return null;
   const {
     kind,
+    person: rawPerson,
     category: rawCategory,
     query: rawQuery,
     from: rawFrom,
@@ -145,6 +153,22 @@ export function parseAskPlan(text: string): AskPlan | null {
     kind !== "top"
   ) {
     return null;
+  }
+  // "person" is optional and, when present, must name a member of the
+  // known person set; anything else invalidates the whole plan, under
+  // the same strict rules as an unknown category.
+  let planPerson: Person | undefined;
+  if (rawPerson !== null && rawPerson !== undefined) {
+    if (typeof rawPerson !== "string") return null;
+    const candidate = rawPerson.trim().toLowerCase();
+    if (
+      candidate !== "zonito" &&
+      candidate !== "nikhila" &&
+      candidate !== "household"
+    ) {
+      return null;
+    }
+    planPerson = candidate;
   }
   // "limit" belongs to "top" plans alone: a stated value must be a
   // real number (never a string or fraction), clamped to 1–25, and an
@@ -205,6 +229,7 @@ export function parseAskPlan(text: string): AskPlan | null {
   if (month && (from || to)) month = null;
   return {
     kind,
+    ...(planPerson ? { person: planPerson } : {}),
     category,
     query,
     from,
@@ -636,9 +661,19 @@ export async function answerAsk(
     if (planText) modelPlan = parseAskPlan(planText);
   }
 
+  // A person named in the QUESTION scopes every computation below,
+  // overriding the current view: totals, rankings, per-month splits,
+  // the zero-match guard's aggregate check — all run for that person,
+  // so the answer's words can only ever describe the figures actually
+  // computed. The deterministic extraction reads the literal question
+  // and wins; the planner's validated person field fills in only when
+  // the literal text named nobody. With no name anywhere, this is the
+  // view's person and every behaviour is exactly as before.
+  const computePerson: Person = det.person ?? modelPlan?.person ?? person;
+
   let spend: Txn[] = [];
   let matched: Txn[] = [];
-  let amountPerson: Person = person;
+  let amountPerson: Person = computePerson;
   let truncated = false;
   let deterministic = "";
   let figuresMonth: string | null = null;
@@ -695,7 +730,7 @@ export async function answerAsk(
     if (modelPlan.kind === "top") {
       shape = "top";
       topN = modelPlan.limit ?? 5;
-      const computed = topComputation(txns, person, topN, phrase);
+      const computed = topComputation(txns, computePerson, topN, phrase);
       spend = computed.set.spend;
       matched = computed.set.matched;
       deterministic = computed.set.deterministic;
@@ -705,7 +740,7 @@ export async function answerAsk(
       const scoped =
         modelPlan.query ??
         (det.terms.length > 0 ? det.terms.join(" ") : question);
-      const computed = recordsComputation(question, scoped, person, txns, truncated);
+      const computed = recordsComputation(question, scoped, computePerson, txns, truncated);
       spend = computed.spend;
       matched = computed.matched;
       deterministic = computed.deterministic;
@@ -716,7 +751,7 @@ export async function answerAsk(
         (modelPlan.query ? `Spending matching "${modelPlan.query}"` : "Total spend");
       const computed = directComputation(
         txns,
-        person,
+        computePerson,
         modelPlan.kind === "latest" ? "latest" : "total",
         label,
         phrase,
@@ -746,7 +781,7 @@ export async function answerAsk(
     figuresMonth = det.month ?? null;
     const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
     if (phrase) scopeLine = `The figures cover${phrase}.`;
-    const computed = topComputation(txns, person, topN, phrase);
+    const computed = topComputation(txns, computePerson, topN, phrase);
     spend = computed.set.spend;
     matched = computed.set.matched;
     deterministic = computed.set.deterministic;
@@ -762,7 +797,7 @@ export async function answerAsk(
     let orders: Txn[];
     let fallback: boolean;
     if (!isOcado) {
-      const answer = tripAnswer(person, txns);
+      const answer = tripAnswer(computePerson, txns);
       orders = answer.orders;
       fallback = answer.fallback;
       amountPerson = answer.answerPerson;
@@ -772,9 +807,9 @@ export async function answerAsk(
       const household = txns.filter(
         (t) => t.kind === "spend" && /^ocado/i.test(t.merchant),
       );
-      const own = household.filter((t) => shareOf(t, person) > 0);
+      const own = household.filter((t) => shareOf(t, computePerson) > 0);
       fallback = own.length === 0;
-      amountPerson = fallback ? "household" : person;
+      amountPerson = fallback ? "household" : computePerson;
       orders = fallback ? household : own;
     }
     spend = orders;
@@ -786,7 +821,7 @@ export async function answerAsk(
       deterministic = isOcado
         ? "No Ocado orders this month."
         : "No Holidays charges this month.";
-    } else if (fallback && person !== "household") {
+    } else if (fallback && computePerson !== "household") {
       deterministic = `No ${label} ${plural(orders.length, unit, `${unit}s`)} on your own accounts; the household total is ${gbp(total)} across ${orders.length} ${plural(orders.length, unit, `${unit}s`)} this month.`;
     } else {
       deterministic = `${label} this month: ${gbp(total)} across ${orders.length} ${plural(orders.length, unit, `${unit}s`)}.`;
@@ -811,7 +846,7 @@ export async function answerAsk(
       scopeTo = det.to ?? null;
       const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
-      const computed = directComputation(txns, person, "total", det.category, phrase, truncated);
+      const computed = directComputation(txns, computePerson, "total", det.category, phrase, truncated);
       spend = computed.spend;
       matched = computed.matched;
       deterministic = computed.deterministic;
@@ -826,7 +861,7 @@ export async function answerAsk(
       scopeTo = det.to;
       const phrase = periodPhrase(null, det.from, det.to);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
-      const computed = directComputation(txns, person, "total", "Total spend", phrase, truncated);
+      const computed = directComputation(txns, computePerson, "total", "Total spend", phrase, truncated);
       spend = computed.spend;
       matched = computed.matched;
       deterministic = computed.deterministic;
@@ -849,10 +884,10 @@ export async function answerAsk(
       scopeFrom = det.from ?? null;
       scopeTo = det.to ?? null;
       if (monthOnly) {
-        matched = txns.filter((t) => shareOf(t, person) > 0);
+        matched = txns.filter((t) => shareOf(t, computePerson) > 0);
         spend = matched.filter((t) => t.kind === "spend");
         const label = monthName(det.month!);
-        const total = spend.reduce((s, t) => s + shareOf(t, person), 0);
+        const total = spend.reduce((s, t) => s + shareOf(t, computePerson), 0);
         deterministic =
           spend.length === 0
             ? `Total in ${label}: ${gbp(0)}.`
@@ -863,7 +898,7 @@ export async function answerAsk(
         const computed = recordsComputation(
           question,
           scopedQuestion,
-          person,
+          computePerson,
           txns,
           truncated,
         );
@@ -884,12 +919,14 @@ export async function answerAsk(
   // the unfiltered ranking for a list question — and say plainly that
   // the specific search matched nothing. Records/latest shapes never
   // reach here: their empty answers are honest "not recorded" claims.
+  // The guard checks and recomputes for computePerson: a question
+  // naming Nikhila is guarded against HER aggregates, not the view's.
   if (
     (shape === "total" || shape === "top") &&
     spend.length === 0 &&
     matched.length === 0 &&
     (scopeMonth !== null || (scopeFrom !== null && scopeTo !== null)) &&
-    periodHasSpend(db, person, {
+    periodHasSpend(db, computePerson, {
       month: scopeMonth,
       from: scopeFrom,
       to: scopeTo,
@@ -905,7 +942,7 @@ export async function answerAsk(
     const phrase = periodPhrase(scopeMonth, scopeFrom, scopeTo);
     if (phrase) scopeLine = `The figures cover${phrase}.`;
     if (shape === "top") {
-      const computed = topComputation(txns, person, topN, phrase);
+      const computed = topComputation(txns, computePerson, topN, phrase);
       if (computed.set.spend.length > 0) {
         spend = computed.set.spend;
         matched = computed.set.matched;
@@ -915,7 +952,7 @@ export async function answerAsk(
     } else {
       const computed = directComputation(
         txns,
-        person,
+        computePerson,
         "total",
         "Total spend",
         phrase,
@@ -923,7 +960,7 @@ export async function answerAsk(
       );
       if (computed.spend.length > 0) {
         const total = computed.spend.reduce(
-          (s, t) => s + shareOf(t, person),
+          (s, t) => s + shareOf(t, computePerson),
           0,
         );
         spend = computed.spend;
@@ -939,6 +976,21 @@ export async function answerAsk(
         "I couldn't interpret that question against your records. Try naming a merchant, a category or a month.";
       topList = undefined;
     }
+  }
+
+  // Scope honesty for the deterministic text: when the question named
+  // a person other than the current view AND the figures really are
+  // that person's (the worked examples' disclosed household fallback
+  // sets amountPerson to "household", and its own text already says
+  // so), the answer opens by naming the scope it computed — a person's
+  // name is never attached to another scope's figures, and no-person
+  // questions keep today's wording byte for byte.
+  const personLabel = (p: Person) =>
+    p === "household" ? "the household" : p === "zonito" ? "Zonito" : "Nikhila";
+  const viewLabel = (p: Person) =>
+    p === "household" ? "Household" : p === "zonito" ? "Zonito" : "Nikhila";
+  if (computePerson !== person && amountPerson === computePerson) {
+    deterministic = `Figures for ${personLabel(computePerson)}, as your question asked:\n${deterministic}`;
   }
 
   const figures = buildFigures(
@@ -957,7 +1009,12 @@ export async function answerAsk(
     .slice(0, MODEL_ROW_LIMIT);
   const promptLines = [
     `Question: ${question}`,
-    `View: ${person === "household" ? "Household" : person === "zonito" ? "Zonito" : "Nikhila"}`,
+    `View: ${viewLabel(computePerson)}`,
+    ...(computePerson !== person
+      ? [
+          `- Scope: the question names ${personLabel(computePerson)}, so every figure and row here is ${personLabel(computePerson)}'s alone — not the current view's. Write the answer about ${personLabel(computePerson)}.`,
+        ]
+      : []),
     `Computed figures (the only numbers you may use):`,
     `- Total of the matched spend set: ${gbp(figures.total)}`,
     `- Matching spend transactions: ${figures.count}`,

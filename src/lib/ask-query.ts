@@ -1,13 +1,16 @@
 import { questionTerms } from "./record-search";
+import type { Person } from "./data";
 
 /**
  * Plans a full-history Ask search from a free-text records question.
  * Browser-safe and pure: given the question, the store's current month
  * and today, it works out whether the question names a month or a
  * relative period ("this week", "last month", "this year", "last 30
- * days"), which content terms remain, and how the matching rows should
- * be pulled. A 4-digit year stated next to a month name pins that month
- * to the stated year, and a standalone stated year becomes that year's
+ * days"), whether it names a household member (who then scopes the
+ * computation, overriding the current view), which content terms
+ * remain, and how the matching rows should be pulled. A 4-digit year
+ * stated next to a month name pins that month to the stated year, and
+ * a standalone stated year becomes that year's
  * range; a year token is question shape, never a content term. The
  * actual record matching still happens in searchRecords over the
  * fetched rows — except category questions with a period, which the
@@ -75,9 +78,38 @@ export interface AskFigures {
   top?: { merchant: string; date: string; amount: number }[] | null;
 }
 
+// The household members a question can name. A name in the question is
+// question SHAPE, like a month name: it scopes the computation to that
+// person, overriding the current view, and it is never a search term
+// (as a term it matches no merchant text and poisons record search).
+const PERSON_NAMES = ["zonito", "nikhila"] as const;
+export type NamedPerson = (typeof PERSON_NAMES)[number];
+
+const personMention = (name: NamedPerson) =>
+  new RegExp(`\\b${name}(?:['’]s)?\\b`);
+
+/**
+ * The person a question names, when exactly one is named: "from
+ * Nikhila", "Nikhila's top payments", "spending for Zonito", or a bare
+ * "Nikhila" qualifier anywhere in the question. First person ("my",
+ * "our", "we") names nobody — it stays with the current view rather
+ * than guessing whose records are meant. Both names together are
+ * ambiguous and likewise name nobody here.
+ */
+export function personFromQuestion(question: string): NamedPerson | undefined {
+  const lower = question.toLowerCase();
+  const found = PERSON_NAMES.filter((name) => personMention(name).test(lower));
+  return found.length === 1 ? found[0] : undefined;
+}
+
 export interface AskQueryPlan {
   /** YYYY-MM when the question names a month, else undefined. */
   month?: string;
+  /**
+   * The person the question names, when it names exactly one. The
+   * computation runs for this person, overriding the current view.
+   */
+  person?: Person;
   /** Inclusive YYYY-MM-DD range start, for relative periods like "this week". */
   from?: string;
   /** Inclusive YYYY-MM-DD range end (the range's last day). */
@@ -287,12 +319,23 @@ export function parseAskQuery(
       periodWords.add(year);
     }
   }
+  // A named person scopes the question; the name itself (and the stray
+  // "s" a possessive leaves behind in the term list) is shape, never
+  // content, so neither survives into the search terms.
+  const namedPerson = personFromQuestion(question);
+  const possessiveName =
+    namedPerson !== undefined &&
+    new RegExp(`\\b${namedPerson}['’]s\\b`).test(lower);
   const terms = questionTerms(question).filter(
     (term) =>
       term !== monthWord &&
       !FRAMING.has(term) &&
       !periodWords.has(term) &&
-      !isYearToken(term),
+      !isYearToken(term) &&
+      !(
+        namedPerson !== undefined &&
+        (term === namedPerson || (possessiveName && term === "s"))
+      ),
   );
   const top = topCount(lower);
   let category =
@@ -306,6 +349,7 @@ export function parseAskQuery(
   return {
     ...(month ? { month } : {}),
     ...(from && to ? { from, to } : {}),
+    ...(namedPerson ? { person: namedPerson } : {}),
     terms,
     // A list question is computed over the full period pull, never a
     // text search for its ranking words.
