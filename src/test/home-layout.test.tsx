@@ -26,7 +26,8 @@ const { Index } = await import("@/routes/index");
  * Home is bands of two independent stacks ordered by value: band 1
  * pairs the hero with Biggest changes (left) against Available with
  * the forecast beneath it (right); the trend chart is a full-width
- * divider; band 3 pairs Coming up with Small spends (left) against
+ * divider, with the Income vs spending card full-width directly
+ * under it; band 3 pairs Coming up with Small spends (left) against
  * Coach over Money in (right); the Moved aside strip is last. Within
  * a band each column is a stack of natural-height cards, so no card
  * shares a row with a taller row-mate and a band's columns can
@@ -94,19 +95,20 @@ describe("Home banded stacks", () => {
       </PersonProvider>,
     );
     // On mobile the wrappers collapse and the outer column lays the
-    // cards out by these order values, so they must run 1..10 in
+    // cards out by these order values, so they must run 1..11 in
     // exactly the value order.
     const expected: [Element, number][] = [
       [screen.getByText(/Spent in/), 1],
       [availableButton(), 2],
       [screen.getByText(/Rest of/), 3],
       [screen.getByText(/Spending trend/), 4],
-      [screen.getByText(/Coming up/), 5],
-      [screen.getByText(/Biggest changes/), 6],
-      [screen.getByText("Coach"), 7],
-      [screen.getByText(/Money in/), 8],
-      [screen.getByText(/Small spends/), 9],
-      [screen.getByText("Moved aside"), 10],
+      [screen.getByText(/Income vs spending/), 5],
+      [screen.getByText(/Coming up/), 6],
+      [screen.getByText(/Biggest changes/), 7],
+      [screen.getByText("Coach"), 8],
+      [screen.getByText(/Money in/), 9],
+      [screen.getByText(/Small spends/), 10],
+      [screen.getByText("Moved aside"), 11],
     ];
     for (const [el, n] of expected) {
       expect(orderOf(el), `order for #${n}`).toBe(n);
@@ -141,7 +143,7 @@ describe("Home banded stacks", () => {
     expect(tokens(band).includes("lg:flex")).toBe(true);
     expect(tokens(band).includes("lg:flex-col")).toBe(false);
     // The band wrapper's own order sequences the desktop bands
-    // around the chart (4) and the strip (10): band 1 is order 1.
+    // around the chart (4) and the strip (11): band 1 is order 1.
     expect(orderOf(band!)).toBe(1);
     // No grid placement classes survive anywhere on Home.
     expect(container.innerHTML).not.toMatch(/lg:(row|col)-start/);
@@ -156,6 +158,27 @@ describe("Home banded stacks", () => {
     const trend = screen.getByText("Spending trend").closest("section")!;
     expect(stackOf(trend)).toBeNull();
     expect(trend.parentElement).toBe(pageOf(trend));
+  });
+
+  it("the Income vs spending card is full-width, directly under the chart", () => {
+    render(
+      <PersonProvider>
+        <Index />
+      </PersonProvider>,
+    );
+    const card = screen.getByText("Income vs spending").closest("section")!;
+    expect(stackOf(card)).toBeNull();
+    expect(card.parentElement).toBe(pageOf(card));
+    // In the page column it follows the trend chart and precedes
+    // band 3's wrapper.
+    const trend = screen.getByText("Spending trend").closest("section")!;
+    expect(
+      trend.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const coming = screen.getByText(/Coming up/).closest("section")!;
+    expect(
+      card.compareDocumentPosition(coming) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("band 3: Coming up + Small spends left, Coach + Money in right", () => {
@@ -174,9 +197,9 @@ describe("Home banded stacks", () => {
     expect(right!.textContent).toContain("Money in");
     expect(right!.textContent).not.toContain("Coming up");
     expect(left!.parentElement).toBe(right!.parentElement);
-    // Band 3's wrapper order (5) sits between the chart (4) and
-    // the strip (10) in the desktop column.
-    expect(orderOf(left!.parentElement!)).toBe(5);
+    // Band 3's wrapper order (6) sits between the flow card (5)
+    // and the strip (11) in the desktop column.
+    expect(orderOf(left!.parentElement!)).toBe(6);
   });
 
   it("keeps the forecast in band 1's right stack in both forecast states", () => {
@@ -239,7 +262,7 @@ describe("Home banded stacks", () => {
     // inside no stack, carrying the last order value.
     expect(strip.parentElement).toBe(pageOf(strip));
     expect(stackOf(strip)).toBeNull();
-    expect(orderOf(strip)).toBe(10);
+    expect(orderOf(strip)).toBe(11);
     // One line, in order: label, amount, what it is.
     const text = strip.textContent ?? "";
     const labelAt = text.indexOf("Moved aside");

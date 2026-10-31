@@ -256,6 +256,21 @@ export interface MonthlyAside {
   totals: Partial<Record<Person, number[]>>; // pounds, aligned to months
 }
 
+/** Monthly money flow per person view, from the precomputed
+ * month_aggregates (GBP rows): each month's total income (movement
+ * 'income') and total spend (movement 'spend'), summed across
+ * categories and aligned to the same month range as MonthlyHistory.
+ * Moved-aside and internal transfers are separate movements and count
+ * as NEITHER — money moved to savings is not income, and a transfer
+ * between own accounts is not spending. Household follows the
+ * stored-rows rule: the stored 'household' aggregates when they
+ * exist, else the two people's rows summed — never both. */
+export interface MonthlyFlow {
+  months: string[];
+  income: Partial<Record<Person, number[]>>; // pounds, aligned to months
+  spend: Partial<Record<Person, number[]>>; // pounds, aligned to months
+}
+
 /** A human correction to subscription detection (subscription_overrides),
  * keyed by canonical merchant; label is the name as acted on, for display. */
 export interface SubOverride {
@@ -314,6 +329,7 @@ export interface DataSnapshot {
   sparks: Record<string, Partial<Record<Person, number[]>>>;
   monthly: MonthlyHistory;
   asideMonthly: MonthlyAside;
+  flowMonthly: MonthlyFlow;
   months6: string[];
   newMerchants: NewMerchant[];
   biggestOneOff: Partial<Record<Person, { merchant: string; amount: number; date: string }>>;
@@ -340,6 +356,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   sparks: {},
   monthly: { months: [], series: {} },
   asideMonthly: { months: [], totals: {} },
+  flowMonthly: { months: [], income: {}, spend: {} },
   months6: [],
   newMerchants: [],
   biggestOneOff: {},
@@ -364,6 +381,7 @@ export const MONTHS6: string[] = [];
 export let MIGRATION: DataSnapshot["migration"] = { moved: [], waiting: [] };
 export let MONTHLY_HISTORY: MonthlyHistory = { months: [], series: {} };
 export let MONTHLY_ASIDE: MonthlyAside = { months: [], totals: {} };
+export let MONTHLY_FLOW: MonthlyFlow = { months: [], income: {}, spend: {} };
 
 function replace<T>(target: T[], next: T[]): void {
   target.length = 0;
@@ -387,6 +405,7 @@ export function hydrateData(next: DataSnapshot): void {
   MIGRATION = next.migration;
   MONTHLY_HISTORY = next.monthly ?? { months: [], series: {} };
   MONTHLY_ASIDE = next.asideMonthly ?? { months: [], totals: {} };
+  MONTHLY_FLOW = next.flowMonthly ?? { months: [], income: {}, spend: {} };
 }
 
 export function getSnapshot(): DataSnapshot {
@@ -767,6 +786,47 @@ export function asideMonthlyFor(p: Person): { months: string[]; totals: number[]
   const raw = MONTHLY_ASIDE.totals[p] ?? [];
   return { months, totals: months.map((_, i) => raw[i] ?? 0) };
 }
+
+/** This view's monthly income and spend totals, aligned to the flow
+ * series' month range (missing entries read as 0). */
+export function flowMonthlyFor(p: Person): { months: string[]; income: number[]; spend: number[] } {
+  const months = MONTHLY_FLOW.months;
+  const inc = MONTHLY_FLOW.income[p] ?? [];
+  const out = MONTHLY_FLOW.spend[p] ?? [];
+  return {
+    months,
+    income: months.map((_, i) => inc[i] ?? 0),
+    spend: months.map((_, i) => out[i] ?? 0),
+  };
+}
+
+export interface FlowMonth {
+  month: string; // YYYY-MM
+  income: number; // pounds
+  spend: number; // pounds
+  gap: number; // income − spend, pounds
+}
+
+/** The last `count` calendar months ending at the store's current
+ * month, as in/out/gap rows for the Home Income vs spending card.
+ * The window is calendar-continuous: a month with no data in it
+ * reads 0 in and 0 out (an honest empty month), never a skipped
+ * month, and the window is never compressed to the months that
+ * happen to have data. */
+export function flowWindowFor(p: Person, count = 6): FlowMonth[] {
+  const current = currentMonthKey();
+  if (!current) return [];
+  const { months, income, spend } = flowMonthlyFor(p);
+  const at = new Map(months.map((m, i) => [m, i] as const));
+  return Array.from({ length: count }, (_, k) => {
+    const month = shiftMonthKey(current, k - (count - 1));
+    const i = at.get(month);
+    const inc = i !== undefined ? income[i]! : 0;
+    const out = i !== undefined ? spend[i]! : 0;
+    return { month, income: inc, spend: out, gap: inc - out };
+  });
+}
+
 export function asideInMonth(p: Person, monthKey: string): number {
   const { months, totals } = asideMonthlyFor(p);
   const i = months.indexOf(monthKey);

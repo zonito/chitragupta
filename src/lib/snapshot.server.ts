@@ -260,9 +260,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   // spark series, from the precomputed aggregates — GBP rows only.
   const aggRows = db
     .prepare(
-      `SELECT person, year_month, category, spend_minor, aside_minor FROM month_aggregates WHERE currency = 'GBP'`,
+      `SELECT person, year_month, category, spend_minor, income_minor, aside_minor FROM month_aggregates WHERE currency = 'GBP'`,
     )
-    .all() as { person: string; year_month: string; category: string; spend_minor: number; aside_minor: number }[];
+    .all() as { person: string; year_month: string; category: string; spend_minor: number; income_minor: number; aside_minor: number }[];
   // Household reads the stored 'household' aggregate rows (true
   // both-people sums). A store that predates them has none, so fall
   // back to summing the per-person rows — and never both, or every
@@ -380,6 +380,48 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       });
     }
     return { months, totals };
+  })();
+
+  // Monthly money flow per person, from the same GBP aggregate rows:
+  // each month's income_minor and spend_minor summed across categories,
+  // which is exactly the month's movement-'income' and movement-'spend'
+  // totals (aside and internal transfers are separate movements and
+  // land in neither). Aligned to the spend history's month range;
+  // household follows the same stored-rows rule as asideMonthly. The
+  // Home Income vs spending card reads this; its figures equal the
+  // /api/aggregates per-category sums for the same months by
+  // construction, since that endpoint reads these same rows.
+  const flowMonthly: DataSnapshot["flowMonthly"] = (() => {
+    const months = monthly.months;
+    if (months.length === 0) return { months: [], income: {}, spend: {} };
+    const spendMinor = new Map<string, number>();
+    const incomeMinor = new Map<string, number>();
+    for (const r of aggRows) {
+      const key = `${r.person}|${r.year_month}`;
+      spendMinor.set(key, (spendMinor.get(key) ?? 0) + r.spend_minor);
+      incomeMinor.set(key, (incomeMinor.get(key) ?? 0) + r.income_minor);
+    }
+    const perView = (minor: Map<string, number>, p: Person): number[] =>
+      months.map((ym) => {
+        if (p !== "household") {
+          return (minor.get(`${p}|${ym}`) ?? 0) / 100;
+        }
+        if (hasHouseholdRows) {
+          return (minor.get(`household|${ym}`) ?? 0) / 100;
+        }
+        return (
+          ((minor.get(`zonito|${ym}`) ?? 0) +
+            (minor.get(`nikhila|${ym}`) ?? 0)) /
+          100
+        );
+      });
+    const income: DataSnapshot["flowMonthly"]["income"] = {};
+    const spend: DataSnapshot["flowMonthly"]["spend"] = {};
+    for (const p of persons) {
+      income[p] = perView(incomeMinor, p);
+      spend[p] = perView(spendMinor, p);
+    }
+    return { months, income, spend };
   })();
 
   // Subscriptions: pattern-only detection (recurring amount cluster on a
@@ -629,6 +671,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     sparks,
     monthly,
     asideMonthly,
+    flowMonthly,
     months6,
     newMerchants,
     biggestOneOff,

@@ -247,6 +247,22 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
       nikhila: [400, 400, 400, 400, 400, 400],
     },
   },
+  // Money flow over the same months: October is deliberately a
+  // negative-gap month for every view, so the card's red gap renders
+  // on the plain fixture.
+  flowMonthly: {
+    months: ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"],
+    income: {
+      household: [2400, 3100, 2800, 4200, 3600, 2950.5],
+      zonito: [2000, 2600, 2300, 3400, 2900, 2400],
+      nikhila: [400, 500, 500, 800, 700, 550.5],
+    },
+    spend: {
+      household: [2100, 2600, 3300, 2900, 3100, 3400.25],
+      zonito: [1700, 2100, 2700, 2300, 2500, 2750],
+      nikhila: [400, 500, 600, 600, 600, 650.25],
+    },
+  },
   months6: ["May", "Jun", "Jul", "Aug", "Sep", "Oct"],
   newMerchants: [
     { merchant: "Bao Borough", category: "Eating out", amount: 46.8, date: "2026-10-18" },

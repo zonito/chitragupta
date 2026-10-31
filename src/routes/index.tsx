@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, flowWindowFor, type IncomeEntry, type Person } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
@@ -439,6 +439,101 @@ export function JevCoachOpinion({ person }: { person: Person }) {
   );
 }
 
+const flowMonthShort = (key: string) =>
+  new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(
+    new Date(`${key}-02T00:00:00Z`),
+  );
+const flowMonthLong = (key: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${key}-02T00:00:00Z`));
+
+/**
+ * "Income vs spending": this view's money in against money out for
+ * the current month, and the gap between them — the control figure
+ * for the household. Income is movement 'income' and spend movement
+ * 'spend' from the precomputed aggregates (see flowWindowFor in
+ * data.ts); moved-aside money and transfers between own accounts
+ * count as NEITHER, so the gap never punishes saving. Below the
+ * headline, paired bars for the last six months make the pattern
+ * visible; a month with no data renders an honest empty pair, never
+ * a skipped month. The gap follows the Activity direction
+ * conventions — signed, green (--good via text-good) when the month
+ * is ahead, red (--destructive via text-destructive) when behind —
+ * the same token pair the .amount-in/.amount-out classes use.
+ */
+export function IncomeSpendingCard({ person, className }: { person: Person; className?: string }) {
+  const rows = useMemo(() => flowWindowFor(person), [person]);
+  if (rows.length === 0) return null;
+  const current = rows[rows.length - 1]!;
+  const max = Math.max(...rows.flatMap((r) => [r.income, r.spend]), 0);
+  const signedGap = (gap: number) => `${gap >= 0 ? "+" : "−"}${gbp(Math.abs(gap))}`;
+  // Bar fill height as a plain percentage of the window max; a
+  // positive value also carries a 2px minimum-height class so a
+  // small-but-real month (a few pounds against a five-figure one)
+  // still shows a sliver of bar instead of vanishing.
+  const barPct = (v: number) => (v > 0 && max > 0 ? (v / max) * 100 : 0);
+  return (
+    <Panel {...(className ? { className } : {})}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label>Income vs spending</Label>
+        <div className="flex gap-3 text-caption text-muted-foreground" aria-hidden="true">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: "var(--good)" }} />
+            In
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: "var(--destructive)" }} />
+            Out
+          </span>
+        </div>
+      </div>
+      <p className="num mt-1 text-heading font-semibold leading-relaxed">
+        In {gbp(current.income)} · Out {gbp(current.spend)} · Gap{" "}
+        <span className={current.gap >= 0 ? "text-good" : "text-destructive"}>
+          {signedGap(current.gap)}
+        </span>
+      </p>
+      <div className="mt-4 flex items-end gap-2">
+        {rows.map((r) => {
+          const figures = `${flowMonthLong(r.month)}: in ${gbp(r.income)}, out ${gbp(r.spend)}, gap ${signedGap(r.gap)}`;
+          return (
+            <div key={r.month} className="flex min-w-0 flex-1 flex-col items-center" title={figures}>
+              <span className="sr-only">{figures}</span>
+              <div className="flex h-24 w-full items-end justify-center gap-1" aria-hidden="true">
+                <div className="flex h-full w-3 items-end rounded-sm bg-muted/60">
+                  <div
+                    className={`w-full rounded-sm ${r.income > 0 ? "min-h-[2px]" : ""}`}
+                    style={{ height: `${barPct(r.income)}%`, backgroundColor: "var(--good)" }}
+                  />
+                </div>
+                <div className="flex h-full w-3 items-end rounded-sm bg-muted/60">
+                  <div
+                    className={`w-full rounded-sm ${r.spend > 0 ? "min-h-[2px]" : ""}`}
+                    style={{ height: `${barPct(r.spend)}%`, backgroundColor: "var(--destructive)" }}
+                  />
+                </div>
+              </div>
+              <div className="mt-1.5 text-micro text-muted-foreground">{flowMonthShort(r.month)}</div>
+              <div
+                className={`num text-caption ${r.gap >= 0 ? "text-good" : "text-destructive"}`}
+                aria-hidden="true"
+              >
+                {signedGap(r.gap)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-caption leading-relaxed text-muted-foreground">
+        Transfers between your own accounts and money moved aside count as neither in nor out.
+      </p>
+    </Panel>
+  );
+}
+
 export function Index() {
   const { person } = usePerson();
   const [availableOpen, setAvailableOpen] = useState(false);
@@ -484,18 +579,19 @@ export function Index() {
         pairs the hero with Biggest changes on the left and Available
         with the month-end forecast on the right (the forecast is
         about the Available money, so they sit together); the trend
-        chart is a full-width divider; band 3 pairs Coming up with
-        Small spends against Coach over Money in; Moved aside is a
-        slim strip last. On mobile the band and stack wrappers
+        chart is a full-width divider, with the Income vs spending
+        card full-width directly under it; band 3 pairs Coming up
+        with Small spends against Coach over Money in; Moved aside
+        is a slim strip last. On mobile the band and stack wrappers
         collapse (display: contents), every card becomes a direct
         item of the outer column, and each card's order class
         restores the single-column value order: hero, Available,
-        forecast, trend, Coming up, Biggest changes, Coach, Money
-        in, Small spends, Moved aside. (The band wrappers carry
-        order classes of their own, 1 and 5, purely to sequence the
-        desktop bands around the chart's 4 and the strip's 10; on
-        mobile the wrappers have no box, so only the cards' order
-        classes act.) */}
+        forecast, trend, income vs spending, Coming up, Biggest
+        changes, Coach, Money in, Small spends, Moved aside. (The
+        band wrappers carry order classes of their own, 1 and 6,
+        purely to sequence the desktop bands around the chart's 4,
+        the flow card's 5 and the strip's 11; on mobile the wrappers
+        have no box, so only the cards' order classes act.) */}
     <div className="flex flex-col gap-5 lg:gap-6">
       <div className="contents order-1 lg:flex lg:gap-6">
         <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
@@ -541,7 +637,7 @@ export function Index() {
         )}
       </div>
 
-          <Panel className="order-6">
+          <Panel className="order-7">
             <Label>Biggest changes</Label>
             {biggestChanges(person).map((c) => (
               <div key={c.category} className="ledger-row flex items-center justify-between py-3">
@@ -569,9 +665,11 @@ export function Index() {
         className="order-4"
       />
 
-      <div className="contents order-5 lg:flex lg:gap-6">
+      <IncomeSpendingCard person={person} className="order-5" />
+
+      <div className="contents order-6 lg:flex lg:gap-6">
         <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-      <Panel className="order-5">
+      <Panel className="order-6">
         <Label>Coming up · {nextMonthName()}</Label>
         <p className="text-heading font-semibold leading-relaxed"><span className="num">{gbp(coming.total, false)}</span> of regulars already known</p>
         <div className="mt-3">
@@ -593,7 +691,7 @@ export function Index() {
         <p className="mt-3 text-caption leading-relaxed text-muted-foreground">The regulars we already know about. One-offs and day-to-day spending are on top.</p>
       </Panel>
 
-      <Panel className="order-9">
+      <Panel className="order-10">
         <Label>Small spends</Label>
         <p className="num text-body leading-relaxed">
           Spends under £10 added up to {gbp(small.total)} this month across {small.count} spends.{small.total >= 40 && " That is roughly a family day out."}
@@ -608,7 +706,7 @@ export function Index() {
         </div>
 
         <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-        <Link to="/coach" className="order-7 block">
+        <Link to="/coach" className="order-8 block">
           <Panel className="bg-accent/8!">
             <Label>Coach</Label>
             <p className="num text-body leading-relaxed">{coachNote(person)}</p>
@@ -616,7 +714,7 @@ export function Index() {
           </Panel>
         </Link>
 
-      <Panel className="order-8">
+      <Panel className="order-9">
         <Label>Money in · {currentMonthName()}</Label>
         <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
         <div className="mt-3">
@@ -637,7 +735,7 @@ export function Index() {
           (label, amount, what it is), not a full card. The label is a
           span here, not <Label>: the strip is a single flex line and
           Label's block margin would misalign it. */}
-      <Panel className="order-10 flex flex-wrap items-center gap-x-3 gap-y-1 py-3!">
+      <Panel className="order-11 flex flex-wrap items-center gap-x-3 gap-y-1 py-3!">
         <span className="text-micro font-medium uppercase tracking-[0.08em] text-muted-foreground">Moved aside</span>
         <span className="num text-heading font-semibold text-aside">{gbp(asideTotal(person), false)}</span>
         <span className="text-caption text-muted-foreground">Savings & investments, not spending</span>
