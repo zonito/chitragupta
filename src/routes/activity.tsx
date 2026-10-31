@@ -68,10 +68,17 @@ export function Activity() {
         (a) => a.person === accountScope.person && a.accountId === accountScope.account,
       )?.name ?? accountScope.account)
     : null;
-  // Category correction in flight from the detail sheet: the value the
-  // user just picked (shown until the refreshed data lands) and the
-  // inline error when the save fails and the select reverts.
-  const [catPick, setCatPick] = useState<Category | null>(null);
+  // Category corrections made from the detail sheet, keyed by the
+  // store merchant string (a correction is merchant-level: it re-files
+  // every row of that merchant). Applied over both month sources the
+  // moment the user picks, so the sheet, the list rows and the totals
+  // reflect the change instantly — the module-level snapshot arrays
+  // keep their identity when hydrateData replaces their contents, so
+  // a router refresh alone never re-derives the memos below (the same
+  // reason notes ride on noteOverrides). The override is held for the
+  // session; the save also invalidates the router so the persisted
+  // snapshot converges underneath it.
+  const [catOverrides, setCatOverrides] = useState<Record<string, Category>>({});
   const [catError, setCatError] = useState<string | null>(null);
   const [catBusy, setCatBusy] = useState(false);
   // The snapshot carries two months of rows; older months are fetched
@@ -161,16 +168,23 @@ export function Activity() {
             storePersonOf(t) === accountScope.person,
         )
       : monthTxns;
-    if (Object.keys(noteOverrides).length === 0) return scoped;
+    const hasNotes = Object.keys(noteOverrides).length > 0;
+    const hasCats = Object.keys(catOverrides).length > 0;
+    if (!hasNotes && !hasCats) return scoped;
     return scoped.map((t): Txn => {
-      if (!(t.id in noteOverrides)) return t;
-      const note = noteOverrides[t.id];
-      const next: Txn = { ...t };
-      if (note === null || note === undefined) delete next.userNote;
-      else next.userNote = note;
+      let next = t;
+      if (t.merchant in catOverrides) {
+        next = { ...next, category: catOverrides[t.merchant]! };
+      }
+      if (t.id in noteOverrides) {
+        const note = noteOverrides[t.id];
+        next = { ...next };
+        if (note === null || note === undefined) delete next.userNote;
+        else next.userNote = note;
+      }
       return next;
     });
-  }, [monthTxns, accountScope, noteOverrides]);
+  }, [monthTxns, accountScope, noteOverrides, catOverrides]);
 
   // The header total sums the WHOLE selected period — one month or
   // the full preset range — over the same scoped rows the list shows.
@@ -233,13 +247,25 @@ export function Activity() {
 
   // The sheet renders the freshest copy of the opened transaction, so a
   // saved correction (which refreshes the snapshot and any fetched month)
-  // shows in place instead of the stale object captured on tap.
+  // shows in place instead of the stale object captured on tap. While a
+  // fetched month is refetching after a save, the tapped object stands
+  // in — with any session category override applied, so the sheet never
+  // flickers back to the pre-correction category.
   const openTxn = open
-    ? (scopedMonthTxns.find((t) => t.id === open.id) ?? open)
+    ? (scopedMonthTxns.find((t) => t.id === open.id) ??
+      (open.merchant in catOverrides
+        ? { ...open, category: catOverrides[open.merchant]! }
+        : open))
     : null;
 
   const saveCategory = async (txn: Txn, category: Category) => {
-    setCatPick(category);
+    // Optimistic: the override lands before the request, so the open
+    // sheet (which renders the freshest copy from scopedMonthTxns),
+    // the list rows behind it and the header totals all show the new
+    // category in the same render — no close/reopen, no waiting for
+    // the snapshot refresh. A failed save restores the previous value.
+    const previous = catOverrides[txn.merchant];
+    setCatOverrides((prev) => ({ ...prev, [txn.merchant]: category }));
     setCatError(null);
     setCatBusy(true);
     try {
@@ -258,20 +284,25 @@ export function Activity() {
         ok?: boolean;
       } | null;
       if (!res.ok || !body?.ok) throw new Error("save failed");
-      // Refresh the snapshot so every row of this merchant reflects the
-      // correction without a manual reload, and drop this month's
-      // on-demand cache (older months) so it refetches the same way.
-      await router.invalidate();
+      // Refresh the snapshot so every other surface converges on the
+      // correction, and drop this month's on-demand cache (older
+      // months) so it refetches the same way. Best-effort: the save
+      // itself has landed, so a failed refresh must not revert it.
+      await router?.invalidate().catch(() => {});
       setFetchedMonths((prev) => {
         if (!(monthCacheKey in prev)) return prev;
         const next = { ...prev };
         delete next[monthCacheKey];
         return next;
       });
-      setCatPick(null);
     } catch {
+      setCatOverrides((prev) => {
+        const next = { ...prev };
+        if (previous === undefined) delete next[txn.merchant];
+        else next[txn.merchant] = previous;
+        return next;
+      });
       setCatError("Could not save that category — it has been put back.");
-      setCatPick(null);
     }
     setCatBusy(false);
   };
@@ -391,7 +422,6 @@ export function Activity() {
         open={!!open}
         onClose={() => {
           setOpen(null);
-          setCatPick(null);
           setCatError(null);
         }}
       >
@@ -416,7 +446,7 @@ export function Activity() {
                 <dt className="text-muted-foreground">Category</dt>
                 <select
                   className={sel}
-                  value={catPick ?? openTxn.category}
+                  value={openTxn.category}
                   disabled={catBusy}
                   onChange={(e) => {
                     if (e.target.value === "__new__") {
