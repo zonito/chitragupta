@@ -159,6 +159,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
 
   // Transactions for the current and previous month, GBP only (foreign
   // currency is reported per-currency by /api/aggregates, never mixed in).
+  // Newest first — including within a day, where effective_date may
+  // carry a time — matching /api/transactions' ORDER BY, so a snapshot
+  // month and a fetched month list rows in the same order.
   const rawRows = db
     .prepare(
       `SELECT fingerprint, person, account, effective_date, year_month, description,
@@ -166,7 +169,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
        FROM transactions
        WHERE currency = 'GBP' AND year_month IN (${included.map(() => "?").join(",")})
          AND movement IN ('spend', 'internal', 'aside', 'income')
-       ORDER BY effective_date`,
+       ORDER BY effective_date DESC`,
     )
     .all(...included) as Row[];
 
@@ -199,6 +202,15 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       owner,
       account: ACCOUNT_TXN_LABEL[row.account] ?? row.account,
       kind,
+      // Mirror apiTxnToTxn (txn-map.ts) exactly, so a snapshot month and
+      // a fetched month show the same detail for the same row: the
+      // statement description becomes the note when it adds anything
+      // beyond the merchant name, and fx is never set — this selection
+      // is GBP-only and the API mapper drops non-GBP rows rather than
+      // decorating them, so neither path invents an fx string.
+      ...(row.description && row.description !== row.merchant
+        ? { note: row.description }
+        : {}),
     });
   }
 

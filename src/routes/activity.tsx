@@ -67,7 +67,11 @@ export function Activity() {
         .filter((t) => who === "all" || t.owner === who)
         .filter((t) => cat === "all" || t.category === cat)
         .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
-        .sort((a, b) => b.day - a.day),
+        // Newest first by full date. The sort is stable, so rows within
+        // a day keep their source order — and both month sources
+        // (snapshot builder and /api/transactions) produce their rows
+        // newest-first within the day, so the two agree.
+        .sort((a, b) => b.date.localeCompare(a.date)),
     [person, q, who, cat, monthTxns],
   );
   const days = [...new Set(list.map((t) => t.day))];

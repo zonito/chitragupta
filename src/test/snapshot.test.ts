@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { openStore } from "@/lib/ingest/store";
 import { reviewQueueCount } from "@/lib/ingest/merchants";
 import { buildSnapshot } from "@/lib/snapshot.server";
+import { apiTxnToTxn } from "@/lib/txn-map";
 
 /**
  * Regression tests for the UI snapshot builder against real-store quirks:
@@ -102,6 +103,42 @@ describe("snapshot builder", () => {
     expect(snap.months.at(-1)).toEqual({ key: "2022-08", label: "August 2022" });
     // Instant first paint is unchanged: only the two newest months of rows.
     expect([...new Set(snap.txns.map((t) => t.monthKey))].sort()).toEqual(["2026-09", "2026-10"]);
+  });
+
+  it("mirrors the API mapper: description becomes the note, no fx is invented, same-day rows are newest first", () => {
+    dir = mkdtempSync(join(tmpdir(), "chitragupta-snap-"));
+    const db = openStore(dir);
+    const insert = db.prepare(
+      `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
+         description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
+       VALUES (?, 'zonito', 'Main', ?, '2026-10', ?, 'Trainline', ?, 0, ?, 0, 'spend', 'Transport')`,
+    );
+    insert.run("n1", "2026-10-05 09:00:00", "Train ticket to Edinburgh", -1000, "GBP");
+    insert.run("n2", "2026-10-05 17:30:00", "Trainline", -2000, "GBP");
+    // A foreign-currency row: the snapshot selection is GBP-only, exactly
+    // as the API mapper drops non-GBP rows instead of decorating them.
+    insert.run("n3", "2026-10-06", "Train ticket to Paris", -3000, "EUR");
+    db.close();
+
+    process.env["CHITRAGUPTA_STORE_DIR"] = dir;
+    const snap = buildSnapshot();
+    // Newest first within the day, like /api/transactions' ordering.
+    expect(snap.txns.map((t) => t.id)).toEqual(["n2", "n1"]);
+    const [later, earlier] = snap.txns;
+    expect(earlier!.note).toBe("Train ticket to Edinburgh");
+    expect(later!.note).toBeUndefined();
+    expect(earlier!.fx).toBeUndefined();
+    expect(later!.fx).toBeUndefined();
+
+    // The same rows through the API mapper carry the same note/fx shape.
+    const apiEarlier = apiTxnToTxn({
+      id: "n1", person: "zonito", account: "Main", date: "2026-10-05 09:00:00",
+      month: "2026-10", description: "Train ticket to Edinburgh",
+      merchant: "Trainline", amountMinor: -1000, currency: "GBP",
+      movement: "spend", category: "Transport",
+    });
+    expect(apiEarlier!.note).toBe(earlier!.note);
+    expect(apiEarlier!.fx).toBe(earlier!.fx);
   });
 
   it("returns the honest empty snapshot when no store is configured", () => {

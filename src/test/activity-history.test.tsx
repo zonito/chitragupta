@@ -88,6 +88,51 @@ describe("Activity older months", () => {
     expect(fetchMock.mock.calls[0]![0]).toContain("month=2026-08");
   });
 
+  it("orders rows newest-first within a day, the same for snapshot and fetched months", async () => {
+    // Snapshot month: the builder now produces rows newest-first, and
+    // Activity's stable date sort must preserve that within the day.
+    hydrateData({
+      ...SAMPLE_SNAPSHOT,
+      months: [
+        { key: "2026-10", label: "October 2026" },
+        { key: "2026-09", label: "September 2026" },
+        { key: "2026-08", label: "August 2026" },
+      ],
+      txns: [
+        { ...sepTxn, id: "oct-late", date: "2026-10-10", day: 10, monthKey: "2026-10", merchant: "Later Shop" },
+        { ...sepTxn, id: "oct-early", date: "2026-10-10", day: 10, monthKey: "2026-10", merchant: "Earlier Shop" },
+        { ...sepTxn, id: "oct-prev", date: "2026-10-09", day: 9, monthKey: "2026-10", merchant: "Previous Day Shop" },
+      ],
+    });
+    const fetchMock = vi.fn(async (_url: string) => ({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        count: 2,
+        transactions: [
+          augRow({ id: "fp-aug-late", date: "2026-08-03", merchant: "Aug Later", description: "Aug Later" }),
+          augRow({ id: "fp-aug-early", date: "2026-08-03", merchant: "Aug Earlier", description: "Aug Earlier" }),
+        ],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = render(
+      <PersonProvider>
+        <DocumentsProvider>
+          <Activity />
+        </DocumentsProvider>
+      </PersonProvider>,
+    );
+    const text = () => container.textContent ?? "";
+    expect(text().indexOf("Later Shop")).toBeLessThan(text().indexOf("Earlier Shop"));
+    expect(text().indexOf("Earlier Shop")).toBeLessThan(text().indexOf("Previous Day Shop"));
+
+    const monthSelect = container.querySelectorAll("select")[2]!;
+    fireEvent.change(monthSelect, { target: { value: "2026-08" } });
+    expect(await screen.findByText("Aug Later")).toBeTruthy();
+    expect(text().indexOf("Aug Later")).toBeLessThan(text().indexOf("Aug Earlier"));
+  });
+
   it("renders a snapshot-window month without fetching", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

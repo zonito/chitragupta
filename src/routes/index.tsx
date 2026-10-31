@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePerson, Panel, Label, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR, type IncomeEntry } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 
@@ -9,7 +9,16 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-function Index() {
+/**
+ * React key for a "Money in" row. Every income entry shares owner
+ * values (all of Zonito's rows are "zonito"), so owner alone collides;
+ * the entry's own label (salary or merchant) plus its date — with the
+ * owner kept in — is unique per entry.
+ */
+export const incomeEntryKey = (entry: IncomeEntry): string =>
+  `${entry.type}|${entry.day}|${entry.owner}`;
+
+export function Index() {
   const { person } = usePerson();
   const coming = upcomingPanel(person);
   const total = spendTotal(person);
@@ -62,7 +71,7 @@ function Index() {
         <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
         <div className="mt-3">
           {incomeFor(person).map((entry) => (
-            <div key={entry.owner} className="ledger-row flex items-center justify-between gap-3 py-2 text-body">
+            <div key={incomeEntryKey(entry)} className="ledger-row flex items-center justify-between gap-3 py-2 text-body">
               <span>{entry.type} · {ownerName(entry.owner)}</span>
               <span className="num shrink-0">{gbp(entry.amount, false)}</span>
             </div>
