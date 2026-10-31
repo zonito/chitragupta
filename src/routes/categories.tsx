@@ -163,7 +163,7 @@ export function Categories() {
       {(isDefault || data) && cats.length > 0 && (
         <div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-x-12 lg:gap-y-6 lg:space-y-0">
           {cats.map((c) => (
-            <Button variant="ghost" key={c.category} onClick={() => setOpen(c.category)} className="panel-enter block h-auto w-full whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent">
+            <Button variant="ghost" key={c.category} onClick={() => setOpen(c.category)} className="panel-enter block h-auto w-full whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-foreground">
               <div className="mb-1.5 flex justify-between text-body">
                 <span className="relative flex items-center"><span className="absolute left-0 top-1/2 -translate-y-1/2"><CategoryIcon category={c.category} /></span><span className="pl-9">{c.category}</span></span>
                 <span className="num amount">{gbp(c.amount, false)}</span>

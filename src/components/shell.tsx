@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog } from "lucide-react";
-import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, CATEGORY_COLOR, type Category, type Txn } from "@/lib/data";
+import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, CATEGORY_COLOR, CATEGORY_INK, CATEGORIES, type Category, type Txn } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { DestinationIcon } from "@/components/item-icons";
@@ -188,7 +188,7 @@ export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone
 export function CategoryChip({ category }: { category: Category }) {
   if (category === "Transfer" || category === "Moved aside") return <Chip tone={category === "Moved aside" ? "good" : "neutral"}>{category}</Chip>;
   const colour = CATEGORY_COLOR[category];
-  return <span className="inline-flex items-center rounded-full px-2 py-0.5 text-micro font-medium" style={{ color: colour, backgroundColor: `color-mix(in oklab, ${colour} 12%, transparent)` }}>{category}</span>;
+  return <span className="inline-flex items-center rounded-full px-2 py-0.5 text-micro font-medium" style={{ color: CATEGORY_INK[category as (typeof CATEGORIES)[number]] ?? colour, backgroundColor: `color-mix(in oklab, ${colour} 12%, transparent)` }}>{category}</span>;
 }
 
 export function Row({ left, sub, right, onClick }: { left: ReactNode; sub?: ReactNode; right?: ReactNode; onClick?: () => void }) {

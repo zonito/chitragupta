@@ -82,7 +82,7 @@
   --destructive: oklch(0.52 0.16 28);
   --destructive-foreground: oklch(0.99 0.01 85);
   --good: oklch(0.5 0.115 158);
-  --warn: oklch(0.53 0.125 66);
+  --warn: oklch(0.49 0.125 66);
   --aside: oklch(0.47 0.095 205);
   --border: oklch(0.88 0.018 78);
   --input: oklch(0.88 0.018 78);
@@ -102,6 +102,19 @@
   --cat-holidays: oklch(0.58 0.115 208);
   --cat-shopping: oklch(0.56 0.155 12);
   --cat-one-off: oklch(0.55 0.035 55);
+  /* Chip text inks: the category colours darkened (lightness only) so
+     category-coloured text on its own 12% tint clears 4.5:1 in the light
+     theme. Bars/dots/icons keep the --cat-* values above. Dark inks are
+     the category colours themselves (they already pass there). */
+  --cat-groceries-ink: oklch(0.505 0.145 150);
+  --cat-eating-out-ink: oklch(0.535 0.155 38);
+  --cat-transport-ink: oklch(0.515 0.115 252);
+  --cat-school-ink: oklch(0.5 0.135 295);
+  --cat-home-ink: oklch(0.525 0.105 72);
+  --cat-subscriptions-ink: oklch(0.505 0.105 192);
+  --cat-holidays-ink: oklch(0.51 0.115 208);
+  --cat-shopping-ink: oklch(0.54 0.155 12);
+  --cat-one-off-ink: oklch(0.52 0.035 55);
   --brand-netflix: #E50914;
   --brand-spotify: #1DB954;
   --brand-ocado: #822673;
@@ -162,6 +175,15 @@
   --cat-holidays: oklch(0.72 0.11 208);
   --cat-shopping: oklch(0.7 0.15 12);
   --cat-one-off: oklch(0.7 0.03 60);
+  --cat-groceries-ink: oklch(0.7 0.14 150);
+  --cat-eating-out-ink: oklch(0.72 0.15 40);
+  --cat-transport-ink: oklch(0.68 0.11 252);
+  --cat-school-ink: oklch(0.66 0.13 295);
+  --cat-home-ink: oklch(0.72 0.1 75);
+  --cat-subscriptions-ink: oklch(0.69 0.1 192);
+  --cat-holidays-ink: oklch(0.72 0.11 208);
+  --cat-shopping-ink: oklch(0.7 0.15 12);
+  --cat-one-off-ink: oklch(0.7 0.03 60);
   color-scheme: dark;
 }
 

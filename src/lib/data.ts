@@ -39,6 +39,20 @@ export const CATEGORY_COLOR: Record<(typeof CATEGORIES)[number], string> = {
   Shopping: "var(--cat-shopping)",
   "One-off": "var(--cat-one-off)",
 };
+/** Text ink for CategoryChip: same hues as CATEGORY_COLOR, darkened in
+ *  the light theme (via the --cat-*-ink tokens) so chip text clears
+ *  4.5:1 on its 12% tint; identical to CATEGORY_COLOR in dark. */
+export const CATEGORY_INK: Record<(typeof CATEGORIES)[number], string> = {
+  Groceries: "var(--cat-groceries-ink)",
+  "Eating out": "var(--cat-eating-out-ink)",
+  Transport: "var(--cat-transport-ink)",
+  School: "var(--cat-school-ink)",
+  Home: "var(--cat-home-ink)",
+  Subscriptions: "var(--cat-subscriptions-ink)",
+  Holidays: "var(--cat-holidays-ink)",
+  Shopping: "var(--cat-shopping-ink)",
+  "One-off": "var(--cat-one-off-ink)",
+};
 
 export interface Txn {
   id: string;
