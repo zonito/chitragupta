@@ -4,6 +4,7 @@ import { openStore } from "./ingest/store";
 import { reviewQueueCount } from "./ingest/merchants";
 import {
   EMPTY_SNAPSHOT,
+  dateLabel,
   shareOf,
   type AccountInfo,
   type DataSnapshot,
@@ -258,7 +259,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     })),
     latestDate,
     {
-      dateLabel: shortDayLabel,
+      // Full dateLabel ("5 Oct 2026"), so a card's last-charged date is
+      // in the same format as the next-expected date it renders beside.
+      dateLabel,
       accountLabel: (account) => ACCOUNT_TXN_LABEL[account] ?? account,
     },
   );
@@ -368,6 +371,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   return {
     configured: true,
     monthKey: current,
+    latestDate: day10(latestDate),
     // Every month in the store, newest first — the picker and Ask route
     // older months to /api/transactions; txns below stay at two months.
     months: monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),

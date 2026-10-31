@@ -17,7 +17,7 @@ const sub = (over: Partial<Sub>): Sub => {
     name: "Streamly",
     amount: 9.99,
     freq: "Monthly",
-    last: "5 Oct",
+    last: "5 Oct 2026",
     card: "Revolut Main · Zonito",
     owner: "zonito",
     status: "Active",
@@ -128,6 +128,51 @@ describe("Subscriptions screen", () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText("Old Gym")).toBeNull();
+  });
+
+  it("formats the header per-month and per-year figures with the same decimals", () => {
+    const { container } = render(
+      <PersonProvider>
+        <Subs />
+      </PersonProvider>,
+    );
+    // Active: Streamly £9.99/month + Prime Yearly £95/year.
+    expect(container.textContent).toContain("£17.91");
+    expect(container.textContent).toContain("£214.88");
+    expect(container.textContent).not.toContain("£215");
+  });
+
+  it("shows last-charged and next dates in one format, both with the year", () => {
+    const { container } = render(
+      <PersonProvider>
+        <Subs />
+      </PersonProvider>,
+    );
+    expect(container.textContent).toContain("last charged 5 Oct 2026");
+    expect(container.textContent).toContain("next 5 Nov 2026");
+  });
+
+  it("renders a past nextExpected as overdue, keeping the detector's Active status", () => {
+    hydrateData({
+      ...SAMPLE_SNAPSHOT,
+      subs: [
+        sub({
+          name: "Late Monthly",
+          last: "5 Sep 2026",
+          nextExpected: "2026-10-05",
+          variants: ["Late Monthly"],
+        }),
+      ],
+    });
+    const { container } = render(
+      <PersonProvider>
+        <Subs />
+      </PersonProvider>,
+    );
+    expect(container.textContent).toContain("next was due 5 Oct 2026");
+    expect(container.textContent).not.toContain("next 5 Oct 2026");
+    // Status is the detector's, unchanged by the wording.
+    expect(screen.getByText("Active")).toBeTruthy();
   });
 
   it("opens a card's transactions paginated 10 per page", async () => {

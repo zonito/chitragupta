@@ -108,6 +108,8 @@ export interface NewMerchant { merchant: string; category: Category; amount: num
 export interface DataSnapshot {
   configured: boolean;
   monthKey: string; // current month, YYYY-MM ("" when no data)
+  /** ISO date of the store's latest transaction, when the snapshot builder knows it. */
+  latestDate?: string;
   months: { key: string; label: string }[]; // every month with transactions in the store, newest first
   txns: Txn[]; // current + previous month only; older months load on demand via /api/transactions
   income: IncomeEntry[]; // current month
@@ -182,6 +184,15 @@ export function hydrateData(next: DataSnapshot): void {
 export function getSnapshot(): DataSnapshot {
   return snapshot;
 }
+/**
+ * The latest data date: the snapshot's recorded store maximum when it
+ * carries one, otherwise the newest loaded transaction date ("" when
+ * there is no data). Dates that fall before this are in the past as far
+ * as the household's data is concerned.
+ */
+export const latestDataDate = (): string =>
+  snapshot.latestDate ||
+  ALL_TXNS.reduce((max, t) => (t.date > max ? t.date : max), "");
 export const isConfigured = () => snapshot.configured;
 export const currentMonthKey = () => snapshot.monthKey;
 export const monthOptions = () => snapshot.months;

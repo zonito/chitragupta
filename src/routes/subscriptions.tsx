@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { usePerson, PageTitle, Panel, Chip, Label, Sheet, meta } from "@/components/shell";
-import { SUBS, monthlyOf, yearlyOf, gbp, ownerName, dateLabel, type Sub, type Txn } from "@/lib/data";
+import { SUBS, monthlyOf, yearlyOf, gbp, ownerName, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
 import { MerchantTile } from "@/components/tiles";
 
@@ -9,6 +9,20 @@ export const Route = createFileRoute("/subscriptions")({
   head: () => meta("Subscriptions", "Recurring charges, yearly cost, and which card each one sits on."),
   component: Subs,
 });
+
+/**
+ * How a subscription's next charge reads. The detector's status stays
+ * exactly as computed — an Active sub whose expected date has already
+ * passed relative to the latest data is not relabelled, it just must
+ * not claim that past date is still "next".
+ */
+export function nextExpectedLabel(s: Sub): string | null {
+  if (s.status !== "Active" || !s.nextExpected) return null;
+  const latest = latestDataDate();
+  return latest && s.nextExpected < latest
+    ? `next was due ${dateLabel(s.nextExpected)}`
+    : `next ${dateLabel(s.nextExpected)}`;
+}
 
 const PAGE_SIZE = 10;
 const SECTION_ORDER: Sub["freq"][] = ["Monthly", "Yearly", "Quarterly", "Weekly"];
@@ -28,7 +42,7 @@ export function Subs() {
       <PageTitle>Subscriptions</PageTitle>
       <Panel className="mb-6 grid grid-cols-2">
         <div><Label>Per month</Label><div className="num text-title font-semibold">{gbp(m)}</div></div>
-        <div><Label>Per year</Label><div className="num text-title font-semibold">{gbp(m * 12, false)}</div></div>
+        <div><Label>Per year</Label><div className="num text-title font-semibold">{gbp(m * 12)}</div></div>
         <div className="col-span-2 mt-4">
           <div className="flex h-2 overflow-hidden rounded-lg bg-muted" role="img" aria-label={active.map(s => `${s.name}: ${gbp(yearlyOf(s))} a year`).join("; ")}>
             {active.map((s, i) => <span key={s.name} className="h-full bg-primary" style={{ width: `${yearly > 0 ? yearlyOf(s) / yearly * 100 : 0}%`, opacity: 0.3 + (i % 5) * 0.14 }} />)}
@@ -109,7 +123,7 @@ function SubCard({ sub: s, person, onOpen }: { sub: Sub; person: string; onOpen:
         </div>
         <div className="mt-3 text-caption text-muted-foreground">
           {s.card} · last charged {s.last}
-          {s.status === "Active" && s.nextExpected && <> · next {dateLabel(s.nextExpected)}</>}
+          {nextExpectedLabel(s) && <> · {nextExpectedLabel(s)}</>}
           {person === "household" && <> · {ownerName(s.owner)}</>}
           {s.note && <div className="mt-0.5">{s.note}</div>}
         </div>
@@ -156,7 +170,7 @@ function SubDetail({ sub }: { sub: Sub }) {
       <div className="num mb-1 text-title font-semibold">{gbp(sub.amount)}</div>
       <p className="mb-5 text-caption text-muted-foreground">
         {sub.freq} · {sub.charges} recurring charge{sub.charges === 1 ? "" : "s"} · last charged {sub.last}
-        {sub.status === "Active" && sub.nextExpected ? ` · next ${dateLabel(sub.nextExpected)}` : ` · ${sub.status}`}
+        {nextExpectedLabel(sub) ? ` · ${nextExpectedLabel(sub)}` : ` · ${sub.status}`}
       </p>
 
       {txns === null && !failed && <p className="text-body text-muted-foreground">Loading transactions…</p>}

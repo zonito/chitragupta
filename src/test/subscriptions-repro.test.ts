@@ -33,6 +33,11 @@ describeRepro("subscriptions from the real Originals", () => {
     const snap = buildSnapshot();
     const byName = new Map(snap.subs.map((s) => [s.name, s]));
 
+    // The display tidy must not change detection: still exactly 32 subs,
+    // and every last-charged label carries its year like the next date.
+    expect(snap.subs).toHaveLength(32);
+    for (const s of snap.subs) expect(s.last).toMatch(/\d{4}$/);
+
     expect(byName.get("Atom Learning")).toMatchObject({
       freq: "Monthly",
       status: "Active",

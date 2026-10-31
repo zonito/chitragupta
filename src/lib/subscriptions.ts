@@ -123,7 +123,7 @@ function amountClusters(charges: SubCharge[]): SubCharge[][] {
 }
 
 export interface DetectFormat {
-  /** "5 Oct" style label for an ISO date. */
+  /** "5 Oct 2026" style label for an ISO date. */
   dateLabel: (iso: string) => string;
   /** UI label for a store account name. */
   accountLabel: (account: string) => string;
