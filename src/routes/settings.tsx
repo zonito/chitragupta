@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { PageTitle, Panel, Label, Chip, Row, Sheet, meta, useTheme, type ThemeChoice } from "@/components/shell";
-import { ACCOUNTS, categoryColor, categoryDefs, reviewTotal, type Category, type CategoryDef, type ReviewQueueItem } from "@/lib/data";
+import { ACCOUNTS, appSettings, categoryColor, categoryDefs, reviewTotal, type Category, type CategoryDef, type ReviewQueueItem } from "@/lib/data";
 import { AccountTile, MerchantTile } from "@/components/tiles";
 import { CategoryIcon } from "@/components/item-icons";
 import { Button } from "@/components/ui/button";
@@ -129,6 +129,7 @@ export function Settings() {
         />
       </Panel>
       <CategoriesManager />
+      <FloorsBudgets />
       <p className="px-1 text-body leading-relaxed text-muted-foreground">
         Your data stays with you. Transfers between Zonito and Nikhila are never counted as spending, and money moved to savings or investments shows separately as "Moved aside".
       </p>
@@ -197,6 +198,201 @@ export function Settings() {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+/** Parse a £ field: "" (or whitespace) is "no limit" (null), a plain
+ * number is pounds → minor units, anything else (letters, negatives)
+ * is "invalid" and blocks the save with an inline error. */
+function parsePounds(raw: string): number | null | "invalid" {
+  const t = raw.trim().replace(/^£/, "").replace(/,/g, "").trim();
+  if (t === "") return null;
+  const v = Number(t);
+  if (!Number.isFinite(v) || v < 0) return "invalid";
+  return Math.round(v * 100);
+}
+
+const poundsInput =
+  "w-24 rounded-lg border bg-card px-3 py-1.5 text-right text-body outline-none focus:ring-2 focus:ring-ring";
+
+/**
+ * Floors & budgets: the household's thresholds — an Available floor
+ * (Home's Available card signals red below it), an overall monthly
+ * budget (the Home hero tracks spend against it) and a monthly budget
+ * per spending category (the Categories rows track against theirs).
+ * All optional; an empty field is no floor / no budget. Values live
+ * server-side in the store (snapshot-carried), so the form seeds from
+ * the snapshot and a save PUTs the full form state, then invalidates
+ * so every surface re-reads the same numbers.
+ */
+function FloorsBudgets() {
+  const router = useRouter();
+  const defs = categoryDefs();
+  const settings = appSettings();
+  const settingsJson = JSON.stringify(settings);
+  const defsKey = defs.map((d) => d.name).join("|");
+
+  const seedFrom = (json: string, key: string) => {
+    const s = JSON.parse(json) as typeof settings;
+    const asField = (minor: number | null | undefined) =>
+      minor !== null && minor !== undefined ? String(minor / 100) : "";
+    return {
+      floor: asField(s.availableFloorMinor),
+      overall: asField(s.overallMonthlyBudgetMinor),
+      cats: Object.fromEntries(
+        key
+          .split("|")
+          .filter(Boolean)
+          .map((name) => [name, asField(s.categoryBudgets[name])]),
+      ) as Record<string, string>,
+    };
+  };
+
+  const [form, setForm] = useState(() => seedFrom(settingsJson, defsKey));
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Re-seed when the snapshot's settings change under us (another
+  // save, a category added) — unless the user is mid-edit.
+  useEffect(() => {
+    if (!dirty) setForm(seedFrom(settingsJson, defsKey));
+    // seedFrom is derived from the two keys; settingsJson/defsKey are
+    // the stable inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsJson, defsKey, dirty]);
+
+  const edit = (patch: Partial<typeof form>) => {
+    setForm((f) => ({ ...f, ...patch }));
+    setDirty(true);
+    setSaved(false);
+  };
+
+  const save = async () => {
+    if (busy) return;
+    const floorMinor = parsePounds(form.floor);
+    const overallMinor = parsePounds(form.overall);
+    const catPatch: Record<string, number | null> = {};
+    let invalid = floorMinor === "invalid" || overallMinor === "invalid";
+    for (const def of defs) {
+      const parsed = parsePounds(form.cats[def.name] ?? "");
+      if (parsed === "invalid") {
+        invalid = true;
+      } else if (parsed !== null) {
+        catPatch[def.name] = parsed;
+      } else if (settings.categoryBudgets[def.name] !== undefined) {
+        // The field was cleared for a category that had a budget:
+        // say so explicitly, or the merge would keep the old value.
+        catPatch[def.name] = null;
+      }
+    }
+    if (invalid) {
+      setError("Amounts must be £0 or more — leave a field empty for no limit.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          availableFloorMinor: floorMinor,
+          overallMonthlyBudgetMinor: overallMinor,
+          categoryBudgets: catPatch,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error ?? "could not save floors & budgets");
+      }
+      setDirty(false);
+      setSaved(true);
+      // Refresh the snapshot so Home and Categories judge by the new
+      // numbers; a refresh failure is not a save failure.
+      try {
+        await router.invalidate();
+      } catch {
+        /* no live router in some renders */
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save floors & budgets");
+    }
+    setBusy(false);
+  };
+
+  const amountField = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+  ) => (
+    <span className="flex shrink-0 items-center gap-1.5">
+      <span aria-hidden="true" className="text-muted-foreground">£</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode="decimal"
+        placeholder="No limit"
+        aria-label={label}
+        className={poundsInput}
+      />
+    </span>
+  );
+
+  return (
+    <Panel className="py-2">
+      <Label>Floors & budgets</Label>
+      <p className="pb-1 text-caption leading-relaxed text-muted-foreground">
+        Thresholds are compared against the view on screen — the household
+        totals in the household view, one person's in theirs. Leave a field
+        empty for no floor or budget.
+      </p>
+      <div className="ledger-row flex items-center justify-between gap-3 py-2.5">
+        <span>Available floor</span>
+        {amountField("Available floor, in pounds", form.floor, (v) =>
+          edit({ floor: v }),
+        )}
+      </div>
+      <div className="ledger-row flex items-center justify-between gap-3 py-2.5">
+        <span>Overall monthly budget</span>
+        {amountField("Overall monthly budget, in pounds", form.overall, (v) =>
+          edit({ overall: v }),
+        )}
+      </div>
+      {defs.map((def) => (
+        <div key={def.name} className="ledger-row flex items-center justify-between gap-3 py-2.5">
+          <span className="flex min-w-0 items-center gap-2">
+            <CategoryIcon category={def.name as Category} />
+            <span className="truncate">{def.name}</span>
+            <span
+              aria-hidden="true"
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: categoryColor(def.name) }}
+            />
+          </span>
+          {amountField(
+            `Monthly budget for ${def.name}, in pounds`,
+            form.cats[def.name] ?? "",
+            (v) => edit({ cats: { ...form.cats, [def.name]: v } }),
+          )}
+        </div>
+      ))}
+      <div className="flex items-center gap-2 py-3">
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => void save()}>
+          Save
+        </Button>
+        {saved && !dirty && <Chip tone="good">Saved</Chip>}
+      </div>
+      {error && (
+        <p className="pb-2 text-caption text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </Panel>
   );
 }
 

@@ -88,6 +88,7 @@
   --input: oklch(0.88 0.018 78);
   --ring: oklch(0.42 0.095 178);
   --hero: oklch(0.38 0.085 178);
+  --danger-on-hero: oklch(0.85 0.115 25);
   --hero-foreground: oklch(0.99 0.005 180);
   --tile-foreground: oklch(0.99 0 0);
   --brand-puregym-foreground: oklch(0.87 0.17 95);
@@ -162,6 +163,7 @@
   --input: oklch(0.3 0.02 200);
   --ring: oklch(0.74 0.115 176);
   --hero: oklch(0.3 0.07 178);
+  --danger-on-hero: oklch(0.85 0.115 25);
   --hero-foreground: oklch(0.99 0.005 180);
   --tile-foreground: oklch(0.99 0 0);
   --brand-puregym-foreground: oklch(0.87 0.17 95);
@@ -218,6 +220,12 @@
 .dark .hero-panel { background: linear-gradient(135deg, oklch(0.32 0.075 176), oklch(0.23 0.06 188)); box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.6); }
 .hero-label { color: oklch(0.87 0.025 182); }
 .hero-comparison { color: oklch(0.9 0.02 182); }
+/* Danger that stays AA-legible on the hero's dark teal gradient in
+   both themes (the plain --destructive is tuned for light card
+   surfaces and would sink into the hero). The hero panel is dark in
+   both themes and the dark theme's gradient is darker still, so one
+   value passes in both, contrast only improving in dark. */
+.hero-danger { color: var(--danger-on-hero); }
 .hero-number { color: var(--hero-foreground); letter-spacing: -0.01em; line-height: 1.05; font-size: var(--text-hero); }
 .hero-panel .hero-track { background: color-mix(in oklab, var(--hero-foreground) 10%, transparent); }
 .data-bar { transition: width 0.9s cubic-bezier(0.22, 0.61, 0.36, 1); }

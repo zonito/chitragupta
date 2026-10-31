@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS subscription_overrides (
   source TEXT NOT NULL DEFAULT 'user',
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   merchant TEXT NOT NULL,

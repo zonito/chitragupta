@@ -204,6 +204,11 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
   },
   reviewTotal: 3,
   categories: BUILTIN_CATEGORY_DEFS,
+  settings: {
+    availableFloorMinor: null,
+    overallMonthlyBudgetMinor: null,
+    categoryBudgets: {},
+  },
   accounts: [
     { name: "Revolut Main", owner: "zonito", last: "28 Oct", lastDate: "2026-10-28", added: 31, stale: false, balanceMinor: 125000, currency: "GBP", accountId: "Main", person: "zonito" },
     { name: "Revolut Pro", owner: "zonito", last: "28 Oct", lastDate: "2026-10-28", added: 4, stale: false, balanceMinor: 34210, currency: "GBP", accountId: "Pro", person: "zonito" },

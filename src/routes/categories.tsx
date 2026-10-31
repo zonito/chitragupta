@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { usePerson, PageTitle, Sheet, Sparkline, Label, meta } from "@/components/shell";
-import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, categoryColor, monthlyHistoryFor, type Category } from "@/lib/data";
-import { fetchCategoryMerchants, fetchCategoryScope, scopeLabel, scopeOptions, type CategoryScopeData } from "@/lib/category-scope";
+import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, categoryColor, monthlyHistoryFor, appSettings, type Category } from "@/lib/data";
+import { fetchCategoryMerchants, fetchCategoryScope, parseScope, scopeLabel, scopeOptions, type CategoryScopeData } from "@/lib/category-scope";
 import { SpendTimelineSection } from "@/components/spend-chart";
 import { AnimatedBar } from "@/components/motion";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,8 @@ export function Categories() {
     : (data?.rows ?? []).map((r) => ({ category: r.category, amount: r.amount }));
   const max = cats[0]?.amount ?? 1;
   const label = scopeLabel(scope, months);
+  const categoryBudgets = appSettings().categoryBudgets;
+  const isMonthScope = parseScope(scope).kind === "month";
 
   const snapshotMerchants =
     open && isDefault
@@ -173,17 +175,52 @@ export function Categories() {
           cannot silently drift again. */}
       {(isDefault || data) && cats.length > 0 && (
         <div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-x-12 lg:gap-y-6 lg:space-y-0">
-          {cats.map((c) => (
+          {cats.map((c) => {
+            // Category budget (Settings): a slim spent-vs-budget bar
+            // fitted inside the pinned row structure, after the
+            // relative bar. Budgets are monthly numbers, so they judge
+            // single-month scopes only (the default current month and
+            // any chosen month) — never a whole year or all time. The
+            // row's pinned hooks (button classes, the name/amount line,
+            // the h-2 relative bar) are untouched; unbudgeted rows
+            // render exactly as before.
+            const budgetMinor = isMonthScope
+              ? categoryBudgets[c.category]
+              : undefined;
+            const budget = budgetMinor !== undefined ? budgetMinor / 100 : null;
+            const overBy =
+              budget !== null && c.amount > budget ? c.amount - budget : 0;
+            return (
             <Button variant="ghost" key={c.category} onClick={() => setOpen(c.category)} className="panel-enter block h-auto w-full whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-foreground">
               <div className="mb-1.5 flex justify-between text-body">
                 <span className="relative flex items-center"><span className="absolute left-0 top-1/2 -translate-y-1/2"><CategoryIcon category={c.category} /></span><span className="pl-9">{c.category}</span></span>
-                <span className="num amount">{gbp(c.amount, false)}</span>
+                <span className={`num amount${overBy > 0 ? " text-destructive" : ""}`}>{gbp(c.amount, false)}</span>
               </div>
               <div className="h-2 rounded-lg bg-muted">
                 <AnimatedBar percent={(c.amount / max) * 100} className="" colour={categoryColor(c.category)} />
               </div>
+              {budget !== null && (
+                <div className="mt-2">
+                  <div className="h-1 rounded-lg bg-muted">
+                    <AnimatedBar
+                      percent={budget > 0 ? (c.amount / budget) * 100 : c.amount > 0 ? 100 : 0}
+                      className=""
+                      colour={overBy > 0 ? "var(--destructive)" : categoryColor(c.category)}
+                    />
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-caption">
+                    <span className="text-muted-foreground">Budget {gbp(budget, false)}</span>
+                    {overBy > 0 ? (
+                      <span className="num font-medium text-destructive">{gbp(overBy, false)} over</span>
+                    ) : (
+                      <span className="num text-muted-foreground">{gbp(budget - c.amount, false)} left</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </Button>
-          ))}
+            );
+          })}
         </div>
       )}
 

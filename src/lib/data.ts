@@ -223,6 +223,24 @@ export interface SubOverride {
   mode: "force" | "suppress" | "cancelled";
 }
 
+/** The household's own thresholds, configured in Settings and stored
+ * server-side (see ingest/settings.ts): an Available floor to stay
+ * above, an overall monthly budget, and a monthly budget per spending
+ * category. Every value is optional — null / absent means no floor
+ * and no budget, and the surfaces render exactly as they did before
+ * thresholds existed. Amounts are minor units (pence). Thresholds are
+ * always judged against the numbers of the view on screen. */
+export interface AppSettings {
+  availableFloorMinor: number | null;
+  overallMonthlyBudgetMinor: number | null;
+  categoryBudgets: Record<string, number>; // category name -> minor units
+}
+export const EMPTY_SETTINGS: AppSettings = {
+  availableFloorMinor: null,
+  overallMonthlyBudgetMinor: null,
+  categoryBudgets: {},
+};
+
 export interface DataSnapshot {
   configured: boolean;
   monthKey: string; // current month, YYYY-MM ("" when no data)
@@ -239,6 +257,7 @@ export interface DataSnapshot {
   reviewTotal: number; // TRUE review-queue size; the sheet fetches the items itself from /api/review-queue
   accounts: AccountInfo[];
   categories: CategoryDef[]; // built-ins + user-created, from the store's categories table
+  settings: AppSettings; // floors & budgets from the store's settings table
   docs: Doc[];
   typical: Record<string, Partial<Record<Person, number>>>;
   sparks: Record<string, Partial<Record<Person, number[]>>>;
@@ -262,6 +281,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   reviewTotal: 0,
   accounts: [],
   categories: [],
+  settings: EMPTY_SETTINGS,
   docs: [],
   typical: {},
   sparks: {},
@@ -328,6 +348,9 @@ export const currentMonthKey = () => snapshot.monthKey;
 export const monthOptions = () => snapshot.months;
 export const newMerchants = () => snapshot.newMerchants;
 export const reviewTotal = () => snapshot.reviewTotal;
+/** The configured floors & budgets (all unset by default). Defensive
+ * fallback: a hand-built snapshot without the field reads as unset. */
+export const appSettings = (): AppSettings => snapshot.settings ?? EMPTY_SETTINGS;
 export const biggestOneOff = (p: Person) => snapshot.biggestOneOff[p] ?? null;
 
 const MONTH_NAMES = [

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
@@ -31,6 +31,23 @@ export const incomeEntryKey = (entry: IncomeEntry): string =>
  * With no recorded balance at all the card says so honestly instead
  * of showing a fabricated £0.
  */
+/** A threshold figure with pence only when it has them (£11,000 /
+ * £10,306.75): a floor the user typed is quoted back exactly. */
+const gbpTrim = (n: number) => gbp(n, n % 1 !== 0);
+
+/** The Available floor state for one view: the configured floor (in
+ * pounds) and whether the view's GBP headline sits below it. Null
+ * floor = no signal anywhere. The comparison uses the very number the
+ * card displays, so what you see is what is judged. */
+export function floorState(person: Person): { floor: number; below: boolean } | null {
+  const { availableFloorMinor } = appSettings();
+  if (availableFloorMinor === null) return null;
+  const total = availableFor(person).gbpTotal;
+  if (total === null) return null;
+  const floor = availableFloorMinor / 100;
+  return { floor, below: total < floor };
+}
+
 export function AvailableCard({ person, onOpen, className }: { person: Person; onOpen: () => void; className?: string }) {
   const avail = availableFor(person);
   if (avail.gbpTotal === null) {
@@ -44,6 +61,7 @@ export function AvailableCard({ person, onOpen, className }: { person: Person; o
     );
   }
   const known = avail.accounts.filter((a) => a.balanceMinor !== null).length;
+  const floor = floorState(person);
   return (
     <Panel {...(className ? { className } : {})}>
       <button
@@ -54,12 +72,22 @@ export function AvailableCard({ person, onOpen, className }: { person: Person; o
       >
         <div className="min-w-0">
           <Label>Available</Label>
-          <div className="num text-title font-semibold"><CountUpMoney value={avail.gbpTotal} pence /></div>
+          <div className={`num text-title font-semibold${floor?.below ? " text-destructive" : ""}`}><CountUpMoney value={avail.gbpTotal} pence /></div>
           {avail.foreign.length > 0 && (
             <p className="num mt-1 text-caption text-muted-foreground">
               plus {avail.foreign.map((f) => formatMoney(f.total, f.currency)).join(" · ")} in other currencies
             </p>
           )}
+          {floor !== null &&
+            (floor.below ? (
+              <p className="num mt-1 text-caption font-medium text-destructive">
+                Below your {gbpTrim(floor.floor)} floor
+              </p>
+            ) : (
+              <p className="num mt-1 text-caption text-muted-foreground">
+                Floor {gbpTrim(floor.floor)}
+              </p>
+            ))}
           <p className="mt-1 text-caption text-muted-foreground">
             Across {known} account{known === 1 ? "" : "s"} · as of {dateLabel(avail.asOf)}
           </p>
@@ -75,10 +103,21 @@ export function AvailableCard({ person, onOpen, className }: { person: Person; o
  *  converted), its owner and its last statement date. */
 export function AvailableBreakdown({ person }: { person: Person }) {
   const avail = availableFor(person);
+  const floor = floorState(person);
   return (
     <div>
       <div className="text-body text-muted-foreground">Available</div>
-      <div className="num mb-1 text-title font-semibold">{avail.gbpTotal !== null ? gbp(avail.gbpTotal) : "—"}</div>
+      <div className={`num mb-1 text-title font-semibold${floor?.below ? " text-destructive" : ""}`}>{avail.gbpTotal !== null ? gbp(avail.gbpTotal) : "—"}</div>
+      {floor !== null &&
+        (floor.below ? (
+          <p className="num mb-1 text-caption font-medium text-destructive">
+            Below your {gbpTrim(floor.floor)} floor
+          </p>
+        ) : (
+          <p className="num mb-1 text-caption text-muted-foreground">
+            Floor {gbpTrim(floor.floor)}
+          </p>
+        ))}
       <p className="mb-5 text-caption text-muted-foreground">
         {person === "household"
           ? "Every account — yours, Nikhila's and Joint"
@@ -153,6 +192,13 @@ export function Index() {
   const usual = typicalTotal(person);
   const diff = total - usual;
   const small = smallSpendFact(TXNS, person);
+  // Overall monthly budget (Settings): a slim progress line under the
+  // hero's own bars. Null = no budget, and the hero is exactly as it
+  // was. Judged on this view's current-month spend total.
+  const { overallMonthlyBudgetMinor } = appSettings();
+  const overallBudget =
+    overallMonthlyBudgetMinor !== null ? overallMonthlyBudgetMinor / 100 : null;
+  const overBudget = overallBudget !== null && total > overallBudget;
   return (
     <>
     {/* Home is a defined grid ordered by value, highest first (source
@@ -177,6 +223,32 @@ export function Index() {
             </div>
           ))}
         </div>
+        {overallBudget !== null && (
+          <div className="mt-3">
+            <div
+              className="hero-track h-1.5 rounded-lg"
+              role="img"
+              aria-label={`${gbp(total, false)} of ${gbp(overallBudget, false)} monthly budget${overBudget ? `; ${gbp(total - overallBudget, false)} over budget` : ""}`}
+            >
+              <AnimatedBar
+                percent={overallBudget > 0 ? (total / overallBudget) * 100 : total > 0 ? 100 : 0}
+                className={overBudget ? "" : "bg-accent"}
+                {...(overBudget ? { colour: "var(--danger-on-hero)" } : {})}
+              />
+            </div>
+            <p className="hero-comparison num mt-2 text-caption">
+              {gbp(total, false)} of {gbp(overallBudget, false)} budget
+              {overBudget && (
+                <>
+                  {" · "}
+                  <span className="hero-danger font-medium">
+                    {gbp(total - overallBudget, false)} over budget
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+        )}
       </div>
 
       <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} className="lg:col-start-2 lg:row-start-1" />

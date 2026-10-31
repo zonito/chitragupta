@@ -36,6 +36,11 @@ import {
   classifyUnknownMerchants,
   claudeConfig,
 } from "./ingest/classify";
+import {
+  getSettings,
+  updateSettings,
+  type SettingsPatch,
+} from "./ingest/settings";
 import { answerAsk } from "./ask.server";
 import { canonicalMerchant, type SubscriptionOverrideMode } from "./subscriptions";
 
@@ -164,6 +169,7 @@ export async function handleChitraguptaApi(
     path === "/api/review-queue/dismiss" ||
     path === "/api/merchants" ||
     path === "/api/categories" ||
+    path === "/api/settings" ||
     path === "/api/digest" ||
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
@@ -856,6 +862,37 @@ async function routeWithDb(
     const result = deleteCategory(db, body.name);
     if (!result.ok) return json({ ok: false, error: result.error }, 400);
     return json({ ok: true });
+  }
+
+  if (path === "/api/settings" && request.method === "GET") {
+    return json({ ok: true, settings: getSettings(db) });
+  }
+
+  if (path === "/api/settings" && request.method === "PUT") {
+    let body: SettingsPatch;
+    try {
+      body = (await request.json()) as SettingsPatch;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return json({ ok: false, error: "settings patch must be an object" }, 400);
+    }
+    // Only the three known keys form the patch; anything else in the
+    // body is ignored rather than stored.
+    const patch: SettingsPatch = {};
+    if ("availableFloorMinor" in body) {
+      patch.availableFloorMinor = body.availableFloorMinor;
+    }
+    if ("overallMonthlyBudgetMinor" in body) {
+      patch.overallMonthlyBudgetMinor = body.overallMonthlyBudgetMinor;
+    }
+    if ("categoryBudgets" in body) {
+      patch.categoryBudgets = body.categoryBudgets;
+    }
+    const result = updateSettings(db, patch);
+    if (!result.ok) return json({ ok: false, error: result.error }, 400);
+    return json({ ok: true, settings: result.settings });
   }
 
   if (path === "/api/ask" && request.method === "POST") {

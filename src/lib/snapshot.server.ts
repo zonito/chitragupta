@@ -19,6 +19,7 @@ import {
 } from "./data";
 import { accountTxnLabel } from "./txn-map";
 import { listCategories } from "./ingest/categories";
+import { getSettings } from "./ingest/settings";
 import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
 import {
   documentRowToDoc,
@@ -147,6 +148,9 @@ export function buildSnapshot(): DataSnapshot {
 }
 
 function buildFromDb(db: Database.Database): DataSnapshot {
+  // Floors & budgets: the household's own thresholds from the settings
+  // table (outside the ingest swap set, so they survive rebuilds).
+  const settings = getSettings(db);
   // The category fold for snapshot transactions uses the store's own
   // category list (built-ins + customs): the client-side uiCategory
   // reads hydrated module state, which the server never has.
@@ -178,7 +182,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       "SELECT DISTINCT year_month FROM transactions ORDER BY year_month DESC",
     )
     .all() as { year_month: string }[];
-  if (monthRows.length === 0) return { ...EMPTY_SNAPSHOT, configured: true, docs };
+  if (monthRows.length === 0) return { ...EMPTY_SNAPSHOT, configured: true, docs, settings };
   const current = monthRows[0]!.year_month;
   const included = monthRows.slice(0, 2).map((r) => r.year_month);
 
@@ -546,6 +550,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     reviewTotal,
     accounts,
     categories: listCategories(db),
+    settings,
     docs,
     typical,
     sparks,
