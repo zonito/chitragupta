@@ -29,6 +29,12 @@ export const Route = createFileRoute("/activity")({
  * live under Zonito's person in the store. */
 const storePersonOf = (t: Txn): string => (t.owner === "joint" ? "zonito" : t.owner);
 
+/** "Q4 2026" for a month key — the quarter preset's scope label. */
+const quarterLabel = (monthKey: string): string => {
+  const [y, m] = monthKey.split("-").map(Number);
+  return `Q${Math.ceil((m ?? 1) / 3)} ${y ?? ""}`.trim();
+};
+
 const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
 
 export function Activity() {
@@ -222,6 +228,34 @@ export function Activity() {
         .sort((a, b) => b.date.localeCompare(a.date)),
     [person, q, whoActive, cat, scopedMonthTxns],
   );
+  // The listed-total summary: sums over the very rows the list renders
+  // (post person view, period, search, category and account scope) —
+  // never a separate aggregate, so the line can never disagree with
+  // the rows under it. Spent mirrors the header total's semantics
+  // (every spend row at its share; aside money never counts). Money
+  // in is the incoming non-spend rows (transfers in, withdrawals
+  // landing back) at their share, shown only when there are any.
+  const listedSpend = list
+    .filter((t) => t.kind === "spend")
+    .reduce((s, t) => s + shareOf(t, person), 0);
+  const listedIn = list
+    .filter((t) => t.incoming && t.kind !== "spend")
+    .reduce((s, t) => s + shareOf(t, person), 0);
+  // The scope label names every active narrowing, so the figures are
+  // never mistaken for the whole period when a filter is on.
+  const periodScopeLabel = range
+    ? preset === "quarter"
+      ? quarterLabel(range.to)
+      : (PERIOD_PRESETS.find((p) => p.id === preset)?.label ?? "Range")
+    : (monthOptions().find((m) => m.key === period)?.label ?? period);
+  const summaryScope = [
+    periodScopeLabel,
+    ...(q.trim() ? [`Search "${q.trim()}"`] : []),
+    ...(cat !== "all" ? [cat] : []),
+    ...(whoActive !== "all" ? [ownerName(whoActive as Txn["owner"])] : []),
+    ...(accountScope ? [scopeLabel ?? accountScope.account] : []),
+  ];
+
   // Day groups, newest first (the list is already sorted). A single
   // month groups by day-of-month exactly as before; a range groups by
   // full date, since a day number alone repeats across months.
@@ -349,7 +383,7 @@ export function Activity() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
       </div>
-      <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
         {/* The account scope (from a Cards account card) is a real
             filter, so — unlike the person dropdown below — it stays
             visible in every view while active, with its own clear
@@ -388,6 +422,35 @@ export function Activity() {
             {monthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
           </optgroup>
         </select>
+      </div>
+
+      {/* Listed-total summary: pinned under the filters while the
+          list scrolls, always describing the rows below it. An empty
+          (loaded) list states £0.00 / 0 transactions rather than
+          hiding, so the line's meaning never changes shape. */}
+      <div
+        data-testid="listed-summary"
+        className="sticky top-2 z-10 mb-5 rounded-xl border bg-card/95 px-4 py-2.5 shadow-sm backdrop-blur"
+      >
+        <p className="text-body">
+          <span className="text-muted-foreground">{summaryScope.join(" · ")}</span>
+          {" — "}
+          {monthLoaded ? (
+            <>
+              <span className="num font-medium text-foreground">{gbp(listedSpend)} spent</span>
+              <span className="text-muted-foreground">
+                {" "}· {list.length} {list.length === 1 ? "transaction" : "transactions"}
+              </span>
+              {listedIn > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}· <span className="num">{gbp(listedIn)}</span> in
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-muted-foreground">Loading…</span>
+          )}
+        </p>
       </div>
 
       {groups.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">{monthLoaded ? "Nothing here." : "Loading…"}</p>}

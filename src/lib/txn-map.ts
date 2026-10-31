@@ -80,6 +80,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     account: accountTxnLabel(row.person, row.account),
     accountId: row.account,
     kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer",
+    ...(row.amountMinor > 0 ? { incoming: true } : {}),
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
     ...(row.userNote ? { userNote: row.userNote } : {}),
   };

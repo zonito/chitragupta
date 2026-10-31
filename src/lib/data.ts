@@ -107,6 +107,11 @@ export interface Txn {
    * fingerprint), carried by the snapshot and /api/transactions when
    * one exists. Searchable in Activity. */
   userNote?: string;
+  /** Money flowing IN (the store row's amount_minor was positive):
+   * a transfer in, an investment withdrawal landing back, a refund.
+   * Amounts on Txn are absolute, so this flag is the only direction
+   * signal; set by both transaction mappers. */
+  incoming?: boolean;
 }
 
 export interface UpcomingPayment {

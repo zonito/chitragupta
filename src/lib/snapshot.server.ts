@@ -239,6 +239,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       // beyond the merchant name, and fx is never set — this selection
       // is GBP-only and the API mapper drops non-GBP rows rather than
       // decorating them, so neither path invents an fx string.
+      ...(row.amount_minor > 0 ? { incoming: true } : {}),
       ...(row.description && row.description !== row.merchant
         ? { note: row.description }
         : {}),
