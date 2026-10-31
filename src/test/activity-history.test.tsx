@@ -84,7 +84,9 @@ describe("Activity older months", () => {
     fireEvent.change(monthSelect, { target: { value: "2026-08" } });
 
     expect(await screen.findAllByText("Mahavir Sweet Mart")).toHaveLength(2);
-    expect(await screen.findByText(/£39\.10 spent/)).toBeTruthy();
+    // Header total and the listed-total summary both carry the
+    // fetched month's figure (the list is unfiltered).
+    expect(await screen.findAllByText(/£39\.10 spent/)).toHaveLength(2);
     expect(fetchMock.mock.calls[0]![0]).toContain("month=2026-08");
   });
 

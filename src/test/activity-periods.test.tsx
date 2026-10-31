@@ -137,9 +137,11 @@ describe("Activity period presets", () => {
     );
     expect(await screen.findByText("September Shop")).toBeTruthy();
     // The duplicated October row renders once, and the header total
-    // is the whole range: £100 (Oct) + £50 (Sep), not £250.
+    // is the whole range: £100 (Oct) + £50 (Sep), not £250. The
+    // listed-total summary line carries the same figure (nothing is
+    // filtered), so the text appears exactly twice.
     expect(screen.getAllByText("October Shop")).toHaveLength(1);
-    expect(screen.getByText(/£150\.00 spent/)).toBeTruthy();
+    expect(screen.getAllByText(/£150\.00 spent/)).toHaveLength(2);
   });
 
   it("This quarter for an October anchor covers October only", async () => {
@@ -154,7 +156,8 @@ describe("Activity period presets", () => {
     );
     expect(await screen.findByText("October Shop")).toBeTruthy();
     expect(screen.queryByText("September Shop")).toBeNull();
-    expect(screen.getByText(/£100\.00 spent/)).toBeTruthy();
+    // Header total and listed-total summary agree (unfiltered).
+    expect(screen.getAllByText(/£100\.00 spent/)).toHaveLength(2);
   });
 });
 
