@@ -123,9 +123,14 @@ describe("Activity notes", () => {
     expect(saveButton.className).toContain("disabled:opacity-100");
     expect(saveButton.className).not.toContain("bg-primary");
     fireEvent.change(area, { target: { value: "gift for mum" } });
-    // Something to save: the full-strength primary, enabled.
+    // Something to save: the secondary tint treatment, enabled — a
+    // light teal tint with deep teal text, never the full-strength
+    // primary fill (too dark) nor the muted nothing-to-save pill.
     expect((saveButton as HTMLButtonElement).disabled).toBe(false);
-    expect(saveButton.className).toContain("bg-primary");
+    expect(saveButton.className).toContain("bg-primary/15");
+    expect(saveButton.className).toContain("text-primary");
+    expect(saveButton.className).toContain("shadow-none");
+    expect(saveButton.className.split(/\s+/)).not.toContain("bg-primary");
     expect(saveButton.className).not.toContain("bg-muted");
     fireEvent.click(saveButton);
     await waitFor(() =>
@@ -140,6 +145,34 @@ describe("Activity notes", () => {
     expect(await screen.findByText("Saved")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.getAllByLabelText("Has a note")).toHaveLength(2));
+  });
+
+  it("the Save note states are token classes, identical under the dark theme", async () => {
+    // The tint/muted treatments are semantic-token classes (bg-primary
+    // at 15%, text-primary, bg-muted): the .dark token overrides in
+    // the stylesheet resolve them per theme, so the class contract is
+    // the same in both themes — a tint that still reads as a tint in
+    // dark, and a muted pill clearly distinct from it.
+    render(
+      <div className="dark">
+        <PersonProvider>
+          <DocumentsProvider>
+            <Activity />
+          </DocumentsProvider>
+        </PersonProvider>
+      </div>,
+    );
+    fireEvent.click(screen.getByText("Tesco"));
+    const area = await screen.findByLabelText("Your note");
+    const saveButton = screen.getByRole("button", { name: "Save note" });
+    expect(saveButton.className).toContain("bg-muted");
+    expect(saveButton.className).not.toContain("bg-primary");
+    fireEvent.change(area, { target: { value: "dark theme note" } });
+    expect(saveButton.className).toContain("bg-primary/15");
+    expect(saveButton.className).toContain("hover:bg-primary/25");
+    expect(saveButton.className).toContain("text-primary");
+    expect(saveButton.className.split(/\s+/)).not.toContain("bg-primary");
+    expect(saveButton.className).not.toContain("text-primary-foreground");
   });
 });
 

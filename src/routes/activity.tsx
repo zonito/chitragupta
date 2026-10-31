@@ -597,17 +597,22 @@ function TransactionNote({
         className="mt-2 w-full rounded-lg border bg-card px-3 py-2 text-body"
       />
       <div className="mt-2 flex items-center gap-2">
-        {/* Two honest states: with nothing to save the button is a
-            flat muted pill (a faded 50%-opacity primary read as
-            broken); the moment there is something to save it is the
-            app's full-strength primary, like the Ask send button. */}
+        {/* Two honest states, both flat (no shadow): with nothing to
+            save the button is a muted pill; with something to save it
+            is a secondary treatment — a light teal tint with deep
+            teal text. Full-strength primary was too dark here and a
+            faded-opacity primary read as broken; the tint tokens
+            (primary at 15%, deepening on hover) resolve per theme,
+            so dark mode gets a tint that still reads as a tint with
+            light teal text. Same size/radius family as the sheet's
+            other secondary actions. */}
         <Button
           size="sm"
           disabled={busy || !dirty}
           onClick={() => void save()}
           className={
             dirty || busy
-              ? undefined
+              ? "bg-primary/15 text-primary shadow-none hover:bg-primary/25"
               : "bg-muted text-muted-foreground shadow-none hover:bg-muted disabled:opacity-100"
           }
         >
