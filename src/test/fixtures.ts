@@ -185,12 +185,12 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
   reviewTotal: 3,
   categories: BUILTIN_CATEGORY_DEFS,
   accounts: [
-    { name: "Revolut Main", owner: "zonito", last: "28 Oct", added: 31, stale: false },
-    { name: "Revolut Pro", owner: "zonito", last: "28 Oct", added: 4, stale: false },
-    { name: "Revolut Savings", owner: "zonito", last: "28 Oct", added: 2, stale: false },
-    { name: "Joint Bills", owner: "joint", last: "27 Oct", added: 4, stale: false },
-    { name: "Monzo Current", owner: "nikhila", last: "26 Oct", added: 17, stale: false },
-    { name: "Amex Gold", owner: "nikhila", last: "6 Oct", added: 6, stale: true },
+    { name: "Revolut Main", owner: "zonito", last: "28 Oct", lastDate: "2026-10-28", added: 31, stale: false, balanceMinor: 125000, currency: "GBP" },
+    { name: "Revolut Pro", owner: "zonito", last: "28 Oct", lastDate: "2026-10-28", added: 4, stale: false, balanceMinor: 34210, currency: "GBP" },
+    { name: "Revolut Savings", owner: "zonito", last: "28 Oct", lastDate: "2026-10-28", added: 2, stale: false, balanceMinor: 500000, currency: "GBP" },
+    { name: "Joint Bills", owner: "joint", last: "27 Oct", lastDate: "2026-10-27", added: 4, stale: false, balanceMinor: 86420, currency: "GBP" },
+    { name: "Monzo Current", owner: "nikhila", last: "26 Oct", lastDate: "2026-10-26", added: 17, stale: false, balanceMinor: 221045, currency: "GBP" },
+    { name: "Amex Gold", owner: "nikhila", last: "6 Oct", lastDate: "2026-10-06", added: 6, stale: true, balanceMinor: 64000, currency: "GBP" },
   ],
   docs: [
     { id: "d1", merchant: "Ikea", date: "14 Oct 2026", amount: 189.99, type: "Receipt", owner: "zonito", matchedLine: "Ikea · Wed 14 Oct · Revolut Main · Zonito", path: "PersonalFinance/Documents/Receipts/2026/2026-10/2026-10-14_Ikea_£189.99.pdf" },

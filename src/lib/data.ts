@@ -138,7 +138,22 @@ export interface ReviewQueueItem {
   detail: string;
   suggestion: string | null;
 }
-export interface AccountInfo { name: string; owner: Owner; last: string; added: number; stale: boolean }
+export interface AccountInfo {
+  name: string;
+  owner: Owner;
+  last: string;
+  /** ISO date (YYYY-MM-DD) behind `last`, from the same selected ingest
+   *  run — lets a view take the latest statement date across accounts. */
+  lastDate: string;
+  added: number;
+  stale: boolean;
+  /** Balance in minor units recorded by the selected ingest run, or
+   *  null when that run recorded none (older stores, failed runs). A
+   *  null balance is unknown — never render it as £0.00. */
+  balanceMinor: number | null;
+  /** Currency of balanceMinor; null exactly when balanceMinor is null. */
+  currency: string | null;
+}
 /** One spending category, built-in or user-created. Colour and icon are
  * the values every surface renders (theme token, hex or oklch colour;
  * an icon name from the shared set). System movement labels (Moved
@@ -410,6 +425,77 @@ export const dateLabel = (iso: string) => {
 };
 
 export const ownerName = (o: Owner) => (o === "joint" ? "Joint" : o === "zonito" ? "Zonito" : "Nikhila");
+
+/** Format an amount in its own currency: gbp() for GBP (and for a
+ *  missing code), Intl currency formatting otherwise. Foreign money is
+ *  displayed in its own currency, never converted into GBP. */
+export function formatMoney(amount: number, currency: string | null): string {
+  if (!currency || currency === "GBP") return gbp(amount);
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
+
+export interface CurrencyTotal { currency: string; total: number }
+export interface AvailableSummary {
+  /** Accounts in this view, ordered for the breakdown sheet: GBP
+   *  accounts by balance descending (unknown balances last), then
+   *  foreign accounts by currency and balance. */
+  accounts: AccountInfo[];
+  /** Sum of the view's GBP balances, or null when no included account
+   *  has any recorded balance at all — "no data", distinct from a true
+   *  £0 (balances exist, just none of them in GBP). */
+  gbpTotal: number | null;
+  /** Non-GBP balances summed per currency, non-zero totals only. */
+  foreign: CurrencyTotal[];
+  /** Latest statement date (ISO) across the included accounts, "" when
+   *  the view has no accounts. */
+  asOf: string;
+}
+
+/**
+ * What is available to spend, per person view, from the snapshot's
+ * account balances (each recorded by that account's latest real ingest
+ * run). Household includes every account, Joint included; an
+ * individual's view is their own accounts only — Joint money is the
+ * household's, so it never inflates one person's headline. Accounts
+ * whose balance is unknown are listed in the breakdown but excluded
+ * from every total.
+ */
+export function availableFor(person: Person): AvailableSummary {
+  const included = ACCOUNTS.filter(
+    (a) => person === "household" || a.owner === person,
+  );
+  const group = (a: AccountInfo) => (a.currency === "GBP" || a.currency === null ? 0 : 1);
+  const accounts = [...included].sort((x, y) => {
+    const gx = group(x);
+    const gy = group(y);
+    if (gx !== gy) return gx - gy;
+    if (gx === 1 && x.currency !== y.currency) {
+      return String(x.currency).localeCompare(String(y.currency));
+    }
+    const bx = x.balanceMinor ?? Number.NEGATIVE_INFINITY;
+    const by = y.balanceMinor ?? Number.NEGATIVE_INFINITY;
+    return by - bx;
+  });
+  let gbpMinor = 0;
+  let anyBalance = false;
+  const foreignMinor = new Map<string, number>();
+  for (const a of included) {
+    if (a.balanceMinor === null || a.currency === null) continue;
+    anyBalance = true;
+    if (a.currency === "GBP") gbpMinor += a.balanceMinor;
+    else foreignMinor.set(a.currency, (foreignMinor.get(a.currency) ?? 0) + a.balanceMinor);
+  }
+  const foreign = [...foreignMinor.entries()]
+    .map(([currency, minor]) => ({ currency, total: minor / 100 }))
+    .filter((f) => f.total !== 0)
+    .sort((a, b) => a.currency.localeCompare(b.currency));
+  const asOf = included.reduce((m, a) => (a.lastDate > m ? a.lastDate : m), "");
+  return { accounts, gbpTotal: anyBalance ? gbpMinor / 100 : null, foreign, asOf };
+}
 
 export const docFor = (txnId: string, documents: readonly Doc[] = DOCS) => documents.find((d) => d.txnId === txnId);
 export function receiptForTransaction(txn: Txn, extension: "pdf" | "jpg" | "png" = "pdf"): Doc {

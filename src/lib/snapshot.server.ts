@@ -384,20 +384,28 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   // Staleness still compares against the newest run of any account, so
   // an account whose last real statement is old stays stale even after
   // a no-op re-run rewrites its latest run row to today.
+  type RunRow = {
+    person: string;
+    account: string;
+    started_at: string;
+    rows_added: number;
+    balance_minor: number | null;
+    currency: string | null;
+  };
   const runRows = db
     .prepare(
-      `SELECT person, account, started_at, rows_added FROM ingest_runs
+      `SELECT person, account, started_at, rows_added, balance_minor, currency FROM ingest_runs
        WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY person, account)
          AND substr(account, 1, 2) <> '__'`,
     )
-    .all() as { person: string; account: string; started_at: string; rows_added: number }[];
+    .all() as RunRow[];
   const contentRows = db
     .prepare(
-      `SELECT person, account, started_at, rows_added FROM ingest_runs
+      `SELECT person, account, started_at, rows_added, balance_minor, currency FROM ingest_runs
        WHERE id IN (SELECT MAX(id) FROM ingest_runs WHERE rows_seen > 0 GROUP BY person, account)
          AND substr(account, 1, 2) <> '__'`,
     )
-    .all() as { person: string; account: string; started_at: string; rows_added: number }[];
+    .all() as RunRow[];
   const contentByAccount = new Map(
     contentRows.map((r) => [`${r.person}|${r.account}`, r]),
   );
@@ -408,7 +416,14 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       name: accountListLabel(r.person, r.account),
       owner: r.account === "Joint" ? "joint" : (r.person as Owner),
       last: shortDayLabel(chosen.started_at.slice(0, 10)),
+      lastDate: chosen.started_at.slice(0, 10),
       added: chosen.rows_added,
+      // The balance rides the SAME selected run as last/added: a later
+      // failed run (balance NULL) never poses as the account's state,
+      // and a run that recorded no balance leaves it unknown (null),
+      // never a fabricated zero.
+      balanceMinor: chosen.balance_minor ?? null,
+      currency: chosen.currency ?? null,
       stale:
         maxStarted !== "" &&
         Date.parse(chosen.started_at) < Date.parse(maxStarted) - 7 * 86400000,
