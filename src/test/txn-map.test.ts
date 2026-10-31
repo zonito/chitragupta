@@ -41,11 +41,37 @@ describe("apiTxnToTxn", () => {
     });
   });
 
-  it("skips rows the snapshot never carries: non-GBP, income, fees, interest", () => {
+  it("skips rows the snapshot never carries: non-GBP, fees, interest", () => {
     expect(apiTxnToTxn(row({ currency: "USD" }))).toBeNull();
-    expect(apiTxnToTxn(row({ movement: "income" }))).toBeNull();
     expect(apiTxnToTxn(row({ movement: "fee" }))).toBeNull();
     expect(apiTxnToTxn(row({ movement: "interest" }))).toBeNull();
+  });
+
+  it("maps an income row with the income kind and the incoming flag", () => {
+    const txn = apiTxnToTxn(
+      row({
+        id: "fp-sal",
+        merchant: "ACME PAYROLL",
+        description: "ACME PAYROLL",
+        amountMinor: 300000,
+        movement: "income",
+        category: "One-off",
+      }),
+    );
+    expect(txn).toEqual({
+      id: "fp-sal",
+      date: "2026-08-03",
+      day: 3,
+      monthKey: "2026-08",
+      merchant: "ACME PAYROLL",
+      category: "One-off",
+      amount: 3000,
+      owner: "zonito",
+      account: "Revolut Main · Zonito",
+      accountId: "Main",
+      kind: "income",
+      incoming: true,
+    });
   });
 
   it("maps internal and aside movements, and Joint accounts to the joint owner", () => {

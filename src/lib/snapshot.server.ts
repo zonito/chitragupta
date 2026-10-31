@@ -212,6 +212,10 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     const amount = Math.abs(row.amount_minor) / 100;
     const day = Number(day10(row.effective_date).slice(8, 10));
     if (row.movement === "income") {
+      // The Home "Money in" feed derivation — unchanged: current-month
+      // positive income only. The row ALSO falls through into txns
+      // below (kind "income"), mirroring apiTxnToTxn, so Activity
+      // lists income for snapshot months exactly as for fetched ones.
       if (row.year_month === current && row.amount_minor > 0) {
         income.push({
           day,
@@ -220,9 +224,8 @@ function buildFromDb(db: Database.Database): DataSnapshot {
           type: /salary|payroll|wages/i.test(row.description) ? "Salary" : row.merchant,
         });
       }
-      continue;
     }
-    const kind = row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer";
+    const kind = row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : row.movement === "income" ? "income" : "transfer";
     const time = timeOfDay(row.effective_date);
     txns.push({
       id: row.fingerprint,

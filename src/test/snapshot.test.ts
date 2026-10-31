@@ -141,6 +141,55 @@ describe("snapshot builder", () => {
     expect(apiEarlier!.fx).toBe(earlier!.fx);
   });
 
+  it("carries income rows in txns for both snapshot months, identical to the API mapper, with the Money-in feed unchanged", () => {
+    dir = mkdtempSync(join(tmpdir(), "chitragupta-snap-"));
+    const db = openStore(dir);
+    const insert = db.prepare(
+      `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
+         description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
+       VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, 'GBP', 0, ?, NULL)`,
+    );
+    // Salary in the current month and the previous month, plus a spend
+    // row each month so both months are real snapshot months.
+    insert.run("sal-oct", "2026-10-28", "2026-10", "ACME PAYROLL", "ACME PAYROLL", 300000, "income");
+    insert.run("sal-sep", "2026-09-28", "2026-09", "ACME PAYROLL", "ACME PAYROLL", 295000, "income");
+    insert.run("sp-oct", "2026-10-05", "2026-10", "Corner Shop", "Corner Shop", -1500, "spend");
+    insert.run("sp-sep", "2026-09-05", "2026-09", "Corner Shop", "Corner Shop", -1200, "spend");
+    db.close();
+
+    process.env["CHITRAGUPTA_STORE_DIR"] = dir;
+    const snap = buildSnapshot();
+
+    // Both months' salary rows are in txns, with the income kind.
+    const oct = snap.txns.find((t) => t.id === "sal-oct");
+    const sep = snap.txns.find((t) => t.id === "sal-sep");
+    expect(oct?.kind).toBe("income");
+    expect(sep?.kind).toBe("income");
+
+    // Field-for-field parity with the API mapper for the same rows
+    // (the API's category for an uncategorised income row is One-off,
+    // per CATEGORY_SQL — the same fallback resolveCategory gives).
+    const apiOct = apiTxnToTxn({
+      id: "sal-oct", person: "zonito", account: "Main", date: "2026-10-28",
+      month: "2026-10", description: "ACME PAYROLL", merchant: "ACME PAYROLL",
+      amountMinor: 300000, currency: "GBP", movement: "income", category: "One-off",
+    });
+    const apiSep = apiTxnToTxn({
+      id: "sal-sep", person: "zonito", account: "Main", date: "2026-09-28",
+      month: "2026-09", description: "ACME PAYROLL", merchant: "ACME PAYROLL",
+      amountMinor: 295000, currency: "GBP", movement: "income", category: "One-off",
+    });
+    expect(oct).toEqual(apiOct);
+    expect(sep).toEqual(apiSep);
+
+    // The Home Money-in feed derivation is unchanged: current-month
+    // positive income only — September's salary is not in it — and the
+    // payroll description still earns the "Salary" type label.
+    expect(snap.income).toEqual([
+      { day: 28, amount: 3000, owner: "zonito", type: "Salary" },
+    ]);
+  });
+
   it("returns the honest empty snapshot when no store is configured", () => {
     delete process.env["CHITRAGUPTA_STORE_DIR"];
     const snap = buildSnapshot();

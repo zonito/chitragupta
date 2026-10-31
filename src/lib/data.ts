@@ -14,7 +14,7 @@
 
 export type Person = "household" | "zonito" | "nikhila";
 export type Owner = "zonito" | "nikhila" | "joint";
-export type Kind = "spend" | "transfer" | "aside";
+export type Kind = "spend" | "transfer" | "aside" | "income";
 
 export const CATEGORIES = [
   "Groceries",

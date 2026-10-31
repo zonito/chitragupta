@@ -78,9 +78,9 @@ export function uiCategory(name: string): Category {
 
 export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
   if (row.currency !== "GBP") return null;
-  // The snapshot's txns carry spend, internal transfers and moved-aside
-  // only; income, fees and interest never appear there.
-  if (row.movement !== "spend" && row.movement !== "internal" && row.movement !== "aside") {
+  // The snapshot's txns carry spend, internal transfers, moved-aside
+  // and income; fees and interest never appear there.
+  if (row.movement !== "spend" && row.movement !== "internal" && row.movement !== "aside" && row.movement !== "income") {
     return null;
   }
   const date = row.date.slice(0, 10);
@@ -96,7 +96,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     owner: row.account === "Joint" ? "joint" : (row.person as Owner),
     account: accountTxnLabel(row.person, row.account),
     accountId: row.account,
-    kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer",
+    kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : row.movement === "income" ? "income" : "transfer",
     ...(row.amountMinor > 0 ? { incoming: true } : {}),
     ...(time ? { time } : {}),
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
