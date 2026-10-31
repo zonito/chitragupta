@@ -106,7 +106,6 @@ describe("ingest guards (B7)", () => {
     const results = ingestAll(
       db,
       fixtureDataDir({ Main: "garbage\nmore garbage\n" }),
-      "zonito",
     );
     const map = byAccount(results);
 
@@ -136,7 +135,6 @@ describe("ingest guards (B7)", () => {
     const results = ingestAll(
       db,
       fixtureDataDir({ Pro: ACCOUNT_HEADER }),
-      "zonito",
     );
     const pro = byAccount(results).get("Pro")!;
     expect(pro.ok).toBe(false);
@@ -152,7 +150,6 @@ describe("ingest guards (B7)", () => {
     const results = ingestAll(
       db,
       fixtureDataDir({ "Savings-9000000002": "garbage\nmore garbage\n" }),
-      "zonito",
     );
     const map = byAccount(results);
     const savings = map.get("Savings-9000000002")!;

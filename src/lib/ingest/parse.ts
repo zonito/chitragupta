@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 
-export type IngestAccount =
-  | "Main"
-  | "Pro"
-  | "USD-Invest"
-  | "Joint"
-  | "Savings-9000000002"
-  | "Savings-9000000001";
+/**
+ * An account name within one person's ingest. Zonito's six accounts are
+ * the INGEST_ACCOUNTS constants below; discovery (ingest.ts) derives
+ * Nikhila's account names from her files ("Current", "Pro",
+ * "Savings-<digits>"), so the type is a plain string — the (person,
+ * account) pair is the identity, never the account name alone.
+ */
+export type IngestAccount = string;
 
 export const INGEST_ACCOUNTS: IngestAccount[] = [
   "Main",

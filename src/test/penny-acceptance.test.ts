@@ -37,7 +37,7 @@ describePenny("Penny Caulfield acceptance (repro copy in /tmp)", () => {
 
     // Build the copy and pin the baseline.
     const seed = openStore(dir);
-    ingestAll(seed, DATA_DIR!, "zonito");
+    ingestAll(seed, DATA_DIR!);
     seedMerchantMemory(seed);
     recomputeAggregates(seed, "zonito");
     const baseline = seed
@@ -119,7 +119,7 @@ describePenny("Penny Caulfield acceptance (repro copy in /tmp)", () => {
 
     // A plain re-ingest adds nothing and reverts nothing.
     const again = openStore(dir);
-    const second = ingestAll(again, DATA_DIR!, "zonito");
+    const second = ingestAll(again, DATA_DIR!);
     expect(second.reduce((n, r) => n + r.rowsAdded, 0)).toBe(0);
     const stillSpend = again
       .prepare(
@@ -137,7 +137,7 @@ describePenny("Penny Caulfield acceptance (repro copy in /tmp)", () => {
     rebuild
       .prepare("UPDATE meta SET value = '0' WHERE key = 'rules_version'")
       .run();
-    const rebuilt = ingestAll(rebuild, DATA_DIR!, "zonito");
+    const rebuilt = ingestAll(rebuild, DATA_DIR!);
     expect(rebuilt.every((r) => r.ok)).toBe(true);
     const afterRebuild = rebuild
       .prepare(

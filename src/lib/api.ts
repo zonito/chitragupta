@@ -98,6 +98,22 @@ async function getDb(): Promise<Database.Database | null> {
             .prepare("SELECT DISTINCT person FROM transactions")
             .all() as { person: string }[];
           for (const { person } of persons) recomputeAggregates(db, person);
+          recomputeAggregates(db, "household");
+        }
+      } else {
+        // Stores built before household aggregates existed have
+        // per-person rows only; heal the combined rows once so the
+        // household views are real sums, not an empty set.
+        const hhCount = db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM month_aggregates WHERE person = 'household'",
+          )
+          .get() as { n: number };
+        if (hhCount.n === 0) {
+          const txnCount = db
+            .prepare("SELECT COUNT(*) AS n FROM transactions")
+            .get() as { n: number };
+          if (txnCount.n > 0) recomputeAggregates(db, "household");
         }
       }
       return db;
@@ -404,12 +420,14 @@ async function routeWithDb(
   const path = url.pathname;
 
   if (path === "/api/ingest/status" && request.method === "GET") {
+    // Keyed by person + account: both people hold a "Pro" account, and
+    // grouping by account alone would collapse the two into one row.
     const rows = db
       .prepare(
-        `SELECT account, started_at AS lastIngest, rows_seen AS rowsSeen, rows_added AS rowsAdded,
+        `SELECT person, account, started_at AS lastIngest, rows_seen AS rowsSeen, rows_added AS rowsAdded,
                 balance_minor AS balanceMinor, currency, discrepancy
          FROM ingest_runs
-         WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY account)
+         WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY person, account)
            AND substr(account, 1, 2) <> '__'`,
       )
       .all();
@@ -427,9 +445,11 @@ async function routeWithDb(
     if (!dir)
       return json({ ok: false, error: "CHITRAGUPTA_DATA_DIR is not set" }, 503);
     try {
-      const results = ingestAll(db, dir, "zonito");
+      const results = ingestAll(db, dir);
       seedMerchantMemory(db);
       recomputeAggregates(db, "zonito");
+      recomputeAggregates(db, "nikhila");
+      recomputeAggregates(db, "household");
       // Classification drains behind ingest; with no key it is an instant
       // no-op, and failures never fail the ingest itself.
       const classification = await classifyUnknownMerchants(db).catch(
@@ -600,11 +620,14 @@ async function routeWithDb(
     const weekEnd = weekStart
       ? new Date(Date.parse(weekStart) + 7 * 86400000).toISOString().slice(0, 10)
       : null;
+    // byMonth is per-person by contract; the stored household rows are
+    // the sum of these, so including them would double the totals for
+    // any consumer adding the people up.
     const monthRows = db
       .prepare(
         `SELECT person, category, SUM(spend_minor) AS spend, SUM(income_minor) AS income,
                 SUM(aside_minor) AS aside, SUM(txn_count) AS txns
-         FROM month_aggregates WHERE year_month = ? AND currency = 'GBP' GROUP BY person, category`,
+         FROM month_aggregates WHERE year_month = ? AND currency = 'GBP' AND person <> 'household' GROUP BY person, category`,
       )
       .all(month);
     const weekTxns = weekStart
@@ -751,7 +774,10 @@ async function routeWithDb(
     const month =
       url.searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
     const person = url.searchParams.get("person") ?? "household";
-    const resolvedPerson = person === "household" ? "zonito" : person;
+    // Household aggregates are real stored rows now (both people's
+    // transactions summed per currency), so "household" reads them
+    // directly instead of borrowing Zonito's.
+    const resolvedPerson = person;
     // GBP totals are GBP rows only; foreign-currency amounts are reported
     // in their own per-currency buckets, never face-value mixed in.
     const rows = db

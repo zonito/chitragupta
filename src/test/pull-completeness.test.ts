@@ -347,13 +347,26 @@ describeData("pull completeness on the real fixture", () => {
   let holidaysAll: number;
   let holidaysSep: number;
   let groceriesMar: number;
+  // Literal pins are Zonito-fixture truths; on the two-person fixture
+  // (repro2) the same figures grow by Nikhila's rows, so the pins are
+  // asserted only when the store holds his rows alone. The derived
+  // comparisons (Ask/API vs the store) run on either fixture.
+  let zonitoOnly = true;
 
   beforeAll(async () => {
     realDir = mkdtempSync(join(tmpdir(), "chitra-pull-real-"));
     realDb = openStore(realDir);
-    ingestAll(realDb, DATA_DIR!, "zonito");
+    ingestAll(realDb, DATA_DIR!);
     seedMerchantMemory(realDb);
     recomputeAggregates(realDb, "zonito");
+    zonitoOnly =
+      (
+        realDb
+          .prepare(
+            "SELECT COUNT(*) AS n FROM transactions WHERE person = 'nikhila'",
+          )
+          .get() as { n: number }
+      ).n === 0;
 
     const spendFor = (month: string) =>
       realDb
@@ -402,11 +415,13 @@ describeData("pull completeness on the real fixture", () => {
   });
 
   it("pins the fixture-derived figures the Ask assertions rest on", () => {
-    expect(sep).toEqual({ n: 84, s: 324178 });
-    expect(oct).toEqual({ n: 73, s: 195238 });
+    if (zonitoOnly) {
+      expect(sep).toEqual({ n: 84, s: 324178 });
+      expect(oct).toEqual({ n: 73, s: 195238 });
+    }
     expect(ocado).toEqual({ n: 5, s: 21329 });
     expect(holidaysAll).toBe(49);
-    expect(groceriesMar).toBe(14);
+    expect(groceriesMar).toBe(zonitoOnly ? 14 : 16);
     expect(holidaysSep).toBeGreaterThan(0);
   });
 
@@ -416,10 +431,12 @@ describeData("pull completeness on the real fixture", () => {
       env: {},
     });
     expect(result.figures.total).toBe(sep.s / 100);
-    expect(result.figures.total).toBe(3241.78);
     expect(result.figures.count).toBe(sep.n);
     expect(result.figures.truncated).toBe(false);
-    expect(result.answer).toContain("£3,241.78");
+    if (zonitoOnly) {
+      expect(result.figures.total).toBe(3241.78);
+      expect(result.answer).toContain("£3,241.78");
+    }
   });
 
   it("Ask totals October 2026 completely", async () => {
@@ -428,7 +445,7 @@ describeData("pull completeness on the real fixture", () => {
       env: {},
     });
     expect(result.figures.total).toBe(oct.s / 100);
-    expect(result.figures.total).toBe(1952.38);
+    if (zonitoOnly) expect(result.figures.total).toBe(1952.38);
     expect(result.figures.count).toBe(oct.n);
     expect(result.figures.truncated).toBe(false);
   });
@@ -468,7 +485,7 @@ describeData("pull completeness on the real fixture", () => {
       apiReal,
     );
     expect(marBody.count).toBe(groceriesMar);
-    expect(marBody.count).toBe(14);
+    if (zonitoOnly) expect(marBody.count).toBe(14);
     expect(marBody.transactions.every((t) => t.category === "Groceries")).toBe(
       true,
     );

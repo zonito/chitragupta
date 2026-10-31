@@ -99,7 +99,7 @@ describe("atomic store rebuild (rules-version change)", () => {
     // A user correction lives in merchant memory and must survive.
     setMerchant(db, "Ocado", "Groceries", { source: "user" });
 
-    const results = ingestAll(db, fixtureDataDir(), "zonito");
+    const results = ingestAll(db, fixtureDataDir());
     expect(results.every((r) => r.ok)).toBe(true);
     expect(byAccount(results).get("Main")).toMatchObject({
       rowsSeen: 1, // the REVERTED row never lands
@@ -125,7 +125,7 @@ describe("atomic store rebuild (rules-version change)", () => {
     expect(rebuildMarkers(db)).toBe(1);
 
     // Second ingest is a plain incremental one: no second rebuild.
-    const again = ingestAll(db, fixtureDataDir(), "zonito");
+    const again = ingestAll(db, fixtureDataDir());
     expect(again.every((r) => r.ok)).toBe(true);
     expect(rebuildMarkers(db)).toBe(1);
     db.close();
@@ -134,7 +134,7 @@ describe("atomic store rebuild (rules-version change)", () => {
   it("leaves the store byte-for-byte intact when a rebuild file is unreadable", () => {
     const storeDir = mkdtempSync(join(tmpdir(), "chitra-store-"));
     const db = openStore(storeDir);
-    const first = ingestAll(db, fixtureDataDir(), "zonito");
+    const first = ingestAll(db, fixtureDataDir());
     expect(first.every((r) => r.ok)).toBe(true);
     const before = txnDump(db);
     expect(before).not.toBe("[]");
@@ -143,7 +143,7 @@ describe("atomic store rebuild (rules-version change)", () => {
     // Force a rebuild (rules version regresses) against a data dir whose
     // Pro file cannot be read.
     db.prepare("UPDATE meta SET value = '0' WHERE key = 'rules_version'").run();
-    const results = ingestAll(db, brokenDataDir(), "zonito");
+    const results = ingestAll(db, brokenDataDir());
 
     const pro = byAccount(results).get("Pro")!;
     expect(pro.ok).toBe(false);
@@ -172,7 +172,7 @@ describe("per-file fault tolerance (normal ingest)", () => {
       "INSERT INTO meta (key, value) VALUES ('rules_version', ?)",
     ).run(String(RULES_VERSION));
 
-    const results = ingestAll(db, brokenDataDir(), "zonito");
+    const results = ingestAll(db, brokenDataDir());
     const map = byAccount(results);
 
     const main = map.get("Main")!;

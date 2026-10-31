@@ -21,6 +21,12 @@ const describeRepro = DATA_DIR ? describe : describe.skip;
 describeRepro("Ask stated years on the repro fixture (B10)", () => {
   let dir: string | null = null;
   let db: Database.Database;
+  // On the two-person fixture (repro2) the household figures grow by
+  // Nikhila's rows; the literal pins below are Zonito-fixture truths and
+  // are asserted only when the store holds his rows alone. The
+  // stated-year behaviour itself is asserted against store-derived
+  // household figures on either fixture.
+  let zonitoOnly = true;
 
   const TODAY = "2026-10-31";
 
@@ -38,7 +44,13 @@ describeRepro("Ask stated years on the repro fixture (B10)", () => {
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), "chitra-ask-year-"));
     db = openStore(dir);
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
+    const nikhila = db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM transactions WHERE person = 'nikhila'",
+      )
+      .get() as { n: number };
+    zonitoOnly = nikhila.n === 0;
   }, 180_000);
 
   afterAll(() => {
@@ -48,8 +60,10 @@ describeRepro("Ask stated years on the repro fixture (B10)", () => {
 
   it("answers September 2026 exactly like September, £3,241.78 across 84", async () => {
     const sep = monthSpend("2026-09");
-    expect(sep.n).toBe(84);
-    expect(sep.total).toBe(324178);
+    if (zonitoOnly) {
+      expect(sep.n).toBe(84);
+      expect(sep.total).toBe(324178);
+    }
 
     const stated = await answerAsk(db, {
       question: "How much did we spend in September 2026?",
@@ -58,8 +72,8 @@ describeRepro("Ask stated years on the repro fixture (B10)", () => {
     });
     expect(stated.ai).toBe(false);
     expect(stated.figures).toMatchObject({
-      total: 3241.78,
-      count: 84,
+      total: sep.total / 100,
+      count: sep.n,
       month: "2026-09",
       truncated: false,
     });
@@ -70,8 +84,8 @@ describeRepro("Ask stated years on the repro fixture (B10)", () => {
       today: TODAY,
     });
     expect(bare.figures).toMatchObject({
-      total: 3241.78,
-      count: 84,
+      total: sep.total / 100,
+      count: sep.n,
       month: "2026-09",
       truncated: false,
     });
@@ -79,7 +93,7 @@ describeRepro("Ask stated years on the repro fixture (B10)", () => {
 
   it("answers October 2026 with the month's true total, £1,952.38", async () => {
     const oct = monthSpend("2026-10");
-    expect(oct.total).toBe(195238);
+    if (zonitoOnly) expect(oct.total).toBe(195238);
 
     const stated = await answerAsk(db, {
       question: "How much did we spend in October 2026?",
@@ -88,7 +102,7 @@ describeRepro("Ask stated years on the repro fixture (B10)", () => {
     });
     expect(stated.ai).toBe(false);
     expect(stated.figures).toMatchObject({
-      total: 1952.38,
+      total: oct.total / 100,
       count: oct.n,
       month: "2026-10",
       truncated: false,

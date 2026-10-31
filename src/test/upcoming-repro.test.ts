@@ -35,7 +35,7 @@ describeRepro("upcoming from the real Originals", () => {
   it("lists the detector's November 2026 regulars and not GitHub", () => {
     dir = mkdtempSync(join(tmpdir(), "chitra-upcoming-"));
     const db = openStore(dir);
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     db.close();
 
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;

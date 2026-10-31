@@ -26,7 +26,7 @@ describeRepro("subscriptions from the real Originals", () => {
   it("detects the real subscriptions and none of the noise", () => {
     dir = mkdtempSync(join(tmpdir(), "chitra-subs-"));
     const db = openStore(dir);
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     db.close();
 
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;
@@ -58,7 +58,7 @@ describeRepro("subscriptions from the real Originals", () => {
   it("gives Tesla exactly its 19 charge ids, and /api/transactions?ids= serves exactly those rows", async () => {
     dir = mkdtempSync(join(tmpdir(), "chitra-subs-"));
     const db = openStore(dir);
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     db.close();
 
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;

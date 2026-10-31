@@ -31,6 +31,21 @@ export const ACCOUNT_TXN_LABEL: Record<string, string> = {
   "Savings-9000000001": "Revolut Savings · Zonito",
 };
 
+/**
+ * The display label for a transaction's account. Account names repeat
+ * across people (both hold a "Pro"), so the label is person-aware:
+ * Nikhila's accounts are derived from her account names, never borrowed
+ * from Zonito's map.
+ */
+export function accountTxnLabel(person: string, account: string): string {
+  if (person === "nikhila") {
+    if (account === "Current") return "Revolut Current · Nikhila";
+    if (account.startsWith("Savings-")) return "Revolut Savings · Nikhila";
+    return `Revolut ${account} · Nikhila`;
+  }
+  return ACCOUNT_TXN_LABEL[account] ?? account;
+}
+
 const UI_CATEGORIES = new Set([
   "Groceries", "Eating out", "Transport", "School", "Home",
   "Subscriptions", "Holidays", "Shopping", "One-off",
@@ -58,7 +73,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     category: uiCategory(row.category),
     amount: Math.abs(row.amountMinor) / 100,
     owner: row.account === "Joint" ? "joint" : (row.person as Owner),
-    account: ACCOUNT_TXN_LABEL[row.account] ?? row.account,
+    account: accountTxnLabel(row.person, row.account),
     kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer",
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
   };

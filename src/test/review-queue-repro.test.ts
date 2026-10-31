@@ -26,7 +26,7 @@ const TEST_NEVER_PATTERNS: RegExp[] = [
 describeRepro("review queue composition on the repro fixture (B2/G12)", () => {
   it("drops the true total from 617 by exactly the excluded set derived from the fixture", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-rq-repro-")));
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     seedMerchantMemory(db);
 
     // Baseline: every distinct unknown merchant (pre-G12 definition),
@@ -41,7 +41,19 @@ describeRepro("review queue composition on the repro fixture (B2/G12)", () => {
          GROUP BY merchant`,
       )
       .all() as { merchant: string; n: number; spend_n: number }[];
-    expect(baseline.length).toBe(617);
+    // 617 is the Zonito-only fixture's baseline. On the two-person
+    // fixture the queue is household-shared by design, so her unknown
+    // merchants join the baseline too; the drop-by-exactly-the-excluded
+    // -set assertion below is the fixture-independent core.
+    const zonitoOnly =
+      (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM transactions WHERE person = 'nikhila'",
+          )
+          .get() as { n: number }
+      ).n === 0;
+    if (zonitoOnly) expect(baseline.length).toBe(617);
 
     const excluded = baseline.filter(
       (r) =>
@@ -66,7 +78,7 @@ describeRepro("review queue composition on the repro fixture (B2/G12)", () => {
 
     // The true total drops by exactly the excluded set.
     expect(reviewQueueCount(db)).toBe(baseline.length - excluded.length);
-    expect(reviewQueueCount(db)).toBe(617 - excluded.length);
+    if (zonitoOnly) expect(reviewQueueCount(db)).toBe(617 - excluded.length);
 
     // The capped list shows none of the excluded labels, every item
     // it does show has spend rows, and the genuine unknown stays.

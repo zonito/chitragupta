@@ -17,6 +17,8 @@ import {
 import { openStoreFile, RULES_VERSION, STORE_FILENAME } from "./store";
 
 export type IngestResult = {
+  /** Whose account this is — two people can both hold a "Pro". */
+  person: string;
   account: IngestAccount;
   rowsSeen: number;
   rowsAdded: number;
@@ -64,12 +66,13 @@ export function findOriginalFile(
 function readOriginals(
   dataDir: string,
   account: IngestAccount,
+  file?: string,
 ): { rows: StatementRow[] | SavingsRow[]; file: string } {
-  const file = findOriginalFile(dataDir, account);
-  const text = readFileSync(join(dataDir, "Originals", file), "utf8");
+  const name = file ?? findOriginalFile(dataDir, account);
+  const text = readFileSync(join(dataDir, "Originals", name), "utf8");
   return {
     rows: isSavingsAccount(account) ? parseSavingsCsv(text) : parseAccountCsv(text),
-    file,
+    file: name,
   };
 }
 
@@ -87,20 +90,31 @@ const SAVINGS_MONTHS: Record<string, string> = {
   Jul: "07",
   Aug: "08",
   Sep: "09",
+  Sept: "09",
   Oct: "10",
   Nov: "11",
   Dec: "12",
 };
 
 export function savingsIsoDate(dateStr: string): string {
-  // Savings CSVs use "Jul 14, 2023" (quoted in the file, quotes stripped at
-  // parse). Returns ISO YYYY-MM-DD; unparseable input passes through so the
-  // row stays visible instead of silently vanishing.
-  const m = dateStr.trim().match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
-  if (!m) return dateStr.trim();
-  const num = SAVINGS_MONTHS[m[1]!];
-  if (!num) return dateStr.trim();
-  return `${m[3]}-${num}-${String(Number(m[2])).padStart(2, "0")}`;
+  // Savings CSVs use "Jul 14, 2023" (en-us exports, quoted in the file,
+  // quotes stripped at parse) or "1 Feb 2026" / "1 Sept 2026" (en-sg
+  // exports, day first). Returns ISO YYYY-MM-DD; unparseable input
+  // passes through so the row stays visible instead of silently
+  // vanishing.
+  const trimmed = dateStr.trim();
+  const us = trimmed.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
+  if (us) {
+    const num = SAVINGS_MONTHS[us[1]!];
+    if (num) return `${us[3]}-${num}-${String(Number(us[2])).padStart(2, "0")}`;
+    return trimmed;
+  }
+  const sg = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,4})\s+(\d{4})$/);
+  if (sg) {
+    const num = SAVINGS_MONTHS[sg[2]!];
+    if (num) return `${sg[3]}-${num}-${String(Number(sg[1])).padStart(2, "0")}`;
+  }
+  return trimmed;
 }
 
 function monthOf(dateStr: string): string {
@@ -151,8 +165,9 @@ export function ingestAccount(
   person: string,
   account: IngestAccount,
   dataDir: string,
+  file?: string,
 ): IngestResult {
-  const { rows, file } = readOriginals(dataDir, account);
+  const { rows, file: readFile } = readOriginals(dataDir, account, file);
   // A found file that parses to nothing is not an empty statement, it is
   // a corrupt or wrong-format export (a real export always has ≥1 row):
   // fail this account by name instead of silently recording a no-op run
@@ -160,7 +175,7 @@ export function ingestAccount(
   // per-account failure.
   if (rows.length === 0) {
     throw new Error(
-      `${file}: no transactions parsed — the file does not look like a ${isSavingsAccount(account) ? "savings" : "statement"} export`,
+      `${readFile}: no transactions parsed — the file does not look like a ${isSavingsAccount(account) ? "savings" : "statement"} export`,
     );
   }
   // Merchants the user has personally corrected: an outgoing transfer to
@@ -322,9 +337,10 @@ export function ingestAccount(
   }
 
   db.prepare(
-    `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO ingest_runs (person, account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
+    person,
     account,
     startedAt,
     // rows_seen counts source rows that survive the REVERTED exclusion and
@@ -343,6 +359,7 @@ export function ingestAccount(
     ? uniqueSavingsCount(rows as SavingsRow[], account)
     : (rows as StatementRow[]).filter((r) => r.state !== "REVERTED").length;
   return {
+    person,
     account,
     rowsSeen,
     rowsAdded,
@@ -350,7 +367,7 @@ export function ingestAccount(
     currency,
     discrepancy,
     ok: true,
-    file,
+    file: readFile,
   };
 }
 
@@ -366,30 +383,35 @@ export function ingestAccountSafe(
   person: string,
   account: IngestAccount,
   dataDir: string,
+  file?: string,
 ): IngestResult {
-  let file: string | null = null;
-  try {
-    file = findOriginalFile(dataDir, account);
-  } catch {
-    // No name could be determined; the read below fails with the detail.
+  let named: string | null = file ?? null;
+  if (named === null) {
+    try {
+      named = findOriginalFile(dataDir, account);
+    } catch {
+      // No name could be determined; the read below fails with the detail.
+    }
   }
   try {
-    return ingestAccount(db, person, account, dataDir);
+    return ingestAccount(db, person, account, dataDir, file);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     try {
       db.prepare(
-        `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy)
-         VALUES (?, ?, 0, 0, NULL, NULL, ?)`,
+        `INSERT INTO ingest_runs (person, account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy)
+         VALUES (?, ?, ?, 0, 0, NULL, NULL, ?)`,
       ).run(
+        person,
         account,
         new Date().toISOString(),
-        `ingest failed${file ? ` for ${file}` : ""}: ${message}`,
+        `ingest failed${named ? ` for ${named}` : ""}: ${message}`,
       );
     } catch {
       // Recording the failure must never mask the failure itself.
     }
     return {
+      person,
       account,
       rowsSeen: 0,
       rowsAdded: 0,
@@ -397,11 +419,17 @@ export function ingestAccountSafe(
       currency: null,
       discrepancy: null,
       ok: false,
-      file,
+      file: named,
       error: message,
     };
   }
 }
+
+const AGGREGATE_CATEGORY = `COALESCE(t.category, m.category,
+         CASE t.movement
+           WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
+           WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
+           WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`;
 
 export function recomputeAggregates(
   db: import("better-sqlite3").Database,
@@ -410,14 +438,27 @@ export function recomputeAggregates(
   // Category resolution order: explicit transaction category (user/molang
   // override or Muse classification) → merchant memory → movement fallback.
   db.prepare(`DELETE FROM month_aggregates WHERE person = ?`).run(person);
+  if (person === "household") {
+    // Household rows are real stored aggregates over BOTH people's
+    // transactions, summed per currency — never a second person's rows
+    // relabelled, and never FX-converted into GBP.
+    db.prepare(
+      `INSERT INTO month_aggregates (person, year_month, category, currency, spend_minor, income_minor, aside_minor, txn_count)
+       SELECT 'household', t.year_month, ${AGGREGATE_CATEGORY},
+         t.currency,
+         SUM(CASE WHEN t.amount_minor < 0 AND t.movement = 'spend' THEN -t.amount_minor ELSE 0 END),
+         SUM(CASE WHEN t.amount_minor > 0 AND t.movement = 'income' THEN t.amount_minor ELSE 0 END),
+         SUM(CASE WHEN t.movement = 'aside' AND t.amount_minor < 0 THEN -t.amount_minor ELSE 0 END),
+         COUNT(*)
+       FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+       WHERE t.person <> 'household'
+       GROUP BY t.year_month, t.currency, ${AGGREGATE_CATEGORY}`,
+    ).run();
+    return;
+  }
   db.prepare(
     `INSERT INTO month_aggregates (person, year_month, category, currency, spend_minor, income_minor, aside_minor, txn_count)
-     SELECT t.person, t.year_month,
-       COALESCE(t.category, m.category,
-         CASE t.movement
-           WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
-           WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
-           WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END),
+     SELECT t.person, t.year_month, ${AGGREGATE_CATEGORY},
        t.currency,
        SUM(CASE WHEN t.amount_minor < 0 AND t.movement = 'spend' THEN -t.amount_minor ELSE 0 END),
        SUM(CASE WHEN t.amount_minor > 0 AND t.movement = 'income' THEN t.amount_minor ELSE 0 END),
@@ -425,24 +466,234 @@ export function recomputeAggregates(
        COUNT(*)
      FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
      WHERE t.person = ?
-     GROUP BY t.person, t.year_month, t.currency,
-       COALESCE(t.category, m.category,
-         CASE t.movement
-           WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
-           WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
-           WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`,
+     GROUP BY t.person, t.year_month, t.currency, ${AGGREGATE_CATEGORY}`,
   ).run(person);
 }
 
-/** Ingest every account, each fault-tolerant (see ingestAccountSafe). */
+/**
+ * Person-aware discovery of the Originals folder.
+ *
+ * Zonito's six accounts keep their filename-hint matching exactly as
+ * findOriginalFile has always done it. Every other statement file in
+ * Originals is Nikhila's: an account-statement file's account is its
+ * rows' dominant Product value (her Current export carries 295 Current
+ * rows plus 4 self-cancelling "Investments" balance-migration rows —
+ * the migration rows belong to the export's balance chain and ingest
+ * with it); a savings file's account is "Savings-<digits>" from the
+ * filename tag (which may carry a leading minus, as hers does). Each
+ * file's (person, account) assignment is persisted in the store's meta
+ * the first time it is derived, and the persisted assignment wins
+ * forever after — a file can never migrate between people, even if the
+ * hint matching would one day claim it.
+ *
+ * A statement file with NO dominant Product (its rows split across
+ * products with none holding 90%) is ambiguous: it fails loudly as its
+ * own ingest result instead of being guessed into somebody's account.
+ */
+export type FileAssignment = { file: string; person: string; account: string };
+
+const ASSIGNMENT_KEY_PREFIX = "file_assignment:";
+
+function persistedAssignments(
+  db: import("better-sqlite3").Database,
+): Map<string, { person: string; account: string }> {
+  const rows = db
+    .prepare("SELECT key, value FROM meta WHERE key LIKE ?")
+    .all(`${ASSIGNMENT_KEY_PREFIX}%`) as { key: string; value: string }[];
+  const map = new Map<string, { person: string; account: string }>();
+  for (const row of rows) {
+    try {
+      const parsed = JSON.parse(row.value) as {
+        person?: unknown;
+        account?: unknown;
+      };
+      if (typeof parsed.person === "string" && typeof parsed.account === "string") {
+        map.set(row.key.slice(ASSIGNMENT_KEY_PREFIX.length), {
+          person: parsed.person,
+          account: parsed.account,
+        });
+      }
+    } catch {
+      // A corrupt assignment is ignored; discovery re-derives it.
+    }
+  }
+  return map;
+}
+
+function persistAssignment(
+  db: import("better-sqlite3").Database,
+  assignment: FileAssignment,
+): void {
+  db.prepare(
+    `INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+  ).run(
+    `${ASSIGNMENT_KEY_PREFIX}${assignment.file}`,
+    JSON.stringify({ person: assignment.person, account: assignment.account }),
+  );
+}
+
+/** "Savings-<digits>" from a savings filename tag, tolerating the
+ * leading minus her export carries ("..._en-sg_-900000003_3b9780.csv"). */
+function savingsAccountFromFilename(file: string): string | null {
+  const tokens = file.replace(/\.csv$/i, "").split("_");
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const m = tokens[i]!.match(/^-?(\d{4,})$/);
+    if (m) return `Savings-${m[1]}`;
+  }
+  return null;
+}
+
+export function discoverFiles(
+  db: import("better-sqlite3").Database,
+  dataDir: string,
+): { assignments: FileAssignment[]; failures: IngestResult[] } {
+  const dir = join(dataDir, "Originals");
+  let files: string[];
+  try {
+    files = readdirSync(dir)
+      .filter((f) => f.endsWith(".csv"))
+      .sort();
+  } catch {
+    // An unlistable Originals folder discovers nothing; every Zonito
+    // account then fails by name through the unassigned pass in
+    // ingestAccounts, exactly as it did before discovery existed.
+    files = [];
+  }
+  const persisted = persistedAssignments(db);
+  const assignments: FileAssignment[] = [];
+  const failures: IngestResult[] = [];
+  const claimed = new Set<string>();
+  const assign = (a: FileAssignment) => {
+    assignments.push(a);
+    claimed.add(a.file);
+    if (!persisted.has(a.file)) persistAssignment(db, a);
+  };
+
+  // Zonito first: a persisted assignment rules; otherwise the standing
+  // filename hints claim their file (never one persisted to Nikhila).
+  for (const account of INGEST_ACCOUNTS) {
+    const mine = [...persisted.entries()].find(
+      ([file, a]) =>
+        a.person === "zonito" && a.account === account && files.includes(file),
+    );
+    if (mine) {
+      assign({ file: mine[0], person: "zonito", account });
+      continue;
+    }
+    let file: string | null = null;
+    try {
+      file = findOriginalFile(dataDir, account);
+    } catch {
+      file = null;
+    }
+    if (file && persisted.get(file)?.person === "nikhila") file = null;
+    if (file) assign({ file, person: "zonito", account });
+    // No file at all: ingestAccountSafe below is not run for this
+    // account; the missing file surfaces when the account is attempted
+    // through its own result (see the unassigned pass in ingestAccounts).
+  }
+
+  // Nikhila: every remaining statement file is hers.
+  for (const file of files) {
+    if (claimed.has(file)) continue;
+    const known = persisted.get(file);
+    if (known) {
+      assign({ file, person: known.person, account: known.account });
+      continue;
+    }
+    if (file.includes("savings")) {
+      const account = savingsAccountFromFilename(file);
+      if (account) {
+        assign({ file, person: "nikhila", account });
+      } else {
+        failures.push({
+          person: "nikhila",
+          account: file,
+          rowsSeen: 0,
+          rowsAdded: 0,
+          balanceMinor: null,
+          currency: null,
+          discrepancy: null,
+          ok: false,
+          file,
+          error: `cannot read a savings account number from the filename ${file}`,
+        });
+      }
+      continue;
+    }
+    if (file.includes("account-statement")) {
+      let account: string | null = null;
+      let failure: string | null = null;
+      try {
+        const text = readFileSync(join(dir, file), "utf8");
+        const rows = parseAccountCsv(text);
+        const counts = new Map<string, number>();
+        for (const r of rows) {
+          const product = r.product.trim();
+          counts.set(product, (counts.get(product) ?? 0) + 1);
+        }
+        const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+        const top = ranked[0];
+        if (top && rows.length > 0 && top[1] / rows.length >= 0.9) {
+          account = top[0];
+        } else {
+          const split = ranked
+            .map(([p, n]) => `${p} ${n}`)
+            .join(", ");
+          failure = `${file}: ambiguous statement — its rows split across Products (${split}) with no single account holding 90%; refusing to guess whose account it is`;
+        }
+      } catch (error) {
+        failure = error instanceof Error ? error.message : String(error);
+      }
+      if (failure !== null) {
+        failures.push({
+          person: "nikhila",
+          account: file,
+          rowsSeen: 0,
+          rowsAdded: 0,
+          balanceMinor: null,
+          currency: null,
+          discrepancy: null,
+          ok: false,
+          file,
+          error: failure,
+        });
+        continue;
+      }
+      assign({ file, person: "nikhila", account: account! });
+      continue;
+    }
+    // Not a statement file at all: not ours to ingest, leave it alone.
+  }
+  return { assignments, failures };
+}
+
+/**
+ * Ingest every discovered account for BOTH people, each fault-tolerant
+ * (see ingestAccountSafe), then refresh the household aggregates so the
+ * combined view always equals the sum of the two people's rows.
+ * Zonito accounts with no discoverable file still produce their named
+ * failure result, exactly as before discovery existed.
+ */
 export function ingestAccounts(
   db: import("better-sqlite3").Database,
   dataDir: string,
-  person = "zonito",
 ): IngestResult[] {
-  return INGEST_ACCOUNTS.map((account) =>
-    ingestAccountSafe(db, person, account, dataDir),
+  const { assignments, failures } = discoverFiles(db, dataDir);
+  const results = assignments.map((a) =>
+    ingestAccountSafe(db, a.person, a.account, dataDir, a.file),
   );
+  const assignedZonito = new Set(
+    assignments.filter((a) => a.person === "zonito").map((a) => a.account),
+  );
+  for (const account of INGEST_ACCOUNTS) {
+    if (!assignedZonito.has(account)) {
+      results.push(ingestAccountSafe(db, "zonito", account, dataDir));
+    }
+  }
+  recomputeAggregates(db, "household");
+  return [...results, ...failures];
 }
 
 function storedRulesVersion(
@@ -459,7 +710,7 @@ const TXN_COLUMNS =
 const AGG_COLUMNS =
   "person, year_month, category, currency, spend_minor, income_minor, aside_minor, txn_count";
 const RUN_COLUMNS =
-  "account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy, finished_at";
+  "person, account, started_at, rows_seen, rows_added, balance_minor, currency, discrepancy, finished_at";
 const MEMORY_COLUMNS = "merchant, category, colour, icon, source, updated_at";
 
 /**
@@ -491,6 +742,28 @@ function carryMerchantMemory(
         r["updated_at"],
       );
     }
+  });
+  copy(rows);
+}
+
+/**
+ * File assignments (meta) are likewise not derivable state the rebuild
+ * may drop: the temp store receives the live store's assignments before
+ * its discovery runs, and the swap copies any assignments the rebuild
+ * derived back into the live store.
+ */
+function carryFileAssignments(
+  from: import("better-sqlite3").Database,
+  to: import("better-sqlite3").Database,
+): void {
+  const rows = from
+    .prepare("SELECT key, value FROM meta WHERE key LIKE ?")
+    .all(`${ASSIGNMENT_KEY_PREFIX}%`) as { key: string; value: string }[];
+  const insert = to.prepare(
+    `INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)`,
+  );
+  const copy = to.transaction((items: { key: string; value: string }[]) => {
+    for (const r of items) insert.run(r.key, r.value);
   });
   copy(rows);
 }
@@ -528,7 +801,6 @@ function removeStoreFiles(path: string): void {
 function rebuildStore(
   db: import("better-sqlite3").Database,
   dataDir: string,
-  person: string,
 ): IngestResult[] {
   const livePath = db.name;
   if (!livePath || livePath === ":memory:") {
@@ -540,7 +812,7 @@ function rebuildStore(
       `INSERT INTO meta (key, value) VALUES ('rules_version', ?)
        ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
     ).run(String(RULES_VERSION));
-    return ingestAccounts(db, dataDir, person);
+    return ingestAccounts(db, dataDir);
   }
   const stored = storedRulesVersion(db);
   const tmpPath = join(dirname(livePath), `${STORE_FILENAME}.rebuild`);
@@ -549,7 +821,8 @@ function rebuildStore(
   let results: IngestResult[];
   try {
     carryMerchantMemory(db, tmp);
-    results = ingestAccounts(tmp, dataDir, person);
+    carryFileAssignments(db, tmp);
+    results = ingestAccounts(tmp, dataDir);
     tmp.pragma("wal_checkpoint(TRUNCATE)");
   } finally {
     tmp.close();
@@ -571,6 +844,11 @@ function rebuildStore(
     db.exec(
       `INSERT INTO ingest_runs (${RUN_COLUMNS})
        SELECT ${RUN_COLUMNS} FROM rebuild_src.ingest_runs`,
+    );
+    db.exec(
+      `INSERT OR REPLACE INTO meta (key, value)
+       SELECT key, value FROM rebuild_src.meta
+       WHERE key LIKE '${ASSIGNMENT_KEY_PREFIX}%'`,
     );
     db.prepare(
       `INSERT INTO meta (key, value) VALUES ('rules_version', ?)
@@ -594,13 +872,16 @@ function rebuildStore(
   return results;
 }
 
+/**
+ * Ingest the whole Originals folder for BOTH people (see discoverFiles).
+ * A rules-version mismatch routes through the atomic rebuild instead.
+ */
 export function ingestAll(
   db: import("better-sqlite3").Database,
   dataDir: string,
-  person = "zonito",
 ): IngestResult[] {
   if (storedRulesVersion(db) === String(RULES_VERSION)) {
-    return ingestAccounts(db, dataDir, person);
+    return ingestAccounts(db, dataDir);
   }
-  return rebuildStore(db, dataDir, person);
+  return rebuildStore(db, dataDir);
 }

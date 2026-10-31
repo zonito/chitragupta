@@ -16,7 +16,7 @@ import {
   type Txn,
   type UpcomingPayment,
 } from "./data";
-import { ACCOUNT_TXN_LABEL, uiCategory } from "./txn-map";
+import { accountTxnLabel, uiCategory } from "./txn-map";
 import { detectSubscriptions } from "./subscriptions";
 import {
   documentRowToDoc,
@@ -65,6 +65,20 @@ const ACCOUNT_LIST_LABEL: Record<string, string> = {
   "Savings-9000000002": "Revolut Savings 0002",
   "Savings-9000000001": "Revolut Savings 0001",
 };
+
+/** Account-list label for one person's account. Nikhila's names derive
+ * from her account names (savings keep their last four digits, so her
+ * account reads "Revolut Savings 0003"); Zonito's use the fixed map. */
+function accountListLabel(person: string, account: string): string {
+  if (person === "nikhila") {
+    if (account === "Current") return "Revolut Current";
+    if (account.startsWith("Savings-")) {
+      return `Revolut Savings ${account.slice(-4)}`;
+    }
+    return `Revolut ${account}`;
+  }
+  return ACCOUNT_LIST_LABEL[account] ?? account;
+}
 
 function resolveCategory(row: Row, memory: Map<string, string>): string {
   if (row.category) return row.category;
@@ -200,7 +214,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       category: uiCategory(resolveCategory(row, memory)),
       amount,
       owner,
-      account: ACCOUNT_TXN_LABEL[row.account] ?? row.account,
+      account: accountTxnLabel(row.person, row.account),
       kind,
       // Mirror apiTxnToTxn (txn-map.ts) exactly, so a snapshot month and
       // a fetched month show the same detail for the same row: the
@@ -221,9 +235,23 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       `SELECT person, year_month, category, spend_minor FROM month_aggregates WHERE currency = 'GBP'`,
     )
     .all() as { person: string; year_month: string; category: string; spend_minor: number }[];
+  // Household reads the stored 'household' aggregate rows (true
+  // both-people sums). A store that predates them has none, so fall
+  // back to summing the per-person rows — and never both, or every
+  // household figure would double.
+  const hasHouseholdRows = aggRows.some((r) => r.person === "household");
   const aggGet = (person: string | null, month: string, category: string): number =>
     aggRows
-      .filter((r) => (person === null || r.person === person) && r.year_month === month && r.category === category)
+      .filter(
+        (r) =>
+          (person === null
+            ? hasHouseholdRows
+              ? r.person === "household"
+              : r.person !== "household"
+            : r.person === person) &&
+          r.year_month === month &&
+          r.category === category,
+      )
       .reduce((s, r) => s + r.spend_minor, 0) / 100;
   const prev6 = [1, 2, 3, 4, 5, 6].map((d) => shiftMonth(current, -d));
   const sparkMonths = [5, 4, 3, 2, 1, 0].map((d) => shiftMonth(current, -d));
@@ -274,7 +302,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       // Full dateLabel ("5 Oct 2026"), so a card's last-charged date is
       // in the same format as the next-expected date it renders beside.
       dateLabel,
-      accountLabel: (account) => ACCOUNT_TXN_LABEL[account] ?? account,
+      accountLabel: (account, person) => accountTxnLabel(person, account),
     },
   );
 
@@ -337,35 +365,39 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     if (best) biggestOneOff[p] = best;
   }
 
-  // Accounts from the last ingest run per account that actually read a
-  // statement. A later no-op re-import (rows_seen = 0) or a failed run
-  // must not pose as an upload: last/added come from the latest run with
-  // rows_seen > 0, falling back to the latest run when none qualify.
+  // Accounts from the last ingest run per (person, account) that
+  // actually read a statement. Grouping by account alone would merge
+  // the two people's "Pro" accounts into one row. A later no-op
+  // re-import (rows_seen = 0) or a failed run must not pose as an
+  // upload: last/added come from the latest run with rows_seen > 0,
+  // falling back to the latest run when none qualify.
   // The __rebuild__ marker rows never appear (account filter below).
   // Staleness still compares against the newest run of any account, so
   // an account whose last real statement is old stays stale even after
   // a no-op re-run rewrites its latest run row to today.
   const runRows = db
     .prepare(
-      `SELECT account, started_at, rows_added FROM ingest_runs
-       WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY account)
+      `SELECT person, account, started_at, rows_added FROM ingest_runs
+       WHERE id IN (SELECT MAX(id) FROM ingest_runs GROUP BY person, account)
          AND substr(account, 1, 2) <> '__'`,
     )
-    .all() as { account: string; started_at: string; rows_added: number }[];
+    .all() as { person: string; account: string; started_at: string; rows_added: number }[];
   const contentRows = db
     .prepare(
-      `SELECT account, started_at, rows_added FROM ingest_runs
-       WHERE id IN (SELECT MAX(id) FROM ingest_runs WHERE rows_seen > 0 GROUP BY account)
+      `SELECT person, account, started_at, rows_added FROM ingest_runs
+       WHERE id IN (SELECT MAX(id) FROM ingest_runs WHERE rows_seen > 0 GROUP BY person, account)
          AND substr(account, 1, 2) <> '__'`,
     )
-    .all() as { account: string; started_at: string; rows_added: number }[];
-  const contentByAccount = new Map(contentRows.map((r) => [r.account, r]));
+    .all() as { person: string; account: string; started_at: string; rows_added: number }[];
+  const contentByAccount = new Map(
+    contentRows.map((r) => [`${r.person}|${r.account}`, r]),
+  );
   const maxStarted = runRows.reduce((m, r) => (r.started_at > m ? r.started_at : m), "");
   const accounts: AccountInfo[] = runRows.map((r) => {
-    const chosen = contentByAccount.get(r.account) ?? r;
+    const chosen = contentByAccount.get(`${r.person}|${r.account}`) ?? r;
     return {
-      name: ACCOUNT_LIST_LABEL[r.account] ?? r.account,
-      owner: r.account === "Joint" ? "joint" : "zonito",
+      name: accountListLabel(r.person, r.account),
+      owner: r.account === "Joint" ? "joint" : (r.person as Owner),
       last: shortDayLabel(chosen.started_at.slice(0, 10)),
       added: chosen.rows_added,
       stale:

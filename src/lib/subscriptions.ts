@@ -125,8 +125,8 @@ function amountClusters(charges: SubCharge[]): SubCharge[][] {
 export interface DetectFormat {
   /** "5 Oct 2026" style label for an ISO date. */
   dateLabel: (iso: string) => string;
-  /** UI label for a store account name. */
-  accountLabel: (account: string) => string;
+  /** UI label for a store account name, for the person who holds it. */
+  accountLabel: (account: string, person: string) => string;
 }
 
 /**
@@ -205,7 +205,7 @@ export function detectSubscriptions(
       amount: lastAmount / 100,
       freq: best.freq,
       last: format.dateLabel(lastDate),
-      card: format.accountLabel(last.account),
+      card: format.accountLabel(last.account, last.person),
       owner: (last.account === "Joint" ? "joint" : last.person) as Owner,
       status: active ? "Active" : "Ended",
       charges: cluster.length,

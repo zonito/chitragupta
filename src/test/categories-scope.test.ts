@@ -65,7 +65,7 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "chitra-b9a-"));
     db = openStore(dir);
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     seedMerchantMemory(db);
     recomputeAggregates(db, "zonito");
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;

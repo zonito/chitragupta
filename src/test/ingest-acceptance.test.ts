@@ -24,14 +24,21 @@ const EXPECTED_ROWS: Record<string, number> = {
 describeAcceptance("acceptance numbers from the real Originals", () => {
   it("ingests 8,612 transactions with per-account counts (REVERTED excluded)", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
-    const results = ingestAll(db, DATA_DIR!, "zonito");
-    const total = results.reduce((n, r) => n + r.rowsSeen, 0);
+    const results = ingestAll(db, DATA_DIR!);
+    // Zonito's figures are asserted on his results alone: on the
+    // two-person fixture the same ingest also returns Nikhila's.
+    const mine = results.filter((r) => r.person === "zonito");
+    const total = mine.reduce((n, r) => n + r.rowsSeen, 0);
     expect(total).toBe(8612);
-    for (const r of results) {
+    for (const r of mine) {
       expect(r.rowsSeen).toBe(EXPECTED_ROWS[r.account]);
     }
     const count = (
-      db.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM transactions WHERE person = 'zonito'",
+        )
+        .get() as {
         n: number;
       }
     ).n;
@@ -41,7 +48,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
 
   it("excludes the 14 REVERTED rows from spend", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     // The 3 genuinely re-attempted charges survive as COMPLETED spend; the
     // 14 REVERTED holds must not. Distinguish by the empty REVERTED balance.
     const holds = db
@@ -64,7 +71,9 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
       .get() as { s: number };
     expect(phantom.s).toBe(0);
     const total = db
-      .prepare("SELECT COUNT(*) AS n FROM transactions")
+      .prepare(
+        "SELECT COUNT(*) AS n FROM transactions WHERE person = 'zonito'",
+      )
       .get() as {
       n: number;
     };
@@ -74,7 +83,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
 
   it("stores savings rows with ISO dates and real year_month buckets", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     const jan = db
       .prepare(
         `SELECT effective_date, year_month FROM transactions
@@ -86,7 +95,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
     expect(jan.year_month).toBe("2026-01");
     const odd = db
       .prepare(
-        `SELECT COUNT(*) AS n FROM transactions WHERE account LIKE 'Savings-%'
+        `SELECT COUNT(*) AS n FROM transactions WHERE person = 'zonito' AND account LIKE 'Savings-%'
          AND year_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'`,
       )
       .get() as { n: number };
@@ -96,8 +105,12 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
 
   it("reproduces the final balances", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
-    const results = ingestAll(db, DATA_DIR!, "zonito");
-    const byAccount = Object.fromEntries(results.map((r) => [r.account, r]));
+    const results = ingestAll(db, DATA_DIR!);
+    const byAccount = Object.fromEntries(
+      results
+        .filter((r) => r.person === "zonito")
+        .map((r) => [r.account, r]),
+    );
     expect(byAccount["Main"]!.balanceMinor).toBe(14274);
     expect(byAccount["Pro"]!.balanceMinor).toBe(15833);
     expect(byAccount["Joint"]!.balanceMinor).toBe(0);
@@ -114,11 +127,15 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
 
   it("is idempotent: a second ingest adds nothing", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
-    ingestAll(db, DATA_DIR!, "zonito");
-    const second = ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
+    const second = ingestAll(db, DATA_DIR!);
     expect(second.reduce((n, r) => n + r.rowsAdded, 0)).toBe(0);
     const count = (
-      db.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM transactions WHERE person = 'zonito'",
+        )
+        .get() as {
         n: number;
       }
     ).n;
@@ -128,7 +145,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
 
   it("lands the Gepp & Sons payments as capital, never February/March spend", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
     const gepp = db
       .prepare(
         "SELECT description, movement, year_month FROM transactions WHERE description LIKE '%Gepp & Sons Solicitors%'",

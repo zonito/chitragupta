@@ -11,6 +11,7 @@ export const Route = createFileRoute("/import")({
 });
 
 type IngestResult = {
+  person?: string;
   account: string;
   rowsAdded: number;
   ok?: boolean;
@@ -19,6 +20,7 @@ type IngestResult = {
 };
 
 type IngestStatusAccount = {
+  person: string;
   account: string;
   lastIngest: string;
   rowsSeen: number;
@@ -37,6 +39,21 @@ const STATUS_LABEL: Record<string, string> = {
   "Savings-9000000002": "Revolut Savings 0002",
   "Savings-9000000001": "Revolut Savings 0001",
 };
+
+/** The snapshot's display label for one person's raw account name —
+ * mirrors accountListLabel in snapshot.server.ts. Both people hold a
+ * "Pro", so status rows are matched by person + label, never label
+ * alone. */
+function statusLabel(person: string, account: string): string {
+  if (person === "nikhila") {
+    if (account === "Current") return "Revolut Current";
+    if (account.startsWith("Savings-")) {
+      return `Revolut Savings ${account.slice(-4)}`;
+    }
+    return `Revolut ${account}`;
+  }
+  return STATUS_LABEL[account] ?? account;
+}
 
 function formatBalance(balanceMinor: number, currency: string | null): string {
   const amount = balanceMinor / 100;
@@ -84,11 +101,11 @@ export function Import() {
     void loadStatus();
   }, []);
 
-  const statusByName = new Map<string, IngestStatusAccount>();
+  const statusByKey = new Map<string, IngestStatusAccount>();
   for (const s of statusAccounts) {
-    statusByName.set(s.account, s);
-    const label = STATUS_LABEL[s.account];
-    if (label) statusByName.set(label, s);
+    const person = s.person ?? "zonito";
+    statusByKey.set(`${person}|${statusLabel(person, s.account)}`, s);
+    statusByKey.set(`${person}|${s.account}`, s);
   }
 
   // Import reads the synced PersonalFinance folder on the server (the
@@ -165,9 +182,10 @@ export function Import() {
           <p className="py-6 text-center text-body text-muted-foreground">No accounts yet — accounts appear here once statements have been imported.</p>
         )}
         {list.map((a) => {
-          const status = statusByName.get(a.name);
+          const statusPerson = a.owner === "joint" ? "zonito" : a.owner;
+          const status = statusByKey.get(`${statusPerson}|${a.name}`);
           return (
-            <div key={a.name} className="ledger-row flex items-center justify-between gap-2 py-3.5">
+            <div key={`${a.owner}:${a.name}`} className="ledger-row flex items-center justify-between gap-2 py-3.5">
               <div className="flex min-w-0 items-center gap-2">
                 <AccountTile account={a.name} />
                 <div className="min-w-0">

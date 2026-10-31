@@ -38,6 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_txns_month ON transactions (person, year_month, m
 CREATE INDEX IF NOT EXISTS idx_txns_merchant ON transactions (merchant);
 CREATE TABLE IF NOT EXISTS ingest_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person TEXT NOT NULL DEFAULT 'zonito',
   account TEXT NOT NULL,
   started_at TEXT NOT NULL,
   rows_seen INTEGER NOT NULL,
@@ -97,6 +98,17 @@ export function openStoreFile(path: string): Database.Database {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
+  // ingest_runs gained a person column when ingest became person-aware
+  // (two people can both hold a "Pro" account). Stores created before
+  // that have only zonito runs, so the column backfills with his name.
+  const runColumns = db
+    .prepare("PRAGMA table_info(ingest_runs)")
+    .all() as { name: string }[];
+  if (!runColumns.some((c) => c.name === "person")) {
+    db.exec(
+      "ALTER TABLE ingest_runs ADD COLUMN person TEXT NOT NULL DEFAULT 'zonito'",
+    );
+  }
   const row = db
     .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
     .get() as { value: string } | undefined;

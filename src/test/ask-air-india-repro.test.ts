@@ -28,7 +28,7 @@ describeRepro("Ask Air India example on the repro fixture (G20d)", () => {
   it("returns the Air India total, with the September 2026 slice at £1,332.84 across 6 rows", async () => {
     dir = mkdtempSync(join(tmpdir(), "chitra-ask-air-india-"));
     const db = openStore(dir);
-    ingestAll(db, DATA_DIR!, "zonito");
+    ingestAll(db, DATA_DIR!);
 
     // The September 2026 slice, straight from the store.
     const sep = db
