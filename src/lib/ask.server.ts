@@ -45,7 +45,14 @@ import {
  * failing gateway is visible instead of silent.
  */
 
-const PULL_LIMIT = 200;
+/**
+ * Safety ceiling for a computation pull, purely a memory guard. Ask
+ * totals are computed over the COMPLETE filtered set: each pull first
+ * counts its matches and then pulls exactly that many rows (see
+ * pullComplete). `truncated` is true only when this ceiling actually
+ * cut the set — never merely because a month holds many rows.
+ */
+const PULL_CEILING = 20_000;
 const MODEL_ROW_LIMIT = 50;
 const ASK_TIMEOUT_MS = 20_000;
 
@@ -177,18 +184,20 @@ const CATEGORY_SQL = `COALESCE(t.category, m.category,
     WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
     WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`;
 
-/** The /api/transactions row query, reused so Ask never HTTP-calls itself. */
-function pullRows(
-  db: Database.Database,
-  params: {
-    month?: string;
-    q?: string;
-    category?: string;
-    from?: string;
-    to?: string;
-    limit: number;
-  },
-): ApiTxnRow[] {
+interface PullParams {
+  month?: string;
+  q?: string;
+  category?: string;
+  from?: string;
+  to?: string;
+}
+
+/**
+ * The single WHERE construction behind both the counting pull and the
+ * row pull, factored so the two can never drift: a count and its pull
+ * always describe exactly the same filtered set.
+ */
+function pullWhere(params: PullParams): { clause: string; args: unknown[] } {
   const where: string[] = [];
   const args: unknown[] = [];
   if (params.month) {
@@ -211,6 +220,18 @@ function pullRows(
     where.push(`${CATEGORY_SQL} = ?`);
     args.push(params.category);
   }
+  return {
+    clause: where.length ? `WHERE ${where.join(" AND ")}` : "",
+    args,
+  };
+}
+
+/** The /api/transactions row query, reused so Ask never HTTP-calls itself. */
+function pullRows(
+  db: Database.Database,
+  params: PullParams & { limit: number },
+): ApiTxnRow[] {
+  const { clause, args } = pullWhere(params);
   return db
     .prepare(
       `SELECT t.fingerprint AS id, t.person, t.account, t.effective_date AS date,
@@ -218,10 +239,38 @@ function pullRows(
               t.amount_minor AS amountMinor, t.currency, t.movement,
               ${CATEGORY_SQL} AS category
        FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
-       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ${clause}
        ORDER BY t.effective_date DESC LIMIT ?`,
     )
     .all(...args, params.limit) as ApiTxnRow[];
+}
+
+function countRows(db: Database.Database, params: PullParams): number {
+  const { clause, args } = pullWhere(params);
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+       FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+       ${clause}`,
+    )
+    .get(...args) as { n: number };
+  return row.n;
+}
+
+/**
+ * A counting pull: count the filtered set, then pull with limit = the
+ * count, so computations run over the complete set. The ceiling is a
+ * memory guard only; `truncated` means the ceiling actually cut the
+ * set (pulled < count) and nothing else.
+ */
+function pullComplete(
+  db: Database.Database,
+  params: PullParams,
+): { rows: ApiTxnRow[]; matchedCount: number; truncated: boolean } {
+  const matchedCount = countRows(db, params);
+  const limit = Math.min(Math.max(matchedCount, 1), PULL_CEILING);
+  const rows = pullRows(db, { ...params, limit });
+  return { rows, matchedCount, truncated: rows.length < matchedCount };
 }
 
 function toTxns(rows: ApiTxnRow[]): Txn[] {
@@ -345,7 +394,8 @@ function directComputation(
       deterministic += ` Total across ${spend.length} matching transactions: ${gbp(total)}.`;
     }
     if (truncated) {
-      deterministic += " Totals cover the most recent 200 matches.";
+      deterministic +=
+        " Totals are partial: the matching set exceeded the safety ceiling and was cut.";
     }
     return { spend, matched: visible, deterministic };
   }
@@ -393,7 +443,8 @@ function recordsComputation(
       deterministic += ` Total across ${spend.length} matching transactions: ${gbp(total)}.`;
     }
     if (truncated) {
-      deterministic += " Totals cover the most recent 200 matches.";
+      deterministic +=
+        " Totals are partial: the matching set exceeded the safety ceiling and was cut.";
     }
   } else {
     deterministic = noRecordsText(person);
@@ -486,7 +537,7 @@ export async function answerAsk(
     /cost|spend|spent|total/i.test(question);
 
   if (modelPlan) {
-    const rows = pullRows(db, {
+    const pull = pullComplete(db, {
       ...(modelPlan.month ? { month: modelPlan.month } : {}),
       ...(modelPlan.from && modelPlan.to
         ? { from: modelPlan.from, to: modelPlan.to }
@@ -496,10 +547,9 @@ export async function answerAsk(
         : modelPlan.query
           ? { q: modelPlan.query }
           : {}),
-      limit: PULL_LIMIT,
     });
-    const txns = toTxns(rows);
-    truncated = rows.length >= PULL_LIMIT;
+    const txns = toTxns(pull.rows);
+    truncated = pull.truncated;
     figuresMonth = modelPlan.month;
     const phrase = periodPhrase(modelPlan.month, modelPlan.from, modelPlan.to);
     if (phrase) scopeLine = `The figures cover${phrase}.`;
@@ -532,12 +582,11 @@ export async function answerAsk(
     }
   } else if (isOcadoExample || isTripExample) {
     const isOcado = isOcadoExample;
-    const rows = pullRows(db, {
+    const pull = pullComplete(db, {
       ...(current ? { month: current } : {}),
-      limit: PULL_LIMIT,
     });
-    const txns = toTxns(rows);
-    truncated = rows.length >= PULL_LIMIT;
+    const txns = toTxns(pull.rows);
+    truncated = pull.truncated;
     let orders: Txn[];
     let fallback: boolean;
     if (!isOcado) {
@@ -576,14 +625,13 @@ export async function answerAsk(
       // Category question with a period: total the pulled category set
       // directly — record search would re-filter it away, because its
       // terms ("transport", "week") are not transaction text.
-      const rows = pullRows(db, {
+      const pull = pullComplete(db, {
         ...(det.month ? { month: det.month } : {}),
         ...(det.from && det.to ? { from: det.from, to: det.to } : {}),
         category: det.category,
-        limit: PULL_LIMIT,
       });
-      const txns = toTxns(rows);
-      truncated = rows.length >= PULL_LIMIT;
+      const txns = toTxns(pull.rows);
+      truncated = pull.truncated;
       figuresMonth = det.month ?? null;
       const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
@@ -594,9 +642,9 @@ export async function answerAsk(
     } else if (det.from && det.to && !det.category && det.terms.length === 0) {
       // A bare period question ("how much did we spend this week?"):
       // total everything in the range.
-      const rows = pullRows(db, { from: det.from, to: det.to, limit: PULL_LIMIT });
-      const txns = toTxns(rows);
-      truncated = rows.length >= PULL_LIMIT;
+      const pull = pullComplete(db, { from: det.from, to: det.to });
+      const txns = toTxns(pull.rows);
+      truncated = pull.truncated;
       const phrase = periodPhrase(null, det.from, det.to);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
       const computed = directComputation(txns, person, "total", "Total spend", phrase, truncated);
@@ -604,7 +652,7 @@ export async function answerAsk(
       matched = computed.matched;
       deterministic = computed.deterministic;
     } else {
-      const rows = pullRows(db, {
+      const pull = pullComplete(db, {
         ...(det.month ? { month: det.month } : {}),
         ...(det.from && det.to ? { from: det.from, to: det.to } : {}),
         ...(det.category
@@ -612,10 +660,9 @@ export async function answerAsk(
           : det.apiQuery
             ? { q: det.apiQuery }
             : {}),
-        limit: PULL_LIMIT,
       });
-      const txns = toTxns(rows);
-      truncated = rows.length >= PULL_LIMIT;
+      const txns = toTxns(pull.rows);
+      truncated = pull.truncated;
       figuresMonth = det.month ?? null;
       const monthOnly = Boolean(det.month && det.terms.length === 0 && !det.category);
       if (monthOnly) {
@@ -681,7 +728,9 @@ export async function answerAsk(
         ]
       : []),
     ...(figures.truncated
-      ? [`- Note: only the most recent 200 matches were totalled.`]
+      ? [
+          `- Note: the matching set exceeded the safety ceiling, so these totals cover only part of it.`,
+        ]
       : []),
     `Representative transactions (most recent first):`,
     ...(representative.length > 0

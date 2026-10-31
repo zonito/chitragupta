@@ -402,7 +402,7 @@ export function AskButton() {
                   ))}
                 </div>
               )}
-              {displayAi.figures.truncated && <p className="mt-2 text-caption leading-relaxed text-muted-foreground">Totals cover the most recent 200 matches.</p>}
+              {displayAi.figures.truncated && <p className="mt-2 text-caption leading-relaxed text-muted-foreground">Totals are partial: the matching set was too large to total in full.</p>}
             </Panel>
           ) : workedExample === "records" ? (
             searching ? (

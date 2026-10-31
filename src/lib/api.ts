@@ -20,6 +20,19 @@ import { answerAsk } from "./ask.server";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
+/**
+ * The resolved-category expression, identical to the one the SELECT in
+ * /api/transactions computes (and to CATEGORY_SQL in ask.server.ts).
+ * Filtering on it in SQL — before LIMIT — is what makes a category
+ * query return that category's rows instead of whatever fraction of
+ * the category happened to survive an unfiltered LIMIT.
+ */
+const CATEGORY_SQL = `COALESCE(t.category, m.category,
+  CASE t.movement
+    WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
+    WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
+    WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`;
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
@@ -415,16 +428,18 @@ async function routeWithDb(
       where.push("(t.merchant LIKE ? OR t.description LIKE ?)");
       params.push(`%${q}%`, `%${q}%`);
     }
+    if (category) {
+      // Filter in SQL, before LIMIT: a JS post-filter over a limited
+      // unfiltered pull silently drops most of the category's rows.
+      where.push(`${CATEGORY_SQL} = ?`);
+      params.push(category);
+    }
     const rows = db
       .prepare(
         `SELECT t.fingerprint AS id, t.person, t.account, t.effective_date AS date,
                 t.year_month AS month, t.description, t.merchant,
                 t.amount_minor AS amountMinor, t.currency, t.movement,
-                COALESCE(t.category, m.category,
-                  CASE t.movement
-                    WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
-                    WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
-                    WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END) AS category
+                ${CATEGORY_SQL} AS category
          FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY t.effective_date DESC LIMIT ?`,
@@ -442,10 +457,7 @@ async function routeWithDb(
       movement: string;
       category: string;
     }[];
-    const filtered = category
-      ? rows.filter((r) => r.category === category)
-      : rows;
-    return json({ ok: true, count: filtered.length, transactions: filtered });
+    return json({ ok: true, count: rows.length, transactions: rows });
   }
 
   if (path === "/api/aggregates" && request.method === "GET") {
