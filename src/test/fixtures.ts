@@ -181,11 +181,7 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
       { name: "Notion", seen: "Last on 4412 · 2 Sep" },
     ],
   },
-  merchantReview: [
-    { name: "Bao Borough", category: "Eating out", detail: "£46.80 · 18 Oct · first time we've seen it" },
-    { name: "Honest Burgers", category: "Eating out", detail: "£38.20 · 14 Oct · first time we've seen it" },
-    { name: "Kingsley Napley LLP", category: "One-off", detail: "£1,850 · 13 Oct · solicitor · lease review" },
-  ],
+  reviewTotal: 3,
   accounts: [
     { name: "Revolut Main", owner: "zonito", last: "28 Oct", added: 31, stale: false },
     { name: "Revolut Pro", owner: "zonito", last: "28 Oct", added: 4, stale: false },

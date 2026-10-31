@@ -1,13 +1,11 @@
 import { readFileSync } from "node:fs";
 import type Database from "better-sqlite3";
 import { openStore } from "./ingest/store";
-import { reviewQueue } from "./ingest/merchants";
+import { reviewQueueCount } from "./ingest/merchants";
 import {
   EMPTY_SNAPSHOT,
-  gbp,
   shareOf,
   type AccountInfo,
-  type Category,
   type DataSnapshot,
   type IncomeEntry,
   type NewMerchant,
@@ -329,23 +327,11 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       Date.parse(r.started_at) < Date.parse(maxStarted) - 7 * 86400000,
   }));
 
-  // Merchant review queue with plain-English detail.
-  const merchantReview = reviewQueue(db).slice(0, 6).map((item) => {
-    const stats = db
-      .prepare(
-        `SELECT COUNT(*) AS n, COALESCE(SUM(-amount_minor), 0) AS total, MAX(effective_date) AS last
-         FROM transactions WHERE merchant = ? AND movement = 'spend'`,
-      )
-      .get(item.merchant) as { n: number; total: number; last: string | null };
-    const detail = stats.last
-      ? `${gbp(stats.total / 100)} · ${stats.n} charge${stats.n === 1 ? "" : "s"} · last ${shortDayLabel(stats.last)}`
-      : "No card payments — transfers or income only";
-    return {
-      name: item.merchant,
-      category: "One-off" as Category,
-      detail,
-    };
-  });
+  // Merchant review: the snapshot carries only the TRUE queue size
+  // for the Settings header chip. The review items themselves are
+  // fetched by the sheet from /api/review-queue on open, so no
+  // truncated, hard-labelled preview is baked in here.
+  const reviewTotal = reviewQueueCount(db);
 
   return {
     configured: true,
@@ -359,7 +345,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     subs,
     cards: [],
     migration: { moved: [], waiting: [] },
-    merchantReview,
+    reviewTotal,
     accounts,
     docs: [],
     typical,

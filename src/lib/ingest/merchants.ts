@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { CATEGORIES, gbp } from "../data";
 
 export type MerchantSource = "rules" | "claude-api" | "molang" | "user";
 
@@ -152,14 +153,41 @@ export const NEVER_CLASSIFY_PATTERNS: RegExp[] = [
 type UnknownMerchantRow = { merchant: string; n: number; spend_n: number };
 
 /**
+ * Dismissals live in their own table, separate from merchant_memory:
+ * dismissing a merchant in Settings is a "not now / noise" verdict,
+ * not a classification, so it must never write a category, change a
+ * transaction or move an aggregate. The table is created with the
+ * store schema; this ensure keeps direct callers safe too.
+ */
+export function ensureDismissedTable(db: Database.Database): void {
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS dismissed_merchants (
+       merchant TEXT PRIMARY KEY,
+       dismissed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+     )`,
+  );
+}
+
+/** Record a Settings dismissal. Merchant memory is NOT touched. */
+export function dismissMerchant(db: Database.Database, merchant: string): void {
+  ensureDismissedTable(db);
+  db.prepare(
+    `INSERT INTO dismissed_merchants (merchant, dismissed_at)
+     VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+     ON CONFLICT (merchant) DO UPDATE SET dismissed_at = excluded.dismissed_at`,
+  ).run(merchant);
+}
+
+/**
  * The shared definition of the review queue: every distinct merchant
- * with spend/income rows that is not in merchant_memory, ordered by
- * row count. reviewQueue caps this list for display and
- * reviewQueueCount counts it in full — both derive from this one
- * query plus the one qualification filter below, so the two can
- * never drift apart.
+ * with spend/income rows that is not in merchant_memory and has not
+ * been dismissed, ordered by row count. reviewQueue caps this list
+ * for display and reviewQueueCount counts it in full — both derive
+ * from this one query plus the one qualification filter below, so
+ * the two can never drift apart.
  */
 function unknownMerchantRows(db: Database.Database): UnknownMerchantRow[] {
+  ensureDismissedTable(db);
   return db
     .prepare(
       `SELECT merchant, COUNT(*) AS n,
@@ -167,6 +195,7 @@ function unknownMerchantRows(db: Database.Database): UnknownMerchantRow[] {
        FROM transactions
        WHERE movement IN ('spend','income')
          AND merchant NOT IN (SELECT merchant FROM merchant_memory)
+         AND merchant NOT IN (SELECT merchant FROM dismissed_merchants)
        GROUP BY merchant ORDER BY n DESC`,
     )
     .all() as UnknownMerchantRow[];
@@ -197,9 +226,71 @@ export function reviewQueueCount(db: Database.Database): number {
   return qualifiedUnknownMerchantRows(db).length;
 }
 
-export function reviewQueue(
+export type ReviewQueueItem = {
+  merchant: string;
+  count: number;
+  examples: string[];
+  /** Plain-English spend detail, the format the snapshot used to build:
+   * "£X · N charges · last <date>" from the merchant's spend rows. */
+  detail: string;
+  /**
+   * The category the app currently resolves for this merchant, or null
+   * when the only resolution is the movement fallback. Resolution is
+   * exactly the snapshot/API order: an explicit transaction category
+   * first, then merchant memory — either of those is a real label a
+   * screen would show; a merchant whose rows carry neither resolves
+   * per movement ('One-off' for spend, etc.), which is a fallback,
+   * not a suggestion, so it surfaces as null rather than a forced
+   * label. Only spend categories (CATEGORIES) can be suggested:
+   * anything else cannot be picked in the review sheet anyway.
+   */
+  suggestion: string | null;
+};
+
+const day10 = (iso: string) => iso.slice(0, 10);
+function shortDayLabel(iso: string): string {
+  const d = new Date(`${day10(iso)}T00:00:00Z`);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(d);
+}
+
+function reviewDetail(db: Database.Database, merchant: string): string {
+  const stats = db
+    .prepare(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(-amount_minor), 0) AS total, MAX(effective_date) AS last
+       FROM transactions WHERE merchant = ? AND movement = 'spend'`,
+    )
+    .get(merchant) as { n: number; total: number; last: string | null };
+  return stats.last
+    ? `${gbp(stats.total / 100)} · ${stats.n} charge${stats.n === 1 ? "" : "s"} · last ${shortDayLabel(stats.last)}`
+    : "No card payments — transfers or income only";
+}
+
+function reviewSuggestion(
   db: Database.Database,
-): { merchant: string; count: number; examples: string[] }[] {
+  merchant: string,
+): string | null {
+  const rows = db
+    .prepare(
+      `SELECT COALESCE(t.category, m.category) AS explicit
+       FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+       WHERE t.merchant = ?
+       ORDER BY CASE WHEN t.movement = 'spend' THEN 0 ELSE 1 END,
+                t.effective_date DESC`,
+    )
+    .all(merchant) as { explicit: string | null }[];
+  for (const row of rows) {
+    if (row.explicit && (CATEGORIES as readonly string[]).includes(row.explicit)) {
+      return row.explicit;
+    }
+  }
+  return null;
+}
+
+export function reviewQueue(db: Database.Database): ReviewQueueItem[] {
   const rows = qualifiedUnknownMerchantRows(db).slice(0, 200);
   return rows.map((r) => {
     const examples = db
@@ -211,6 +302,8 @@ export function reviewQueue(
       merchant: r.merchant,
       count: r.n,
       examples: examples.map((e) => e.description),
+      detail: reviewDetail(db, r.merchant),
+      suggestion: reviewSuggestion(db, r.merchant),
     };
   });
 }

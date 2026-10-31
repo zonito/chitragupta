@@ -85,7 +85,14 @@ export interface CardItem {
   label: string; type: "Virtual" | "Physical"; last4: string; owner: Owner;
   status: "Active" | "Frozen" | "Replaced"; issued: string; frozen?: string; replacedBy?: string; account: string;
 }
-export interface MerchantReview { name: string; category: Category; detail: string }
+/** One GET /api/review-queue item, as fetched by the Settings sheet. */
+export interface ReviewQueueItem {
+  merchant: string;
+  count: number;
+  examples: string[];
+  detail: string;
+  suggestion: string | null;
+}
 export interface AccountInfo { name: string; owner: Owner; last: string; added: number; stale: boolean }
 export type DocType = "Receipt" | "Bill" | "Invoice" | "Warranty";
 export interface Doc {
@@ -104,7 +111,7 @@ export interface DataSnapshot {
   subs: Sub[];
   cards: CardItem[];
   migration: { moved: { name: string; seen: string }[]; waiting: { name: string; seen: string }[] };
-  merchantReview: MerchantReview[];
+  reviewTotal: number; // TRUE review-queue size; the sheet fetches the items itself from /api/review-queue
   accounts: AccountInfo[];
   docs: Doc[];
   typical: Record<string, Partial<Record<Person, number>>>;
@@ -124,7 +131,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   subs: [],
   cards: [],
   migration: { moved: [], waiting: [] },
-  merchantReview: [],
+  reviewTotal: 0,
   accounts: [],
   docs: [],
   typical: {},
@@ -144,7 +151,6 @@ export const INCOME: IncomeEntry[] = [];
 export const UPCOMING: UpcomingPayment[] = [];
 export const SUBS: Sub[] = [];
 export const CARDS: CardItem[] = [];
-export const MERCHANT_REVIEW: MerchantReview[] = [];
 export const ACCOUNTS: AccountInfo[] = [];
 export const DOCS: Doc[] = [];
 export const MONTHS6: string[] = [];
@@ -163,7 +169,6 @@ export function hydrateData(next: DataSnapshot): void {
   replace(UPCOMING, next.upcoming);
   replace(SUBS, next.subs);
   replace(CARDS, next.cards);
-  replace(MERCHANT_REVIEW, next.merchantReview);
   replace(ACCOUNTS, next.accounts);
   replace(DOCS, next.docs);
   replace(MONTHS6, next.months6);
@@ -177,6 +182,7 @@ export const isConfigured = () => snapshot.configured;
 export const currentMonthKey = () => snapshot.monthKey;
 export const monthOptions = () => snapshot.months;
 export const newMerchants = () => snapshot.newMerchants;
+export const reviewTotal = () => snapshot.reviewTotal;
 export const biggestOneOff = (p: Person) => snapshot.biggestOneOff[p] ?? null;
 
 const MONTH_NAMES = [

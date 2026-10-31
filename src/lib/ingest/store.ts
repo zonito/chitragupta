@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS merchant_memory (
   source TEXT NOT NULL DEFAULT 'rules',
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS dismissed_merchants (
+  merchant TEXT PRIMARY KEY,
+  dismissed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 `;
 
 export const STORE_FILENAME = "chitragupta.sqlite";

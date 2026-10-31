@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openStore } from "@/lib/ingest/store";
+import { reviewQueueCount } from "@/lib/ingest/merchants";
 import { buildSnapshot } from "@/lib/snapshot.server";
 
 /**
@@ -47,10 +48,35 @@ describe("snapshot builder", () => {
     expect(ocado).toHaveLength(2);
     expect(ocado.every((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.date))).toBe(true);
     // Since B2/G12 a pure-income label never qualifies for the review
-    // queue, so it is not a review item; the builder still survives it.
-    const review = snap.merchantReview.find((m) => m.name === "Mystery Sender");
-    expect(review).toBeUndefined();
+    // queue, so it does not count toward the review total either; the
+    // builder still survives it. Only Ocado (spend-bearing, unknown)
+    // counts.
+    expect(snap.reviewTotal).toBe(1);
     expect(snap.accounts[0]?.name).toBe("Revolut Main");
+  });
+
+  it("carries no hardcoded review items and a reviewTotal equal to reviewQueueCount", () => {
+    dir = mkdtempSync(join(tmpdir(), "chitragupta-snap-"));
+    const db = openStore(dir);
+    const insert = db.prepare(
+      `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
+         description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
+       VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, 'GBP', 0, 'spend', NULL)`,
+    );
+    insert.run("r1", "2026-10-05", "2026-10", "Alpha Unknown", "Alpha Unknown", -1000);
+    insert.run("r2", "2026-10-06", "2026-10", "Beta Unknown", "Beta Unknown", -2000);
+    insert.run("r3", "2026-10-07", "2026-10", "Beta Unknown", "Beta Unknown", -500);
+    const expected = reviewQueueCount(db);
+    db.close();
+
+    process.env["CHITRAGUPTA_STORE_DIR"] = dir;
+    const snap = buildSnapshot();
+    // The snapshot no longer carries a review item list at all (the
+    // sheet fetches items from /api/review-queue), so nothing in it
+    // can be a hardcoded "One-off" review entry.
+    expect("merchantReview" in snap).toBe(false);
+    expect(expected).toBe(2);
+    expect(snap.reviewTotal).toBe(expected);
   });
 
   it("lists every month in the store while txns stay at the two newest months", () => {

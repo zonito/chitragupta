@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { PageTitle, Panel, Label, Chip, Row, Sheet, meta, useTheme, type ThemeChoice } from "@/components/shell";
-import { ACCOUNTS, MERCHANT_REVIEW } from "@/lib/data";
+import { ACCOUNTS, CATEGORIES, reviewTotal, type Category, type ReviewQueueItem } from "@/lib/data";
 import { AccountTile, MerchantTile } from "@/components/tiles";
 import { Button } from "@/components/ui/button";
 
@@ -10,28 +10,96 @@ export const Route = createFileRoute("/settings")({
   component: Settings,
 });
 
-function Settings() {
+const PAGE_SIZE = 20;
+const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
+
+export function Settings() {
   const { theme, setTheme } = useTheme();
   const accs = (o: string) => ACCOUNTS.filter((a) => a.owner === o);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [visible, setVisible] = useState(PAGE_SIZE);
   const [status, setStatus] = useState<Record<string, "kept" | "dismissed">>({});
-  const queue = MERCHANT_REVIEW.filter((m) => !status[m.name]);
-  const handled = MERCHANT_REVIEW.filter((m) => status[m.name]);
-  const review = (name: string, verdict: "kept" | "dismissed") => {
-    setStatus((s) => ({ ...s, [name]: verdict }));
-    // Keeping a merchant confirms its category in merchant memory, so the
-    // choice survives reloads and future imports classify it the same way.
-    if (verdict === "kept") {
-      const item = MERCHANT_REVIEW.find((m) => m.name === name);
-      if (item) {
-        void fetch("/api/merchants", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ merchant: name, category: item.category, source: "user" }),
-        }).catch(() => {});
-      }
-    }
+  const [choices, setChoices] = useState<Record<string, string>>({});
+  const waiting = reviewTotal();
+  const queue = items.filter((m) => !status[m.merchant]);
+  const handled = items.filter((m) => status[m.merchant]);
+  const remaining = Math.max(0, total - handled.length);
+
+  // The sheet fetches the real queue on open (the snapshot carries only
+  // the true total, for the header chip), so it can page through every
+  // waiting merchant instead of a baked-in handful.
+  useEffect(() => {
+    if (!reviewOpen) return;
+    let cancelled = false;
+    setVisible(PAGE_SIZE);
+    setStatus({});
+    setLoaded(false);
+    fetch("/api/review-queue")
+      .then((res) => res.json())
+      .then((body: { ok?: boolean; queue?: ReviewQueueItem[]; total?: number }) => {
+        if (cancelled) return;
+        if (body.ok && body.queue) {
+          setItems(body.queue);
+          setTotal(body.total ?? body.queue.length);
+          setChoices(
+            Object.fromEntries(
+              body.queue
+                .filter((item) => item.suggestion)
+                .map((item) => [item.merchant, item.suggestion as string]),
+            ),
+          );
+        } else {
+          setItems([]);
+          setTotal(0);
+          setChoices({});
+        }
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems([]);
+        setTotal(0);
+        setChoices({});
+        setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewOpen]);
+
+  const keep = (item: ReviewQueueItem) => {
+    const category = choices[item.merchant];
+    if (!category) return;
+    setStatus((s) => ({ ...s, [item.merchant]: "kept" }));
+    // Keeping confirms the chosen category in merchant memory (a "user"
+    // correction), so the choice survives reloads and future imports
+    // classify the merchant the same way.
+    void fetch("/api/merchants", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ merchant: item.merchant, category, source: "user" }),
+    }).catch(() => {});
   };
+
+  const dismiss = (item: ReviewQueueItem) => {
+    setStatus((s) => ({ ...s, [item.merchant]: "dismissed" }));
+    // Dismissal persists server-side (its own table, never merchant
+    // memory), so the merchant does not come back on reload.
+    void fetch("/api/review-queue/dismiss", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ merchant: item.merchant }),
+    }).catch(() => {});
+  };
+
+  const tileCategory = (item: ReviewQueueItem): Category =>
+    (choices[item.merchant] as Category | undefined) ??
+    (item.suggestion as Category | null) ??
+    "One-off";
+
   return (
     <div className="space-y-5 lg:max-w-2xl">
       <PageTitle>Settings</PageTitle>
@@ -56,7 +124,7 @@ function Settings() {
         <Row
           left="Merchant review"
           onClick={() => setReviewOpen(true)}
-          right={<Chip tone="neutral">{queue.length === 0 ? "Review queue is clear" : `${queue.length} ${queue.length === 1 ? "merchant" : "merchants"} waiting for review`}</Chip>}
+          right={<Chip tone="neutral">{waiting === 0 ? "Review queue is clear" : `${waiting} ${waiting === 1 ? "merchant" : "merchants"} waiting for review`}</Chip>}
         />
       </Panel>
       <p className="px-1 text-caption leading-relaxed text-muted-foreground">
@@ -66,36 +134,62 @@ function Settings() {
 
       <Sheet open={reviewOpen} onClose={() => setReviewOpen(false)}>
         <h2 className="mb-1 text-heading font-semibold">Merchant review</h2>
-        <p className="mb-4 text-caption leading-relaxed text-muted-foreground">Merchants we haven't seen before. Keeping confirms the category; dismissing marks it as noise.</p>
+        <p className="mb-4 text-caption leading-relaxed text-muted-foreground">Merchants we haven't seen before. Pick a category and keep to confirm it; dismissing marks it as noise.</p>
+        {!loaded && <p className="py-2 text-caption text-muted-foreground">Loading…</p>}
+        {loaded && (
+          <p className="mb-2 text-caption text-muted-foreground">
+            {remaining === 0 ? "Nothing waiting." : `${remaining} ${remaining === 1 ? "merchant" : "merchants"} waiting for review.`}
+          </p>
+        )}
         <div>
-          {queue.map((m) => (
-            <div key={m.name} className="ledger-row flex items-center justify-between gap-3 py-3">
+          {queue.slice(0, visible).map((m) => (
+            <div key={m.merchant} className="ledger-row flex flex-wrap items-center justify-between gap-3 py-3">
               <div className="flex min-w-0 items-center gap-3">
-                <MerchantTile merchant={m.name} category={m.category} />
+                <MerchantTile merchant={m.merchant} category={tileCategory(m)} />
                 <div className="min-w-0">
-                  <div className="truncate text-body">{m.name}</div>
+                  <div className="truncate text-body">{m.merchant}</div>
                   <div className="mt-0.5 text-caption text-muted-foreground">{m.detail}</div>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button variant="outline" size="sm" onClick={() => review(m.name, "kept")}>Keep</Button>
-                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => review(m.name, "dismissed")}>Dismiss</Button>
+              <div className="flex shrink-0 flex-wrap items-center gap-1">
+                <select
+                  aria-label={`Category for ${m.merchant}`}
+                  className={sel}
+                  value={choices[m.merchant] ?? ""}
+                  onChange={(e) => setChoices((prev) => ({ ...prev, [m.merchant]: e.target.value }))}
+                >
+                  <option value="" disabled>Choose a category</option>
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <Button variant="outline" size="sm" disabled={!choices[m.merchant]} onClick={() => keep(m)}>Keep</Button>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => dismiss(m)}>Dismiss</Button>
               </div>
             </div>
           ))}
+          {visible < queue.length && (
+            <div className="py-3 text-center">
+              <Button variant="outline" size="sm" onClick={() => setVisible((v) => v + PAGE_SIZE)}>Show more</Button>
+            </div>
+          )}
+          {loaded && total > items.length && queue.length > 0 && (
+            <p className="py-2 text-caption text-muted-foreground">{total - items.length} more {total - items.length === 1 ? "merchant is" : "merchants are"} waiting beyond the {items.length} shown here.</p>
+          )}
           {handled.map((m) => (
-            <div key={m.name} className="ledger-row flex items-center justify-between gap-3 py-3">
+            <div key={m.merchant} className="ledger-row flex items-center justify-between gap-3 py-3">
               <div className="flex min-w-0 items-center gap-3">
-                <MerchantTile merchant={m.name} category={m.category} />
+                <MerchantTile merchant={m.merchant} category={tileCategory(m)} />
                 <div className="min-w-0">
-                  <div className="truncate text-body">{m.name}</div>
+                  <div className="truncate text-body">{m.merchant}</div>
                   <div className="mt-0.5 text-caption text-muted-foreground">{m.detail}</div>
                 </div>
               </div>
-              <Chip tone={status[m.name] === "kept" ? "good" : "neutral"}>{status[m.name] === "kept" ? "Kept" : "Dismissed"}</Chip>
+              <Chip tone={status[m.merchant] === "kept" ? "good" : "neutral"}>{status[m.merchant] === "kept" ? "Kept" : "Dismissed"}</Chip>
             </div>
           ))}
-          {handled.length === MERCHANT_REVIEW.length && (
+          {loaded && queue.length === 0 && total > items.length && (
+            <p className="py-2 text-caption text-muted-foreground">That's all {items.length} we can show right now — {total - items.length} more {total - items.length === 1 ? "merchant is" : "merchants are"} still waiting beyond that.</p>
+          )}
+          {loaded && queue.length === 0 && total <= items.length && (
             <p className="py-2 text-caption text-muted-foreground">That's the queue for now — new merchants appear here when we first see them.</p>
           )}
         </div>

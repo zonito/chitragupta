@@ -34,12 +34,19 @@ describe("GET /api/review-queue honesty", () => {
     expect(res?.status).toBe(200);
     const body = (await res!.json()) as {
       ok: boolean;
-      queue: unknown[];
+      queue: { merchant: string; detail: string; suggestion: string | null }[];
       total: number;
     };
     expect(body.ok).toBe(true);
     expect(body.queue).toHaveLength(200);
     expect(body.total).toBe(250);
     expect(body.total).toBeGreaterThan(body.queue.length);
+    // Every item carries the plain-English detail, and a merchant with
+    // no explicit/memory category resolves only to the movement
+    // fallback, so its suggestion is null rather than a forced label.
+    for (const item of body.queue) {
+      expect(item.detail).toMatch(/^£1\.00 · 1 charge · last 5 Oct$/);
+      expect(item.suggestion).toBeNull();
+    }
   });
 });

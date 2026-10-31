@@ -6,6 +6,7 @@ import {
   type IngestResult,
 } from "./ingest/ingest";
 import {
+  dismissMerchant,
   reviewQueue,
   reviewQueueCount,
   setMerchant,
@@ -124,6 +125,7 @@ export async function handleChitraguptaApi(
     path === "/api/ingest/status" ||
     path === "/api/ingest/run" ||
     path === "/api/review-queue" ||
+    path === "/api/review-queue/dismiss" ||
     path === "/api/merchants" ||
     path === "/api/digest" ||
     path === "/api/classify/run" ||
@@ -212,6 +214,24 @@ async function routeWithDb(
       queue: reviewQueue(db),
       total: reviewQueueCount(db),
     });
+  }
+
+  if (path === "/api/review-queue/dismiss" && request.method === "POST") {
+    let body: { merchant?: string };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const merchant = body.merchant?.trim();
+    if (!merchant) {
+      return json({ ok: false, error: "merchant is required" }, 400);
+    }
+    // A dismissal only records the dismissal: it writes no merchant
+    // memory, touches no transaction and recomputes no aggregate, so
+    // the merchant simply stops being offered for review.
+    dismissMerchant(db, merchant);
+    return json({ ok: true });
   }
 
   if (path === "/api/classify/run" && request.method === "GET") {
