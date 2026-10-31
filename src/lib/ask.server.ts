@@ -68,10 +68,11 @@ const ASK_SYSTEM = [
 const PLANNER_SYSTEM = [
   "You are the query planner for Chitragupta, a household expense tracker.",
   "Convert the user's question into ONE JSON object and reply with ONLY that JSON object — no prose, no code fences, no explanation.",
-  'Shape: {"kind":"total"|"latest"|"records","category":<category|null>,"query":<string|null>,"from":"YYYY-MM-DD"|null,"to":"YYYY-MM-DD"|null,"month":"YYYY-MM"|null}',
+  'Shape: {"kind":"total"|"latest"|"records"|"top","category":<category|null>,"query":<string|null>,"from":"YYYY-MM-DD"|null,"to":"YYYY-MM-DD"|null,"month":"YYYY-MM"|null,"limit":<number|null>}',
   `- category must be one of ${JSON.stringify(CATEGORIES)} when the question is about that spending category, else null.`,
   '- kind "total": the user wants amounts summed — how much, a total, the cost of a category, merchant or period.',
   '- kind "latest": the user asks when something last happened, or for the most recent matching record.',
+  '- kind "top": the user asks for the biggest / top / largest N transactions (a ranked list, not a sum). Set "limit" to N when the question states one, else null. For other kinds "limit" is null.',
   '- kind "records": anything else — find or list the matching records.',
   '- query: the merchant or place named in the question (for example "Ocado", "India", "Mahavir Sweet Mart"), else null. Never invent a merchant or category the question does not imply.',
   '- Periods: "this week" is the Monday-to-Sunday week containing today (use from/to); "last week" is the Monday-to-Sunday week before it (from/to); "this year" is 1 January of this year to today (from/to); "last 30 days" is the 30 days ending today (from/to); "this month", "last month" and a named month are that single calendar month (use month; a named month is its most recent occurrence not after today). No period in the question: from, to and month are all null.',
@@ -87,7 +88,7 @@ export interface AskResult {
 
 /** A validated query plan, from the model planner. */
 export interface AskPlan {
-  kind: "total" | "latest" | "records";
+  kind: "total" | "latest" | "records" | "top";
   category: string | null;
   query: string | null;
   /** Inclusive range start, YYYY-MM-DD. */
@@ -96,6 +97,8 @@ export interface AskPlan {
   to: string | null;
   /** Single calendar month, YYYY-MM. */
   month: string | null;
+  /** Rows to list for a "top" plan (1–25, default 5). */
+  limit?: number;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -133,9 +136,34 @@ export function parseAskPlan(text: string): AskPlan | null {
     from: rawFrom,
     to: rawTo,
     month: rawMonth,
+    limit: rawLimit,
   } = parsed as Record<string, unknown>;
-  if (kind !== "total" && kind !== "latest" && kind !== "records") {
+  if (
+    kind !== "total" &&
+    kind !== "latest" &&
+    kind !== "records" &&
+    kind !== "top"
+  ) {
     return null;
+  }
+  // "limit" belongs to "top" plans alone: a stated value must be a
+  // real number (never a string or fraction), clamped to 1–25, and an
+  // absent one means the default 5. Other kinds ignore it entirely,
+  // so their parsed shape is unchanged.
+  let limit: number | undefined;
+  if (kind === "top") {
+    if (rawLimit !== null && rawLimit !== undefined) {
+      if (
+        typeof rawLimit !== "number" ||
+        !Number.isFinite(rawLimit) ||
+        !Number.isInteger(rawLimit)
+      ) {
+        return null;
+      }
+      limit = Math.min(25, Math.max(1, rawLimit));
+    } else {
+      limit = 5;
+    }
   }
   let category: string | null = null;
   if (rawCategory !== null && rawCategory !== undefined) {
@@ -175,7 +203,15 @@ export function parseAskPlan(text: string): AskPlan | null {
   }
   // A range and a month cannot both scope the pull; the range wins.
   if (month && (from || to)) month = null;
-  return { kind, category, query, from, to, month };
+  return {
+    kind,
+    category,
+    query,
+    from,
+    to,
+    month,
+    ...(limit !== undefined ? { limit } : {}),
+  };
 }
 
 const CATEGORY_SQL = `COALESCE(t.category, m.category,
@@ -286,6 +322,42 @@ function currentMonthKey(db: Database.Database): string {
   return row.m ?? "";
 }
 
+/**
+ * Whether month_aggregates record any GBP spend for this view in the
+ * scoped period. The zero-match guard's ground truth: aggregates are
+ * built from the same transactions, so spend there but zero matches
+ * in a computation means the plan's filter — not the period — is what
+ * matched nothing. An empty aggregates table (a store ingest has not
+ * built yet) reads as "no spend", so the guard simply never fires.
+ */
+function periodHasSpend(
+  db: Database.Database,
+  person: Person,
+  scope: { month: string | null; from: string | null; to: string | null },
+): boolean {
+  if (scope.month) {
+    const row = db
+      .prepare(
+        `SELECT COALESCE(SUM(spend_minor), 0) AS s FROM month_aggregates
+         WHERE person = ? AND year_month = ? AND currency = 'GBP'`,
+      )
+      .get(person, scope.month) as { s: number };
+    return row.s > 0;
+  }
+  if (scope.from && scope.to) {
+    const row = db
+      .prepare(
+        `SELECT COALESCE(SUM(spend_minor), 0) AS s FROM month_aggregates
+         WHERE person = ? AND year_month BETWEEN ? AND ? AND currency = 'GBP'`,
+      )
+      .get(person, scope.from.slice(0, 7), scope.to.slice(0, 7)) as {
+      s: number;
+    };
+    return row.s > 0;
+  }
+  return false;
+}
+
 function monthName(key: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     month: "long",
@@ -320,6 +392,7 @@ function buildFigures(
   latest: AskFigures["latest"],
   month: string | null,
   truncated: boolean,
+  topList?: NonNullable<AskFigures["top"]>,
 ): AskFigures {
   const total = pennies(
     spend.reduce((s, t) => s + shareOf(t, amountPerson), 0),
@@ -336,14 +409,17 @@ function buildFigures(
     total,
     count: spend.length,
     latest,
+    // A top answer's figures describe the listed rows alone; a
+    // per-month split of a ranking would read as period totals.
     perMonth:
-      byMonth.size > 1
-        ? [...byMonth.entries()]
+      topList || byMonth.size <= 1
+        ? null
+        : [...byMonth.entries()]
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([m, v]) => ({ month: m, total: v.total, count: v.count }))
-        : null,
+            .map(([m, v]) => ({ month: m, total: v.total, count: v.count })),
     month,
     truncated,
+    ...(topList ? { top: topList } : {}),
   };
 }
 
@@ -404,6 +480,52 @@ function directComputation(
       ? `No ${label} spending${periodPhrase} — the total is ${gbp(0)}.`
       : `${label}${periodPhrase}: ${gbp(total)} across ${spend.length} ${plural(spend.length, "transaction", "transactions")}.`;
   return { spend, matched: visible, deterministic };
+}
+
+/**
+ * The top-N path: rank a pulled set's spend by the person's share,
+ * biggest first (ties: newest first, then merchant, then id, so the
+ * order is fully deterministic), and list the first N. The figures
+ * describe the listed rows alone — their sum is the answer's total,
+ * never the whole period's.
+ */
+function topComputation(
+  txns: Txn[],
+  person: Person,
+  n: number,
+  periodPhrase: string,
+): { set: ComputedSet; topList: NonNullable<AskFigures["top"]> } {
+  const visible = txns.filter((t) => shareOf(t, person) > 0);
+  const spend = visible.filter((t) => t.kind === "spend");
+  const ranked = [...spend].sort(
+    (a, b) =>
+      shareOf(b, person) - shareOf(a, person) ||
+      b.date.localeCompare(a.date) ||
+      a.merchant.localeCompare(b.merchant) ||
+      a.id.localeCompare(b.id),
+  );
+  const listed = ranked.slice(0, Math.max(1, n));
+  const topList = listed.map((t) => ({
+    merchant: t.merchant,
+    date: dayName(t.date),
+    amount: pennies(shareOf(t, person)),
+  }));
+  const total = listed.reduce((s, t) => s + shareOf(t, person), 0);
+  const deterministic =
+    listed.length === 0
+      ? `No spending${periodPhrase} — there is nothing to rank.`
+      : [
+          `Your ${listed.length} biggest ${plural(listed.length, "transaction", "transactions")}${periodPhrase}:`,
+          ...listed.map(
+            (t) =>
+              `${dayName(t.date)} · ${t.merchant} — ${gbp(pennies(shareOf(t, person)))}`,
+          ),
+          `Together: ${gbp(total)}.`,
+        ].join("\n");
+  return {
+    set: { spend: listed, matched: listed, deterministic },
+    topList,
+  };
 }
 
 /**
@@ -521,6 +643,17 @@ export async function answerAsk(
   let deterministic = "";
   let figuresMonth: string | null = null;
   let scopeLine: string | null = null;
+  let topList: NonNullable<AskFigures["top"]> | undefined;
+  let topN = 5;
+  // The zero-match guard's view of this answer: its shape, and the
+  // period scope the pull actually used. Only total/top shapes over a
+  // known period can be guarded — records/latest empties are honest
+  // "not recorded here" answers, and the worked examples carry their
+  // own empty copy.
+  let shape: "total" | "latest" | "records" | "top" | "example" = "records";
+  let scopeMonth: string | null = null;
+  let scopeFrom: string | null = null;
+  let scopeTo: string | null = null;
 
   const periodPhrase = (month: string | null, from: string | null, to: string | null) =>
     month
@@ -551,12 +684,24 @@ export async function answerAsk(
     const txns = toTxns(pull.rows);
     truncated = pull.truncated;
     figuresMonth = modelPlan.month;
+    scopeMonth = modelPlan.month;
+    scopeFrom = modelPlan.from;
+    scopeTo = modelPlan.to;
     const phrase = periodPhrase(modelPlan.month, modelPlan.from, modelPlan.to);
     if (phrase) scopeLine = `The figures cover${phrase}.`;
     const searchable =
       modelPlan.kind === "records" &&
       (modelPlan.query !== null || det.terms.length > 0);
-    if (searchable) {
+    if (modelPlan.kind === "top") {
+      shape = "top";
+      topN = modelPlan.limit ?? 5;
+      const computed = topComputation(txns, person, topN, phrase);
+      spend = computed.set.spend;
+      matched = computed.set.matched;
+      deterministic = computed.set.deterministic;
+      topList = computed.topList;
+    } else if (searchable) {
+      shape = "records";
       const scoped =
         modelPlan.query ??
         (det.terms.length > 0 ? det.terms.join(" ") : question);
@@ -565,6 +710,7 @@ export async function answerAsk(
       matched = computed.matched;
       deterministic = computed.deterministic;
     } else {
+      shape = modelPlan.kind === "latest" ? "latest" : "total";
       const label =
         modelPlan.category ??
         (modelPlan.query ? `Spending matching "${modelPlan.query}"` : "Total spend");
@@ -580,7 +726,33 @@ export async function answerAsk(
       matched = computed.matched;
       deterministic = computed.deterministic;
     }
+  } else if (det.top !== undefined) {
+    // A list question with no gateway (or a discarded plan): rank the
+    // period pull directly. Period and category come from the
+    // deterministic parser; the ranking words themselves never become
+    // a text search.
+    shape = "top";
+    topN = det.top;
+    scopeMonth = det.month ?? null;
+    scopeFrom = det.from ?? null;
+    scopeTo = det.to ?? null;
+    const pull = pullComplete(db, {
+      ...(det.month ? { month: det.month } : {}),
+      ...(det.from && det.to ? { from: det.from, to: det.to } : {}),
+      ...(det.category ? { category: det.category } : {}),
+    });
+    const txns = toTxns(pull.rows);
+    truncated = pull.truncated;
+    figuresMonth = det.month ?? null;
+    const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
+    if (phrase) scopeLine = `The figures cover${phrase}.`;
+    const computed = topComputation(txns, person, topN, phrase);
+    spend = computed.set.spend;
+    matched = computed.set.matched;
+    deterministic = computed.set.deterministic;
+    topList = computed.topList;
   } else if (isOcadoExample || isTripExample) {
+    shape = "example";
     const isOcado = isOcadoExample;
     const pull = pullComplete(db, {
       ...(current ? { month: current } : {}),
@@ -633,6 +805,10 @@ export async function answerAsk(
       const txns = toTxns(pull.rows);
       truncated = pull.truncated;
       figuresMonth = det.month ?? null;
+      shape = "total";
+      scopeMonth = det.month ?? null;
+      scopeFrom = det.from ?? null;
+      scopeTo = det.to ?? null;
       const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
       const computed = directComputation(txns, person, "total", det.category, phrase, truncated);
@@ -645,6 +821,9 @@ export async function answerAsk(
       const pull = pullComplete(db, { from: det.from, to: det.to });
       const txns = toTxns(pull.rows);
       truncated = pull.truncated;
+      shape = "total";
+      scopeFrom = det.from;
+      scopeTo = det.to;
       const phrase = periodPhrase(null, det.from, det.to);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
       const computed = directComputation(txns, person, "total", "Total spend", phrase, truncated);
@@ -665,6 +844,10 @@ export async function answerAsk(
       truncated = pull.truncated;
       figuresMonth = det.month ?? null;
       const monthOnly = Boolean(det.month && det.terms.length === 0 && !det.category);
+      shape = monthOnly ? "total" : "records";
+      scopeMonth = det.month ?? null;
+      scopeFrom = det.from ?? null;
+      scopeTo = det.to ?? null;
       if (monthOnly) {
         matched = txns.filter((t) => shareOf(t, person) > 0);
         spend = matched.filter((t) => t.kind === "spend");
@@ -691,12 +874,80 @@ export async function answerAsk(
     }
   }
 
+  // Zero-match guard: a total/top computation that matched nothing in
+  // a period month_aggregates show HAS spend for this view means the
+  // plan's filter broke — not that the period was empty. Presenting
+  // that £0.00 as the answer is the one unacceptable output (it is
+  // exactly what "Top 5 transactions for this month" produced when
+  // the planner mapped the list question onto a filtered total).
+  // Recompute over the period's UNFILTERED pull — a plain total, or
+  // the unfiltered ranking for a list question — and say plainly that
+  // the specific search matched nothing. Records/latest shapes never
+  // reach here: their empty answers are honest "not recorded" claims.
+  if (
+    (shape === "total" || shape === "top") &&
+    spend.length === 0 &&
+    matched.length === 0 &&
+    (scopeMonth !== null || (scopeFrom !== null && scopeTo !== null)) &&
+    periodHasSpend(db, person, {
+      month: scopeMonth,
+      from: scopeFrom,
+      to: scopeTo,
+    })
+  ) {
+    const pull = pullComplete(db, {
+      ...(scopeMonth ? { month: scopeMonth } : {}),
+      ...(scopeFrom && scopeTo ? { from: scopeFrom, to: scopeTo } : {}),
+    });
+    const txns = toTxns(pull.rows);
+    truncated = pull.truncated;
+    figuresMonth = scopeMonth;
+    const phrase = periodPhrase(scopeMonth, scopeFrom, scopeTo);
+    if (phrase) scopeLine = `The figures cover${phrase}.`;
+    if (shape === "top") {
+      const computed = topComputation(txns, person, topN, phrase);
+      if (computed.set.spend.length > 0) {
+        spend = computed.set.spend;
+        matched = computed.set.matched;
+        topList = computed.topList;
+        deterministic = `Nothing matched that specific search${phrase}; the unfiltered ranking is:\n${computed.set.deterministic}`;
+      }
+    } else {
+      const computed = directComputation(
+        txns,
+        person,
+        "total",
+        "Total spend",
+        phrase,
+        truncated,
+      );
+      if (computed.spend.length > 0) {
+        const total = computed.spend.reduce(
+          (s, t) => s + shareOf(t, person),
+          0,
+        );
+        spend = computed.spend;
+        matched = computed.matched;
+        deterministic = `Nothing matched that specific search${phrase}. Total spend${phrase} was ${gbp(total)} across ${computed.spend.length} ${plural(computed.spend.length, "transaction", "transactions")}.`;
+      }
+    }
+    if (spend.length === 0) {
+      // Aggregates claim spend the pull cannot see: distrust both
+      // rather than present either as fact, and say the question
+      // could not be interpreted.
+      deterministic =
+        "I couldn't interpret that question against your records. Try naming a merchant, a category or a month.";
+      topList = undefined;
+    }
+  }
+
   const figures = buildFigures(
     spend,
     amountPerson,
     matched.length > 0 ? latestOf(matched, amountPerson) : null,
     figuresMonth,
     truncated,
+    topList,
   );
 
   // Analyse: one gateway call. The model sees the computed figures plus
@@ -730,6 +981,14 @@ export async function answerAsk(
     ...(figures.truncated
       ? [
           `- Note: the matching set exceeded the safety ceiling, so these totals cover only part of it.`,
+        ]
+      : []),
+    ...(figures.top
+      ? [
+          `- This answer is a ranked list: the total above is the sum of the listed transactions only, not a period total.`,
+          `- Largest first: ${figures.top
+            .map((t) => `${t.date} · ${t.merchant} · ${gbp(t.amount)}`)
+            .join("; ")}`,
         ]
       : []),
     `Representative transactions (most recent first):`,

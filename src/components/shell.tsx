@@ -460,6 +460,16 @@ export function AskButton() {
               <div className="num mt-4 text-title font-semibold">{gbp(displayAi.figures.total)}</div>
               <p className="text-caption leading-relaxed text-muted-foreground">Across {displayAi.figures.count} matching {displayAi.figures.count === 1 ? "transaction" : "transactions"}{displayAi.figures.month ? ` · ${monthOptions().find((m) => m.key === displayAi.figures.month)?.label ?? displayAi.figures.month}` : ""}.</p>
               {displayAi.figures.latest && <p className="num mt-2 text-body leading-relaxed">Latest: {displayAi.figures.latest.merchant}, {displayAi.figures.latest.date} — {gbp(displayAi.figures.latest.amount)}.</p>}
+              {displayAi.figures.top && (
+                <div className="mt-3">
+                  {displayAi.figures.top.map((row, i) => (
+                    <div key={`${row.date}-${row.merchant}-${i}`} className="ledger-row flex justify-between gap-3 py-2 text-body">
+                      <span>{row.date} · {row.merchant}</span>
+                      <span className="num shrink-0">{gbp(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {displayAi.figures.perMonth && (
                 <div className="mt-3">
                   {displayAi.figures.perMonth.map((m) => (

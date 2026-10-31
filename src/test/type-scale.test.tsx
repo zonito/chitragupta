@@ -29,9 +29,9 @@ describe("shell type scale (class pins)", () => {
     expect(shell).not.toContain("rounded-xl px-3 py-2 text-sm");
   });
 
-  it("all three Ask ledger row shapes are text-body, not text-sm", () => {
+  it("all four Ask ledger row shapes are text-body, not text-sm", () => {
     const rows = shell.match(/ledger-row flex justify-between gap-3 py-2 text-(sm|body)/g) ?? [];
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows.every((r) => r.endsWith("text-body"))).toBe(true);
   });
 });

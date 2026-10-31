@@ -67,6 +67,12 @@ export interface AskFigures {
   month: string | null;
   /** True when the match pull hit the row cap, so totals are a floor. */
   truncated: boolean;
+  /**
+   * The largest matching spend transactions, biggest first — present
+   * only for "top" answers, where total/count describe this listed set
+   * alone, never the whole period.
+   */
+  top?: { merchant: string; date: string; amount: number }[] | null;
 }
 
 export interface AskQueryPlan {
@@ -82,6 +88,11 @@ export interface AskQueryPlan {
   apiQuery: string;
   /** Value for the API's category parameter, when a term names one. */
   category?: string;
+  /**
+   * How many transactions a "top / biggest / largest N" question asks
+   * to list (1–25), when the question has that list shape.
+   */
+  top?: number;
 }
 
 // A stated 4-digit year, 1900–2099. Years are period shape, never
@@ -118,6 +129,42 @@ function standaloneYear(lower: string, hasOtherContent: boolean): string | undef
     }
   }
   return undefined;
+}
+
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+};
+const TOP_NOUN = "(?:transactions?|payments?|purchases?|expenses?|spends?)";
+
+/**
+ * The list shape — "top 5 transactions", "biggest 3 payments in
+ * September", "5 largest purchases": a ranking word sitting next to a
+ * transaction noun. "Top up" and "biggest category" are not lists and
+ * never match. Returns how many rows to list: the stated count (digits
+ * or a number word), 1 for a singular noun with no count ("my biggest
+ * payment"), else the default 5; clamped to 1–25. Undefined when the
+ * question has no list shape.
+ */
+function topCount(lower: string): number | undefined {
+  if (/\bcategories\b|\bcategory\b/.test(lower)) return undefined;
+  const num = "(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)";
+  // The count-first shape ("3 biggest transactions") is tried first:
+  // tried second, the ranking-first shape would match at "biggest"
+  // and silently drop the stated count for the default 5.
+  const match =
+    new RegExp(`\\b${num}\\s+(?:biggest|largest)\\s+(${TOP_NOUN})\\b`).exec(
+      lower,
+    ) ??
+    new RegExp(
+      `\\b(?:top|biggest|largest)\\s+(?:${num}\\s+)?(${TOP_NOUN})\\b`,
+    ).exec(lower);
+  if (!match) return undefined;
+  const raw = match[1];
+  let n: number;
+  if (raw) n = /^\d+$/.test(raw) ? Number(raw) : NUMBER_WORDS[raw]!;
+  else n = match[2]!.endsWith("s") ? 5 : 1;
+  return Math.min(25, Math.max(1, n));
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -247,13 +294,23 @@ export function parseAskQuery(
       !periodWords.has(term) &&
       !isYearToken(term),
   );
-  const category =
+  const top = topCount(lower);
+  let category =
     terms.length === 1 ? SINGLE_WORD_CATEGORIES[terms[0]!] : undefined;
+  if (top !== undefined && !category) {
+    // A category word inside a list question ("top 5 grocery
+    // transactions") scopes the ranking, even among other terms.
+    const named = terms.filter((t) => SINGLE_WORD_CATEGORIES[t]);
+    if (named.length === 1) category = SINGLE_WORD_CATEGORIES[named[0]!];
+  }
   return {
     ...(month ? { month } : {}),
     ...(from && to ? { from, to } : {}),
     terms,
-    apiQuery: category ? "" : (terms[0] ?? ""),
+    // A list question is computed over the full period pull, never a
+    // text search for its ranking words.
+    apiQuery: category || top !== undefined ? "" : (terms[0] ?? ""),
     ...(category ? { category } : {}),
+    ...(top !== undefined ? { top } : {}),
   };
 }
