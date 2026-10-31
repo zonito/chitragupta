@@ -132,6 +132,23 @@ export function setMerchant(
   );
 }
 
+/**
+ * Labels that are not merchants at all and must never be sent to AI
+ * classification or shown as review items, however they move. Kept
+ * minimal and evidenced on the real data: "Investing money" (spend
+ * ×63, an internal investment transfer), "Closing investment"
+ * (income ×43), cashback credits and their reversals (Pro Cashback
+ * income ×46, Pro Cashback Reversal spend ×4, Cashback, TOPCASHBACK),
+ * and "Fidelity Investments" (spend ×5, an investment platform move,
+ * not household spending).
+ */
+export const NEVER_CLASSIFY_PATTERNS: RegExp[] = [
+  /^investing money$/i,
+  /^closing investment$/i,
+  /cashback/i,
+  /^fidelity investments$/i,
+];
+
 type UnknownMerchantRow = { merchant: string; n: number; spend_n: number };
 
 /**
@@ -139,7 +156,8 @@ type UnknownMerchantRow = { merchant: string; n: number; spend_n: number };
  * with spend/income rows that is not in merchant_memory, ordered by
  * row count. reviewQueue caps this list for display and
  * reviewQueueCount counts it in full — both derive from this one
- * query so the two can never drift apart.
+ * query plus the one qualification filter below, so the two can
+ * never drift apart.
  */
 function unknownMerchantRows(db: Database.Database): UnknownMerchantRow[] {
   return db
@@ -154,15 +172,35 @@ function unknownMerchantRows(db: Database.Database): UnknownMerchantRow[] {
     .all() as UnknownMerchantRow[];
 }
 
+/**
+ * A merchant qualifies for review only when it is a real spending
+ * label: it must have at least one 'spend' transaction (pure-income
+ * and income+internal labels — salary senders, deposit labels,
+ * cashback credits, investment payouts — are not merchants to
+ * classify), and it must not match the never-classify list. The
+ * count a qualifying merchant reports stays its full spend+income
+ * row count.
+ */
+function qualifiesForReview(row: UnknownMerchantRow): boolean {
+  if (row.spend_n <= 0) return false;
+  return !NEVER_CLASSIFY_PATTERNS.some((p) => p.test(row.merchant));
+}
+
+function qualifiedUnknownMerchantRows(
+  db: Database.Database,
+): UnknownMerchantRow[] {
+  return unknownMerchantRows(db).filter(qualifiesForReview);
+}
+
 /** The TRUE number of distinct unknown merchants (never capped). */
 export function reviewQueueCount(db: Database.Database): number {
-  return unknownMerchantRows(db).length;
+  return qualifiedUnknownMerchantRows(db).length;
 }
 
 export function reviewQueue(
   db: Database.Database,
 ): { merchant: string; count: number; examples: string[] }[] {
-  const rows = unknownMerchantRows(db).slice(0, 200);
+  const rows = qualifiedUnknownMerchantRows(db).slice(0, 200);
   return rows.map((r) => {
     const examples = db
       .prepare(

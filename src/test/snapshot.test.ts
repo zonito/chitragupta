@@ -8,7 +8,7 @@ import { buildSnapshot } from "@/lib/snapshot.server";
 /**
  * Regression tests for the UI snapshot builder against real-store quirks:
  * some stored effective_date values carry a full "YYYY-MM-DD HH:MM:SS"
- * timestamp, and the review queue can hold merchants with no card payments.
+ * timestamp, and the store can hold merchants with no card payments.
  * Both used to throw inside the builder and silently empty every screen.
  */
 describe("snapshot builder", () => {
@@ -22,7 +22,7 @@ describe("snapshot builder", () => {
     else process.env["CHITRAGUPTA_STORE_DIR"] = prevEnv;
   });
 
-  it("normalises timestamp-shaped dates and survives a spend-free review merchant", () => {
+  it("normalises timestamp-shaped dates and survives a spend-free merchant", () => {
     dir = mkdtempSync(join(tmpdir(), "chitragupta-snap-"));
     const db = openStore(dir);
     const insert = db.prepare(
@@ -32,7 +32,7 @@ describe("snapshot builder", () => {
     );
     insert.run("a", "2026-10-05 13:58:16", "2026-10", "Ocado", "Ocado", -4250, "spend");
     insert.run("b", "2026-10-06", "2026-10", "Ocado", "Ocado", -1000, "spend");
-    // Income-only merchant: lands in the review queue with no spend rows.
+    // Income-only merchant: present in the store with no spend rows.
     insert.run("c", "2026-10-07", "2026-10", "Mystery Sender", "Mystery Sender", 5000, "income");
     db.prepare(
       `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added) VALUES ('Main', '2026-10-30T09:00:00.000Z', 3, 3)`,
@@ -46,8 +46,10 @@ describe("snapshot builder", () => {
     const ocado = snap.txns.filter((t) => t.merchant === "Ocado");
     expect(ocado).toHaveLength(2);
     expect(ocado.every((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.date))).toBe(true);
+    // Since B2/G12 a pure-income label never qualifies for the review
+    // queue, so it is not a review item; the builder still survives it.
     const review = snap.merchantReview.find((m) => m.name === "Mystery Sender");
-    expect(review?.detail).toContain("No card payments");
+    expect(review).toBeUndefined();
     expect(snap.accounts[0]?.name).toBe("Revolut Main");
   });
 
