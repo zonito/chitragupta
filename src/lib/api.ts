@@ -42,6 +42,7 @@ import {
   type SettingsPatch,
 } from "./ingest/settings";
 import { answerAsk } from "./ask.server";
+import { parseAmountQuery } from "./amount-search";
 import { coachJevOpinion, subJevAsk, subJevCached } from "./jev.server";
 import { canonicalMerchant, type SubscriptionOverrideMode } from "./subscriptions";
 
@@ -1126,9 +1127,30 @@ async function routeWithDb(
     if (q) {
       // Search covers the user's own notes too (txn_notes): a word
       // that appears only in a note finds its transaction, exactly as
-      // Activity's client-side filter does for snapshot months.
-      where.push("(t.merchant LIKE ? OR t.description LIKE ? OR n.note LIKE ?)");
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+      // Activity's client-side filter does for snapshot months. A
+      // numeric query also matches amounts (shared amount-search lib,
+      // identical semantics to the client): exact absolute-minor
+      // equality, or the canonical two-decimal string starting with
+      // the query text ("128" finds a £128.04 row and a £1,284.00
+      // row; printf gives the same string SQLite-side).
+      const amountQuery = parseAmountQuery(q);
+      if (amountQuery) {
+        where.push(
+          "(t.merchant LIKE ? OR t.description LIKE ? OR n.note LIKE ?" +
+            " OR ABS(t.amount_minor) = ?" +
+            " OR printf('%.2f', ABS(t.amount_minor) / 100.0) LIKE ?)",
+        );
+        params.push(
+          `%${q}%`,
+          `%${q}%`,
+          `%${q}%`,
+          amountQuery.minor,
+          `${amountQuery.text}%`,
+        );
+      } else {
+        where.push("(t.merchant LIKE ? OR t.description LIKE ? OR n.note LIKE ?)");
+        params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+      }
     }
     if (category) {
       // Filter in SQL, before LIMIT: a JS post-filter over a limited

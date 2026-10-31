@@ -8,6 +8,7 @@ import { MerchantTile, AccountTile } from "@/components/tiles";
 import { ACCOUNTS, ALL_TXNS, SUBS, SUB_OVERRIDES, categoryNames, docFor, docName, shareOf, gbp, dayLabel, dateLabel, ownerName, personLabel, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 import { PERIOD_PRESETS, parsePreset, presetValue, rangeForPreset } from "@/lib/periods";
 import { fetchApiTransactions } from "@/lib/txn-map";
+import { amountMatchesQuery, parseAmountQuery } from "@/lib/amount-search";
 import { canonicalMerchant } from "@/lib/subscriptions";
 import { postSubscriptionOverride, type SubscriptionOverrideMode } from "@/lib/subscription-overrides";
 
@@ -204,6 +205,9 @@ export function Activity() {
   // never silently narrow (or empty) that person's list.
   const whoActive = person === "household" ? who : "all";
 
+  // A numeric search query is also an amount query (see amount-search).
+  const amountQuery = useMemo(() => parseAmountQuery(q), [q]);
+
   const list = useMemo(
     () =>
       scopedMonthTxns
@@ -212,13 +216,16 @@ export function Activity() {
         .filter((t) => cat === "all" || t.category === cat)
         // Search matches the merchant, the statement description and
         // the user's own note — the same fields /api/transactions'
-        // q covers for fetched months.
+        // q covers for fetched months — plus, for a numeric query,
+        // the amount (exact or displayed-string prefix; shared
+        // amount-search lib, identical on both paths).
         .filter((t) => {
           const needle = q.toLowerCase();
           return (
             t.merchant.toLowerCase().includes(needle) ||
             (t.note ?? "").toLowerCase().includes(needle) ||
-            (t.userNote ?? "").toLowerCase().includes(needle)
+            (t.userNote ?? "").toLowerCase().includes(needle) ||
+            (amountQuery !== null && amountMatchesQuery(t.amount, amountQuery))
           );
         })
         // Newest first by full date. The sort is stable, so rows within
@@ -226,7 +233,7 @@ export function Activity() {
         // (snapshot builder and /api/transactions) produce their rows
         // newest-first within the day, so the two agree.
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [person, q, whoActive, cat, scopedMonthTxns],
+    [person, q, whoActive, cat, scopedMonthTxns, amountQuery],
   );
   // The listed-total summary: sums over the very rows the list renders
   // (post person view, period, search, category and account scope) —
