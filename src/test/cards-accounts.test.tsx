@@ -122,9 +122,9 @@ describe("Cards Accounts section", () => {
     );
     expect(await screen.findByText("Accounts")).toBeTruthy();
     // Owner group headings.
-    expect(screen.getByRole("heading", { name: "Zonito" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Nikhila" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Joint" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "👨 Zonito" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "👩 Nikhila" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "🤝 Joint" })).toBeTruthy();
     // Balance from the snapshot's selected run for Zonito's Pro.
     expect(screen.getByText("£342.10")).toBeTruthy();
     // This month's figures from /api/accounts, in the store's month.

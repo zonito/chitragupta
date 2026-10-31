@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Upload } from "lucide-react";
 import { usePerson, PageTitle, Panel, Chip, meta } from "@/components/shell";
-import { ACCOUNTS, gbp, ownerName } from "@/lib/data";
+import { ACCOUNTS, gbp, personLabel } from "@/lib/data";
 import { AccountTile } from "@/components/tiles";
 
 export const Route = createFileRoute("/import")({
@@ -190,7 +190,7 @@ export function Import() {
                 <AccountTile account={a.name} />
                 <div className="min-w-0">
                 <div className="text-body">{a.name}</div>
-                <div className="text-caption text-muted-foreground">{ownerName(a.owner)} · last upload {a.last} · {a.added} added</div>
+                <div className="text-caption text-muted-foreground">{personLabel(a.owner)} · last upload {a.last} · {a.added} added</div>
                 {status && status.balanceMinor !== null && status.balanceMinor !== undefined && (
                   <div className="num text-caption text-muted-foreground">Balance {formatBalance(status.balanceMinor, status.currency)}</div>
                 )}

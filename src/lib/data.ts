@@ -478,6 +478,26 @@ export const dateLabel = (iso: string) => {
 
 export const ownerName = (o: Owner) => (o === "joint" ? "Joint" : o === "zonito" ? "Zonito" : "Nikhila");
 
+/**
+ * The one place person/owner labels get their emoji: chrome and
+ * labelling only, applied at render. 🏠 All (household) · 👨 Zonito ·
+ * 👩 Nikhila · 🤝 Joint. Prose sentences keep using ownerName, and
+ * data-bound strings (statement labels, store account names, API
+ * payloads) never carry emoji.
+ */
+export const PERSON_CHIP: Record<Person | Owner, { emoji: string; label: string }> = {
+  household: { emoji: "🏠", label: "All" },
+  zonito: { emoji: "👨", label: "Zonito" },
+  nikhila: { emoji: "👩", label: "Nikhila" },
+  joint: { emoji: "🤝", label: "Joint" },
+};
+
+/** "🏠 All" / "👨 Zonito" / "👩 Nikhila" / "🤝 Joint". */
+export const personLabel = (p: Person | Owner): string => {
+  const chip = PERSON_CHIP[p];
+  return `${chip.emoji} ${chip.label}`;
+};
+
 /** Format an amount in its own currency: gbp() for GBP (and for a
  *  missing code), Intl currency formatting otherwise. Foreign money is
  *  displayed in its own currency, never converted into GBP. */

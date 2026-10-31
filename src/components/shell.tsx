@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog, X } from "lucide-react";
-import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, categoryColor, categoryInk, type Category, type Txn } from "@/lib/data";
+import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, categoryColor, categoryInk, personLabel, type Category, type Txn } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { DestinationIcon } from "@/components/item-icons";
@@ -20,13 +20,15 @@ export function PersonProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={{ person, setPerson }}>{children}</Ctx.Provider>;
 }
 
-const OPTS: { v: Person; l: string }[] = [
-  // "All", not "Household": the switch's segments are equal thirds,
-  // and the long label made the selected pill look stretched against
-  // the two names. Prose elsewhere keeps saying Household.
-  { v: "household", l: "All" },
-  { v: "zonito", l: "Zonito" },
-  { v: "nikhila", l: "Nikhila" },
+// Segment labels come from the shared personLabel helper (emoji +
+// text: 🏠 All / 👨 Zonito / 👩 Nikhila). "All", not "Household": the
+// segments are equal thirds, and the long label made the selected
+// pill look stretched against the two names. Prose elsewhere keeps
+// saying Household.
+const OPTS: { v: Person }[] = [
+  { v: "household" },
+  { v: "zonito" },
+  { v: "nikhila" },
 ];
 
 export type ThemeChoice = "system" | "light" | "dark";
@@ -83,7 +85,7 @@ function PersonSwitch() {
           onClick={() => setPerson(o.v)}
           className={`flex-1 rounded-full py-1.5 text-center transition ${person === o.v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
         >
-          {o.l}
+          {personLabel(o.v)}
         </button>
       ))}
     </div>

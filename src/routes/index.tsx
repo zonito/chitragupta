@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, categoryColor, availableFor, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
@@ -92,7 +92,7 @@ export function AvailableBreakdown({ person }: { person: Person }) {
             <div className="min-w-0">
               <div className="truncate text-body">{a.name}</div>
               <div className="text-caption text-muted-foreground">
-                {ownerName(a.owner)} · last upload {dateLabel(a.lastDate)}
+                {personLabel(a.owner)} · last upload {dateLabel(a.lastDate)}
               </div>
             </div>
           </div>
@@ -203,7 +203,7 @@ export function Index() {
         <div className="mt-3">
           {incomeFor(person).map((entry) => (
             <div key={incomeEntryKey(entry)} className="ledger-row flex items-center justify-between gap-3 py-2 text-body">
-              <span>{entry.type} · {ownerName(entry.owner)}</span>
+              <span>{entry.type} · {personLabel(entry.owner)}</span>
               <span className="num shrink-0">{gbp(entry.amount, false)}</span>
             </div>
           ))}

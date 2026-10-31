@@ -217,7 +217,7 @@ describe("Home Available card and breakdown", () => {
     expect(dialog.textContent).toContain("Revolut Savings");
     expect(dialog.textContent).toContain("£5,000.00");
     expect(dialog.textContent).toContain("Total available");
-    expect(dialog.textContent).toContain("Joint · last upload 27 Oct 2026");
+    expect(dialog.textContent).toContain("🤝 Joint · last upload 27 Oct 2026");
     // GBP order in the sheet: biggest balance first.
     const names = ["Revolut Savings", "Monzo Current", "Revolut Main", "Joint Bills", "Amex Gold", "Revolut Pro"];
     const positions = names.map((n) => dialog.textContent!.indexOf(n));

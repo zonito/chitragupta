@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { usePerson, PageTitle, Panel, Chip, Label, Sheet, meta } from "@/components/shell";
-import { SUBS, monthlyOf, yearlyOf, gbp, ownerName, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
+import { SUBS, monthlyOf, yearlyOf, gbp, personLabel, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
 import { subscriptionMonthlyRows } from "@/lib/timeline";
 import { SpendTimelineSection } from "@/components/spend-chart";
@@ -140,7 +140,7 @@ function SubCard({ sub: s, person, onOpen }: { sub: Sub; person: string; onOpen:
         <div className="mt-3 text-caption text-muted-foreground">
           {s.card} · last charged {s.last}
           {nextExpectedLabel(s) && <> · {nextExpectedLabel(s)}</>}
-          {person === "household" && <> · {ownerName(s.owner)}</>}
+          {person === "household" && <> · {personLabel(s.owner)}</>}
           {s.note && <div className="mt-0.5 text-body">{s.note}</div>}
         </div>
       </button>

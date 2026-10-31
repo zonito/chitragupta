@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { usePerson, PageTitle, Panel, Chip, Label, CategoryChip, meta } from "@/components/shell";
-import { ACCOUNTS, CARDS, MIGRATION, ownerName, gbp, formatMoney, dateLabel, monthOptions, type AccountInfo, type CardItem, type Category, type Owner, type Person } from "@/lib/data";
+import { ACCOUNTS, CARDS, MIGRATION, personLabel, gbp, formatMoney, dateLabel, monthOptions, type AccountInfo, type CardItem, type Category, type Owner, type Person } from "@/lib/data";
 import { migrateStoredCards, newCardId, type StoredCard } from "@/lib/cards";
 import { fetchAccountInsights, primaryFigures, type AccountInsight, type AccountsData } from "@/lib/accounts";
 import { AnimatedBar } from "@/components/motion";
@@ -71,7 +71,7 @@ export function AccountsSection({ person }: { person: Person }) {
       {groups.map((g) => (
         <div key={g.owner} className="mb-5 last:mb-0">
           {person === "household" && (
-            <h3 className="mb-2 text-body font-medium">{ownerName(g.owner)}</h3>
+            <h3 className="mb-2 text-body font-medium">{personLabel(g.owner)}</h3>
           )}
           <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
             {g.list.map((a) => (
@@ -114,7 +114,7 @@ function AccountInsightCard({
           <div className="min-w-0">
             <div className="truncate text-body font-medium">{info.name}</div>
             <div className="text-caption text-muted-foreground">
-              {ownerName(info.owner)} · last statement {dateLabel(info.lastDate)}
+              {personLabel(info.owner)} · last statement {dateLabel(info.lastDate)}
             </div>
           </div>
         </div>
@@ -317,7 +317,7 @@ export function Cards() {
               </span>
             </div>
             <div className="mt-1 text-caption text-muted-foreground">
-              {c.account} · {ownerName(c.owner)} · issued {c.issued}
+              {c.account} · {personLabel(c.owner)} · issued {c.issued}
               {c.frozen && <> · {c.status === "Frozen" ? "frozen" : "retired"} {c.frozen}</>}
             </div>
             {c.replacedBy && <div className="mt-0.5 text-caption text-muted-foreground">Replaced by {c.replacedBy}</div>}

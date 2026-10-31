@@ -5,7 +5,7 @@ import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/compon
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { ACCOUNTS, ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { ACCOUNTS, ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, ownerName, personLabel, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
 
 export const Route = createFileRoute("/activity")({
@@ -322,7 +322,7 @@ export function Activity() {
               {[
                 ["Date", dayLabel(openTxn.day, true, openTxn.monthKey)],
                 ["Account", openTxn.account],
-                ["Who", ownerName(openTxn.owner)],
+                ["Who", personLabel(openTxn.owner)],
                 ...(openTxn.fx ? [["Original", openTxn.fx]] : []),
                 ...(openTxn.note ? [["Note", openTxn.note]] : []),
               ].map(([k, v]) => (
