@@ -497,7 +497,7 @@ export function Activity() {
             </div>
             <dl className="text-body">
               {[
-                ["Date", dayLabel(openTxn.day, true, openTxn.monthKey)],
+                ["Date", dayLabel(openTxn.day, true, openTxn.monthKey) + (openTxn.time ? ` · ${openTxn.time}` : "")],
                 ["Account", openTxn.account],
                 ["Who", personLabel(openTxn.owner)],
                 ...(openTxn.fx ? [["Original", openTxn.fx]] : []),

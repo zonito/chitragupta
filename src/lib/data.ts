@@ -112,6 +112,11 @@ export interface Txn {
    * Amounts on Txn are absolute, so this flag is the only direction
    * signal; set by both transaction mappers. */
   incoming?: boolean;
+  /** The exact time of day as recorded on the stored timestamp,
+   * "HH:MM". Absent when the row is date-only or carries the 00:00
+   * date-only placeholder (see timeOfDay in txn-map); shown verbatim
+   * in the detail sheet, never timezone-converted. */
+  time?: string;
 }
 
 export interface UpcomingPayment {

@@ -9,6 +9,22 @@ import { categoryNames } from "./data";
  * labels — so a fetched month behaves like a snapshot month.
  */
 
+/**
+ * The time of day recorded on a store timestamp, "HH:MM", or
+ * undefined when the row carries no time. Store effective_date is
+ * usually a bare "YYYY-MM-DD" and sometimes "YYYY-MM-DD HH:MM:SS"
+ * (an ISO T separator works too). A 00:00 stamp is the date-only
+ * placeholder, not a real midnight transaction, so it reads as no
+ * time — the sheet must never print 00:00. Times are shown exactly
+ * as recorded: no parsing into a Date, no timezone conversion.
+ */
+export const timeOfDay = (iso: string): string | undefined => {
+  const match = /[T ](\d{2}):(\d{2})/.exec(iso);
+  if (!match) return undefined;
+  const hhmm = `${match[1]}:${match[2]}`;
+  return hhmm === "00:00" ? undefined : hhmm;
+};
+
 export interface ApiTxnRow {
   id: string;
   person: string;
@@ -68,6 +84,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     return null;
   }
   const date = row.date.slice(0, 10);
+  const time = timeOfDay(row.date);
   return {
     id: row.id,
     date,
@@ -81,6 +98,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     accountId: row.account,
     kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer",
     ...(row.amountMinor > 0 ? { incoming: true } : {}),
+    ...(time ? { time } : {}),
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
     ...(row.userNote ? { userNote: row.userNote } : {}),
   };

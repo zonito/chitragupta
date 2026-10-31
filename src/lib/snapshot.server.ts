@@ -17,7 +17,7 @@ import {
   type Txn,
   type UpcomingPayment,
 } from "./data";
-import { accountTxnLabel } from "./txn-map";
+import { accountTxnLabel, timeOfDay } from "./txn-map";
 import { listCategories } from "./ingest/categories";
 import { getSettings } from "./ingest/settings";
 import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
@@ -221,6 +221,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       continue;
     }
     const kind = row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer";
+    const time = timeOfDay(row.effective_date);
     txns.push({
       id: row.fingerprint,
       date: day10(row.effective_date),
@@ -240,6 +241,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       // is GBP-only and the API mapper drops non-GBP rows rather than
       // decorating them, so neither path invents an fx string.
       ...(row.amount_minor > 0 ? { incoming: true } : {}),
+      ...(time ? { time } : {}),
       ...(row.description && row.description !== row.merchant
         ? { note: row.description }
         : {}),
