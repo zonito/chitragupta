@@ -153,6 +153,16 @@ export function ingestAccount(
   dataDir: string,
 ): IngestResult {
   const { rows, file } = readOriginals(dataDir, account);
+  // A found file that parses to nothing is not an empty statement, it is
+  // a corrupt or wrong-format export (a real export always has ≥1 row):
+  // fail this account by name instead of silently recording a no-op run
+  // with rowsSeen 0. ingestAccountSafe turns this throw into the named
+  // per-account failure.
+  if (rows.length === 0) {
+    throw new Error(
+      `${file}: no transactions parsed — the file does not look like a ${isSavingsAccount(account) ? "savings" : "statement"} export`,
+    );
+  }
   // Merchants the user has personally corrected: an outgoing transfer to
   // one of them is real spending, not money moved aside, so it ingests as
   // spend from the start. Read once per account ingest; a store rebuild

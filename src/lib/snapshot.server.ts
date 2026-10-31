@@ -322,7 +322,14 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     if (best) biggestOneOff[p] = best;
   }
 
-  // Accounts from the latest ingest run per account.
+  // Accounts from the last ingest run per account that actually read a
+  // statement. A later no-op re-import (rows_seen = 0) or a failed run
+  // must not pose as an upload: last/added come from the latest run with
+  // rows_seen > 0, falling back to the latest run when none qualify.
+  // The __rebuild__ marker rows never appear (account filter below).
+  // Staleness still compares against the newest run of any account, so
+  // an account whose last real statement is old stays stale even after
+  // a no-op re-run rewrites its latest run row to today.
   const runRows = db
     .prepare(
       `SELECT account, started_at, rows_added FROM ingest_runs
@@ -330,16 +337,27 @@ function buildFromDb(db: Database.Database): DataSnapshot {
          AND substr(account, 1, 2) <> '__'`,
     )
     .all() as { account: string; started_at: string; rows_added: number }[];
+  const contentRows = db
+    .prepare(
+      `SELECT account, started_at, rows_added FROM ingest_runs
+       WHERE id IN (SELECT MAX(id) FROM ingest_runs WHERE rows_seen > 0 GROUP BY account)
+         AND substr(account, 1, 2) <> '__'`,
+    )
+    .all() as { account: string; started_at: string; rows_added: number }[];
+  const contentByAccount = new Map(contentRows.map((r) => [r.account, r]));
   const maxStarted = runRows.reduce((m, r) => (r.started_at > m ? r.started_at : m), "");
-  const accounts: AccountInfo[] = runRows.map((r) => ({
-    name: ACCOUNT_LIST_LABEL[r.account] ?? r.account,
-    owner: r.account === "Joint" ? "joint" : "zonito",
-    last: shortDayLabel(r.started_at.slice(0, 10)),
-    added: r.rows_added,
-    stale:
-      maxStarted !== "" &&
-      Date.parse(r.started_at) < Date.parse(maxStarted) - 7 * 86400000,
-  }));
+  const accounts: AccountInfo[] = runRows.map((r) => {
+    const chosen = contentByAccount.get(r.account) ?? r;
+    return {
+      name: ACCOUNT_LIST_LABEL[r.account] ?? r.account,
+      owner: r.account === "Joint" ? "joint" : "zonito",
+      last: shortDayLabel(chosen.started_at.slice(0, 10)),
+      added: chosen.rows_added,
+      stale:
+        maxStarted !== "" &&
+        Date.parse(chosen.started_at) < Date.parse(maxStarted) - 7 * 86400000,
+    };
+  });
 
   // Merchant review: the snapshot carries only the TRUE queue size
   // for the Settings header chip. The review items themselves are

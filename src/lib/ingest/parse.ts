@@ -68,12 +68,38 @@ function splitCsvLine(line: string): string[] {
   return fields.map((f) => f.trim());
 }
 
+export const STATEMENT_HEADER = [
+  "Type",
+  "Product",
+  "Started Date",
+  "Completed Date",
+  "Description",
+  "Amount",
+  "Fee",
+  "Currency",
+  "State",
+  "Balance",
+] as const;
+
 export function parseAccountCsv(text: string): StatementRow[] {
   const rows: StatementRow[] = [];
+  let headerChecked = false;
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
     const f = splitCsvLine(line);
+    if (!headerChecked) {
+      headerChecked = true;
+      const headerOk =
+        f.length === STATEMENT_HEADER.length &&
+        STATEMENT_HEADER.every((col, i) => f[i] === col);
+      if (!headerOk) {
+        throw new Error(
+          `invalid statement header: expected ${STATEMENT_HEADER.join(", ")} but found ${f.join(", ")}`,
+        );
+      }
+      continue;
+    }
     if (f[0] === "Type") continue;
     if (f.length < 10) continue;
     rows.push({
@@ -88,6 +114,11 @@ export function parseAccountCsv(text: string): StatementRow[] {
       state: f[8]!,
       balance: f[9]!,
     });
+  }
+  if (!headerChecked) {
+    throw new Error(
+      `invalid statement header: expected ${STATEMENT_HEADER.join(", ")} but found no header row`,
+    );
   }
   return rows;
 }
