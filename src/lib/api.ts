@@ -13,7 +13,8 @@ import {
   documentRowToDoc,
   type DocumentRow,
 } from "./documents.server";
-import type { DocType } from "./data";
+import { CATEGORIES, type DocType } from "./data";
+import { uiCategory } from "./txn-map";
 import {
   ingestAll,
   recomputeAggregates,
@@ -155,6 +156,244 @@ export async function handleChitraguptaApi(
     return routeWithDb(request, ensured as Database.Database);
   }
   return null;
+}
+
+/** Shift a YYYY-MM month key by delta months. */
+function shiftMonthKey(key: string, delta: number): string {
+  const [y, m] = key.split("-").map(Number) as [number, number];
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function shortMonthLabel(key: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${key}-02T00:00:00Z`));
+}
+
+/** Median of a non-empty list, unrounded (an even count averages the two
+ * middle values, so the result can land on a half minor unit). */
+function medianOf(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]!
+    : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+const SCOPE_PERSONS: ReadonlySet<string> = new Set([
+  "household",
+  "zonito",
+  "nikhila",
+]);
+
+/**
+ * Scoped category aggregates for the Categories period selector.
+ *
+ * Params: person (household|zonito|nikhila, default household) and a
+ * scope: scope=month with month=YYYY-MM, scope=year with year=YYYY, or
+ * scope=all (bare year= / all=1 select the same scopes). Unlike the
+ * legacy month response above — which serves the precomputed
+ * month_aggregates for one stored person — scoped rows are computed from
+ * transactions with the client's shareOf weighting replicated in SQL:
+ * household counts every GBP spend row (movement='spend', amount<0) at
+ * 100%; a named person counts Joint-account rows at 0.5, their own rows
+ * at 100% and the other person's at 0 (month_aggregates does not encode
+ * that split, so it cannot serve these scopes). Categories resolve with
+ * the same COALESCE expression as everywhere else, then fold through
+ * uiCategory and the CATEGORIES list, exactly as the snapshot's
+ * byCategory does, so a scoped month agrees with the snapshot to the
+ * penny. Amounts are minor units and can carry a half (a halved odd
+ * Joint row), again mirroring the client.
+ *
+ * Response: { ok, person, scope, month? | year?, total_minor,
+ * seriesPeriods, seriesLabels, rows } where total_minor is the scope's
+ * whole weighted GBP spend (the spendTotal analogue: it includes any
+ * spend whose category folds outside CATEGORIES, which rows omit), and
+ * each row is { category, spend_minor, typical_minor, series }:
+ * - typical_minor ("usually"): month scope → median of the prior 6
+ *   calendar months' weighted spend; year scope → median of the other
+ *   years' annual totals when at least 2 other years have data, else
+ *   null; all scope → null.
+ * - series: per-category weighted totals over seriesPeriods — month
+ *   scope: the 6 months ending at the month; year scope: the 12 months
+ *   of the year; all scope: one total per year with data.
+ * With &category=<name> the response also carries merchants:
+ * [{ merchant, spend_minor }] — per-merchant weighted spend in that
+ * category within the scope, sorted desc — for the category sheet.
+ */
+function aggregatesScope(db: Database.Database, url: URL): Response {
+  const person = url.searchParams.get("person") ?? "household";
+  if (!SCOPE_PERSONS.has(person)) {
+    return json({ ok: false, error: "person must be household, zonito or nikhila" }, 400);
+  }
+  const scopeParam = url.searchParams.get("scope");
+  const kind =
+    scopeParam ??
+    (url.searchParams.has("year")
+      ? "year"
+      : url.searchParams.has("all")
+        ? "all"
+        : "month");
+  if (kind !== "month" && kind !== "year" && kind !== "all") {
+    return json({ ok: false, error: "scope must be month, year or all" }, 400);
+  }
+  const monthParam =
+    url.searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
+  if (kind === "month" && !/^\d{4}-\d{2}$/.test(monthParam)) {
+    return json({ ok: false, error: "month must be YYYY-MM" }, 400);
+  }
+  const yearParam = url.searchParams.get("year") ?? monthParam.slice(0, 4);
+  if (kind === "year" && !/^\d{4}$/.test(yearParam)) {
+    return json({ ok: false, error: "year must be YYYY" }, 400);
+  }
+
+  // shareOf as SQL: the two ? are the resolved person (household short-
+  // circuits to full weight before the person comparison is reached).
+  const WEIGHT_SQL = `CASE WHEN ? = 'household' THEN 1.0
+    WHEN t.account = 'Joint' THEN 0.5
+    WHEN t.person = ? THEN 1.0 ELSE 0.0 END`;
+  const SPEND_WHERE = `t.currency = 'GBP' AND t.movement = 'spend' AND t.amount_minor < 0`;
+
+  // Weighted GBP spend per (month, resolved category) over the whole
+  // store; every scope below is derived from this one map in JS, so the
+  // scopes can never disagree with each other.
+  const monthlyRows = db
+    .prepare(
+      `SELECT t.year_month AS ym, ${CATEGORY_SQL} AS raw_category,
+              SUM(-t.amount_minor * (${WEIGHT_SQL})) AS spend
+       FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+       WHERE ${SPEND_WHERE}
+       GROUP BY t.year_month, raw_category`,
+    )
+    .all(person, person) as {
+    ym: string;
+    raw_category: string;
+    spend: number;
+  }[];
+  const uiCategories: ReadonlySet<string> = new Set(CATEGORIES);
+  const byMonth = new Map<string, Map<string, number>>();
+  for (const r of monthlyRows) {
+    const category = uiCategory(r.raw_category);
+    if (!uiCategories.has(category)) continue;
+    let monthMap = byMonth.get(r.ym);
+    if (!monthMap) byMonth.set(r.ym, (monthMap = new Map()));
+    monthMap.set(category, (monthMap.get(category) ?? 0) + r.spend);
+  }
+  const monthSpend = (ym: string, category: string): number =>
+    byMonth.get(ym)?.get(category) ?? 0;
+  const years = (
+    db
+      .prepare(
+        "SELECT DISTINCT substr(year_month, 1, 4) AS y FROM transactions ORDER BY y",
+      )
+      .all() as { y: string }[]
+  ).map((r) => r.y);
+  const yearMonths = (y: string): string[] =>
+    Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
+  const yearSpend = (y: string, category: string): number =>
+    yearMonths(y).reduce((s, ym) => s + monthSpend(ym, category), 0);
+
+  let seriesPeriods: string[];
+  let seriesLabels: string[];
+  let inScope: (ym: string) => boolean;
+  let typicalFor: (category: string) => number | null;
+  if (kind === "month") {
+    seriesPeriods = [5, 4, 3, 2, 1, 0].map((d) => shiftMonthKey(monthParam, -d));
+    seriesLabels = seriesPeriods.map(shortMonthLabel);
+    const prior6 = [6, 5, 4, 3, 2, 1].map((d) => shiftMonthKey(monthParam, -d));
+    inScope = (ym) => ym === monthParam;
+    typicalFor = (category) =>
+      medianOf(prior6.map((ym) => monthSpend(ym, category)));
+  } else if (kind === "year") {
+    seriesPeriods = yearMonths(yearParam);
+    seriesLabels = seriesPeriods.map(shortMonthLabel);
+    const otherYears = years.filter((y) => y !== yearParam);
+    inScope = (ym) => ym.startsWith(`${yearParam}-`);
+    typicalFor = (category) =>
+      otherYears.length >= 2
+        ? medianOf(otherYears.map((y) => yearSpend(y, category)))
+        : null;
+  } else {
+    seriesPeriods = years;
+    seriesLabels = years;
+    inScope = () => true;
+    typicalFor = () => null;
+  }
+
+  const totals = new Map<string, number>();
+  for (const [ym, monthMap] of byMonth) {
+    if (!inScope(ym)) continue;
+    for (const [category, spend] of monthMap) {
+      totals.set(category, (totals.get(category) ?? 0) + spend);
+    }
+  }
+  const rows = [...totals.entries()]
+    .filter(([, spend]) => spend > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([category, spend]) => ({
+      category,
+      spend_minor: spend,
+      typical_minor: typicalFor(category),
+      series:
+        kind === "all"
+          ? seriesPeriods.map((y) => yearSpend(y, category))
+          : seriesPeriods.map((ym) => monthSpend(ym, category)),
+    }));
+  // The scope total counts every weighted spend row in scope, including
+  // any whose category folds outside CATEGORIES (the rows omit those,
+  // exactly as spendTotal and byCategory relate on the client).
+  const total_minor = monthlyRows
+    .filter((r) => inScope(r.ym))
+    .reduce((s, r) => s + r.spend, 0);
+
+  const body: Record<string, unknown> = {
+    ok: true,
+    person,
+    scope: kind,
+    ...(kind === "month" ? { month: monthParam } : {}),
+    ...(kind === "year" ? { year: yearParam } : {}),
+    total_minor,
+    seriesPeriods,
+    seriesLabels,
+    rows,
+  };
+
+  const categoryParam = url.searchParams.get("category")?.trim();
+  if (categoryParam) {
+    const periodWhere =
+      kind === "month"
+        ? "AND t.year_month = ?"
+        : kind === "year"
+          ? "AND substr(t.year_month, 1, 4) = ?"
+          : "";
+    const periodParam =
+      kind === "month" ? [monthParam] : kind === "year" ? [yearParam] : [];
+    const merchantRows = db
+      .prepare(
+        `SELECT t.merchant AS merchant, ${CATEGORY_SQL} AS raw_category,
+                SUM(-t.amount_minor * (${WEIGHT_SQL})) AS spend
+         FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+         WHERE ${SPEND_WHERE} ${periodWhere}
+         GROUP BY t.merchant, raw_category`,
+      )
+      .all(person, person, ...periodParam) as {
+      merchant: string;
+      raw_category: string;
+      spend: number;
+    }[];
+    const merchants = new Map<string, number>();
+    for (const r of merchantRows) {
+      if (uiCategory(r.raw_category) !== categoryParam) continue;
+      merchants.set(r.merchant, (merchants.get(r.merchant) ?? 0) + r.spend);
+    }
+    body["category"] = categoryParam;
+    body["merchants"] = [...merchants.entries()]
+      .map(([merchant, spend]) => ({ merchant, spend_minor: spend }))
+      .sort((a, b) => b.spend_minor - a.spend_minor || a.merchant.localeCompare(b.merchant));
+  }
+  return json(body);
 }
 
 async function routeWithDb(
@@ -498,6 +737,17 @@ async function routeWithDb(
   }
 
   if (path === "/api/aggregates" && request.method === "GET") {
+    // Scoped aggregates (Categories period selector): a request carrying
+    // a scope — scope=month|year|all, or a bare year= / all=1 — is served
+    // by aggregatesScope below. A request with no scope keeps the legacy
+    // month_aggregates response below, byte-for-byte.
+    if (
+      url.searchParams.has("scope") ||
+      url.searchParams.has("year") ||
+      url.searchParams.has("all")
+    ) {
+      return aggregatesScope(db, url);
+    }
     const month =
       url.searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
     const person = url.searchParams.get("person") ?? "household";
