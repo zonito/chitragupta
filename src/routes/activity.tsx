@@ -63,18 +63,53 @@ export function Activity() {
     const person = params.get("accountPerson");
     return account && person ? { account, person } : null;
   });
-  const clearAccountScope = () => {
-    setAccountScope(null);
-    // Strip the query so a reload does not resurrect the scope.
+  const applyAccountScope = (next: { account: string; person: string } | null) => {
+    setAccountScope(next);
+    // Keep the query in step with the state, the way the Cards deep
+    // link writes it: a reload lands on the same scope, and clearing
+    // strips the query so a reload does not resurrect it.
     if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", window.location.pathname);
+      const url = next
+        ? `${window.location.pathname}?account=${encodeURIComponent(next.account)}&accountPerson=${encodeURIComponent(next.person)}`
+        : window.location.pathname;
+      window.history.replaceState(null, "", url);
     }
   };
+  const clearAccountScope = () => applyAccountScope(null);
   const scopeLabel = accountScope
     ? (ACCOUNTS.find(
         (a) => a.person === accountScope.person && a.accountId === accountScope.account,
       )?.name ?? accountScope.account)
     : null;
+  // Account picker groups, derived from the snapshot's account list —
+  // never hardcoded. In a single-person view only that person's
+  // accounts are offered; Joint's rows are stored under Zonito, so it
+  // rides in his group. Duplicate (person, account) pairs collapse.
+  const pickerPersons: ("zonito" | "nikhila")[] =
+    person === "household" ? ["zonito", "nikhila"] : [person];
+  const accountGroups = pickerPersons
+    .map((p) => ({
+      person: p,
+      accounts: ACCOUNTS.filter(
+        (a, i) =>
+          a.person === p &&
+          a.accountId &&
+          ACCOUNTS.findIndex(
+            (b) => b.person === a.person && b.accountId === a.accountId,
+          ) === i,
+      ),
+    }))
+    .filter((g) => g.accounts.length > 0);
+  // A scope set elsewhere (a Cards deep link into the other person's
+  // view) may sit outside the groups on offer; it still gets an
+  // option so the picker reflects it instead of showing a blank.
+  const scopeInPicker =
+    !accountScope ||
+    accountGroups.some((g) =>
+      g.accounts.some(
+        (a) => a.person === accountScope.person && a.accountId === accountScope.account,
+      ),
+    );
   // Category corrections made from the detail sheet, keyed by the
   // store merchant string (a correction is merchant-level: it re-files
   // every row of that merchant). Applied over both month sources the
@@ -408,6 +443,44 @@ export function Activity() {
             </button>
           </span>
         )}
+        {/* Account picker: the same scope state the chip above (and
+            the Cards deep link) uses, so the two always agree —
+            choosing here raises the chip, clearing either clears
+            both. Grouped by person with the shared emoji labels;
+            a single-person view offers only that person's accounts. */}
+        <select
+          className={sel}
+          aria-label="Account"
+          value={accountScope ? `${accountScope.person}:${accountScope.account}` : "all"}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "all") {
+              clearAccountScope();
+              return;
+            }
+            const sep = v.indexOf(":");
+            applyAccountScope({
+              person: v.slice(0, sep),
+              account: v.slice(sep + 1),
+            });
+          }}
+        >
+          <option value="all">All accounts</option>
+          {accountGroups.map((g) => (
+            <optgroup key={g.person} label={personLabel(g.person)}>
+              {g.accounts.map((a) => (
+                <option key={`${a.person}:${a.accountId}`} value={`${a.person}:${a.accountId}`}>
+                  {a.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          {accountScope && !scopeInPicker && (
+            <option value={`${accountScope.person}:${accountScope.account}`}>
+              {scopeLabel}
+            </option>
+          )}
+        </select>
         {/* A filter whose value the global view already fixes is not
             shown: the person dropdown exists only in Household view. */}
         {person === "household" && (

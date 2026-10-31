@@ -209,8 +209,13 @@ describe("Activity account scope", () => {
     expect(screen.getByText("Zonito Pro Merchant")).toBeTruthy();
     expect(screen.queryByText("Nikhila Pro Merchant")).toBeNull();
     expect(screen.queryByText("Zonito Main Merchant")).toBeNull();
-    // The scope stays visible as a chip naming the account…
-    expect(screen.getByText("Revolut Pro")).toBeTruthy();
+    // The scope stays visible as a chip naming the account… (the
+    // chip is the clear button's pill; the account picker's option
+    // carries the same name, so query the chip itself)
+    const chip = screen
+      .getByRole("button", { name: "Clear account filter" })
+      .closest("span");
+    expect(chip?.textContent).toContain("Revolut Pro");
     // …and clearing it restores the whole month.
     fireEvent.click(screen.getByRole("button", { name: "Clear account filter" }));
     expect(screen.getByText("Nikhila Pro Merchant")).toBeTruthy();

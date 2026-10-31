@@ -89,9 +89,10 @@ describe("Activity person dropdown", () => {
     const { container } = renderActivity();
     fireEvent.click(screen.getByRole("button", { name: "View as Zonito" }));
     expect(screen.queryByLabelText("Person")).toBeNull();
-    // The category and month filters remain.
+    // The account, category and month filters remain.
     const selects = [...container.querySelectorAll("select")];
-    expect(selects).toHaveLength(2);
+    expect(selects).toHaveLength(3);
+    expect(screen.getByLabelText("Account")).toBeTruthy();
     expect(
       selects.some((s) =>
         [...s.options].some((o) => o.textContent === "All categories"),

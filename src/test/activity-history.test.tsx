@@ -80,7 +80,7 @@ describe("Activity older months", () => {
     expect(screen.getAllByText("Ocado").length).toBeGreaterThan(0);
     expect(fetchMock).not.toHaveBeenCalled();
 
-    const monthSelect = container.querySelectorAll("select")[2]!;
+    const monthSelect = screen.getByLabelText("Period");
     fireEvent.change(monthSelect, { target: { value: "2026-08" } });
 
     expect(await screen.findAllByText("Mahavir Sweet Mart")).toHaveLength(2);
@@ -129,7 +129,7 @@ describe("Activity older months", () => {
     expect(text().indexOf("Later Shop")).toBeLessThan(text().indexOf("Earlier Shop"));
     expect(text().indexOf("Earlier Shop")).toBeLessThan(text().indexOf("Previous Day Shop"));
 
-    const monthSelect = container.querySelectorAll("select")[2]!;
+    const monthSelect = screen.getByLabelText("Period");
     fireEvent.change(monthSelect, { target: { value: "2026-08" } });
     expect(await screen.findByText("Aug Later")).toBeTruthy();
     expect(text().indexOf("Aug Later")).toBeLessThan(text().indexOf("Aug Earlier"));
@@ -145,7 +145,7 @@ describe("Activity older months", () => {
         </DocumentsProvider>
       </PersonProvider>,
     );
-    const monthSelect = container.querySelectorAll("select")[2]!;
+    const monthSelect = screen.getByLabelText("Period");
     fireEvent.change(monthSelect, { target: { value: "2026-09" } });
     expect(screen.getByText("September Shop")).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
