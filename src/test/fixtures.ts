@@ -231,3 +231,38 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
     zonito: { merchant: "Kingsley Napley LLP", amount: 1850, date: "2026-10-13" },
   },
 };
+
+// Charge-month history for the sample subscriptions (the Subscriptions
+// trend's raw material): monthly subs charge every month up to their
+// last charge, yearly ones once a year; counts match each sub's
+// `charges`. Attached as a post-pass so the literals above stay terse.
+const chargeMonthsBack = (
+  endMonth: string,
+  count: number,
+  amount: number,
+  stepMonths = 1,
+): { month: string; total: number }[] => {
+  const out: { month: string; total: number }[] = [];
+  const [y, m] = endMonth.split("-").map(Number) as [number, number];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(y, m - 1 - i * stepMonths, 1));
+    out.push({
+      month: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+      total: amount,
+    });
+  }
+  return out;
+};
+const SUB_CHARGE_MONTHS: Record<string, { month: string; total: number }[]> = {
+  Netflix: chargeMonthsBack("2026-10", 14, 18.99),
+  "Spotify Family": chargeMonthsBack("2026-10", 11, 19.99),
+  "The Times": chargeMonthsBack("2026-10", 6, 26),
+  PureGym: chargeMonthsBack("2026-10", 9, 34.99),
+  "iCloud+ 2TB": chargeMonthsBack("2026-10", 12, 8.99),
+  "Disney+": chargeMonthsBack("2026-10", 7, 9.99),
+  "Amazon Prime": chargeMonthsBack("2026-03", 3, 95, 12),
+  "Microsoft 365 Family": chargeMonthsBack("2026-06", 2, 104.99, 12),
+};
+for (const s of SAMPLE_SNAPSHOT.subs) {
+  s.chargeMonths = SUB_CHARGE_MONTHS[s.name] ?? [];
+}

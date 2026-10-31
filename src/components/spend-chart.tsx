@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
-import { categoryColor, gbp } from "@/lib/data";
-import { categoryTotals, type ChartBucket } from "@/lib/timeline";
+import { useEffect, useMemo, useState } from "react";
+import { categoryColor, gbp, type Person } from "@/lib/data";
+import { Label, Panel } from "@/components/shell";
+import {
+  categoryTotals,
+  CHART_PRESETS,
+  fetchDaily,
+  presetBuckets,
+  presetComparison,
+  type ChartBucket,
+  type ChartPreset,
+  type DailyData,
+  type MonthlyRows,
+} from "@/lib/timeline";
 
 /**
  * The shared spending-over-time chart (Categories timeline, Home trend,
@@ -12,6 +23,130 @@ import { categoryTotals, type ChartBucket } from "@/lib/timeline";
  * — is readable in text, never colour alone. The legend always carries
  * names + totals in text (WCAG AA), in both themes.
  */
+
+export interface SpendTimelineSectionProps {
+  title: string;
+  /** Monthly series the monthly-family presets bucket (snapshot
+   * monthly history for Categories/Home; subscription charge months
+   * for Subscriptions). */
+  monthly: MonthlyRows;
+  /** Enables the Daily preset, fetched for this person. Omit on
+   * surfaces whose data has no day level (Subscriptions) — the Daily
+   * button is then dropped rather than shown empty. */
+  dailyPerson?: Person;
+  /** Preset subset; default is every preset the data supports. */
+  presets?: ChartPreset[];
+  compact?: boolean;
+  seriesName?: string;
+  caption?: string;
+  className?: string;
+}
+
+/**
+ * The chart section shared by Categories, Home and Subscriptions: the
+ * preset control, the SpendChart, and the one-line comparison read.
+ * Monthly-family presets bucket `monthly` locally (no fetch); only the
+ * Daily preset fetches, lazily, the first time it is chosen — 60 days,
+ * so the comparison line reads the previous 30 from the same response.
+ * "Current" is anchored to the data's latest month throughout.
+ */
+export function SpendTimelineSection({
+  title,
+  monthly,
+  dailyPerson,
+  presets,
+  compact = false,
+  seriesName,
+  caption,
+  className,
+}: SpendTimelineSectionProps) {
+  const presetIds = (presets ?? CHART_PRESETS.map((p) => p.id)).filter(
+    (id) => id !== "daily" || dailyPerson !== undefined,
+  );
+  const [preset, setPreset] = useState<ChartPreset>(
+    presetIds.includes("monthly") ? "monthly" : (presetIds[0] ?? "monthly"),
+  );
+  const [selected, setSelected] = useState<string | null>(null);
+  const [daily, setDaily] = useState<{ person: Person; data: DailyData } | null>(null);
+  const [dailyFailed, setDailyFailed] = useState(false);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [monthly]);
+
+  useEffect(() => {
+    if (preset !== "daily" || !dailyPerson || daily?.person === dailyPerson || dailyFailed) return;
+    let cancelled = false;
+    fetchDaily(dailyPerson, 60)
+      .then((data) => {
+        if (!cancelled) setDaily({ person: dailyPerson, data });
+      })
+      .catch(() => {
+        if (!cancelled) setDailyFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [preset, dailyPerson, daily, dailyFailed]);
+
+  const dailyData = dailyPerson && daily?.person === dailyPerson ? daily.data : null;
+  const buckets = useMemo(
+    () => presetBuckets(preset, monthly, dailyData),
+    [preset, monthly, dailyData],
+  );
+  const comparison = useMemo(
+    () => presetComparison(preset, monthly, dailyData),
+    [preset, monthly, dailyData],
+  );
+  const dailyPending = preset === "daily" && !dailyData && !dailyFailed;
+
+  return (
+    <Panel {...(className ? { className } : {})}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label>{title}</Label>
+        <div className="flex flex-wrap gap-0.5 rounded-full bg-muted p-0.5" role="group" aria-label="Chart period">
+          {CHART_PRESETS.filter((p) => presetIds.includes(p.id)).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={preset === p.id}
+              onClick={() => setPreset(p.id)}
+              className={`rounded-full px-2.5 py-1 text-caption ${preset === p.id ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {monthly.months.length === 0 ? (
+        <p className="mt-3 text-body text-muted-foreground">
+          Not enough history yet — the chart appears once statements cover a few months.
+        </p>
+      ) : dailyPending ? (
+        <p className="mt-3 text-body text-muted-foreground">Loading…</p>
+      ) : preset === "daily" && dailyFailed ? (
+        <p className="mt-3 text-body text-muted-foreground">Could not load daily spending just now.</p>
+      ) : (
+        <>
+          <div className="mt-3">
+            <SpendChart
+              buckets={buckets}
+              selected={selected}
+              onSelect={setSelected}
+              cumulative={preset === "oneyear"}
+              compact={compact}
+              {...(seriesName ? { seriesName } : {})}
+            />
+          </div>
+          {comparison && <p className="num mt-3 text-body">{comparison}</p>}
+          {caption && (
+            <p className="mt-2 text-caption text-muted-foreground">{caption}</p>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
 
 export interface SpendChartProps {
   buckets: ChartBucket[];

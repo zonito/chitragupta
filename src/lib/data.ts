@@ -121,6 +121,10 @@ export interface Sub {
    *  detail view fetches exactly these rows, so its count always matches
    *  `charges` and unrelated same-merchant purchases never appear. */
   chargeIds: string[];
+  /** The cluster charges summed per calendar month (pounds), ascending
+   *  — the Subscriptions trend chart's raw material. Derived from the
+   *  same charge rows the detail view shows; absent on hand-built subs. */
+  chargeMonths?: { month: string; total: number }[];
   /** ISO date of the next expected charge; Active subs only, else null. */
   nextExpected: string | null;
   /** Store merchant names grouped into this sub (name variants). */

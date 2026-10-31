@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { usePerson, PageTitle, Panel, Chip, Label, Sheet, meta } from "@/components/shell";
 import { SUBS, monthlyOf, yearlyOf, gbp, ownerName, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
+import { subscriptionMonthlyRows } from "@/lib/timeline";
+import { SpendTimelineSection } from "@/components/spend-chart";
 import { MerchantTile } from "@/components/tiles";
 
 export const Route = createFileRoute("/subscriptions")({
@@ -37,6 +39,10 @@ export function Subs() {
   const m = active.reduce((a, s) => a + monthlyOf(s), 0);
   const yearly = active.reduce((a, s) => a + yearlyOf(s), 0);
   const largest = [...active].sort((a, b) => yearlyOf(b) - yearlyOf(a))[0];
+  // The recurring-cost trend: the shared timeline section over the
+  // detector's own charge history (active subs in this view, summed
+  // per month), so a creeping subscription bill is visible at a glance.
+  const subsMonthly = useMemo(() => subscriptionMonthlyRows(person), [person]);
   return (
     <div>
       <PageTitle>Subscriptions</PageTitle>
@@ -50,6 +56,16 @@ export function Subs() {
           {largest && <p className="num mt-2 text-caption text-muted-foreground">{largest.name} · {gbp(yearlyOf(largest))}/year</p>}
         </div>
       </Panel>
+
+      {list.length > 0 && (
+        <SpendTimelineSection
+          title="Recurring cost over time"
+          monthly={subsMonthly}
+          seriesName="Subscriptions"
+          className="mb-6"
+          caption="Active subscriptions only — the charges the detector found, summed per month."
+        />
+      )}
 
       {SECTION_ORDER.map((freq) => {
         const section = active.filter((s) => s.freq === freq);

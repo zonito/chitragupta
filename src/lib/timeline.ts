@@ -1,4 +1,4 @@
-import { gbp, type Person } from "./data";
+import { gbp, SUBS, type Person } from "./data";
 
 /**
  * Bucketing for the spending-over-time charts (Categories timeline,
@@ -173,6 +173,52 @@ export function categoryTotals(buckets: ChartBucket[]): { name: string; total: n
     .map(([name, total]) => ({ name, total }))
     .filter((t) => t.total > 0)
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
+/** Every YYYY-MM from first to last inclusive (both YYYY-MM keys). */
+export function continuousMonths(first: string, last: string): string[] {
+  const out: string[] = [];
+  const [fy, fm] = first.split("-").map(Number) as [number, number];
+  const [ly, lm] = last.split("-").map(Number) as [number, number];
+  const total = (ly - fy) * 12 + (lm - fm);
+  for (let i = 0; i <= total; i++) {
+    const d = new Date(Date.UTC(fy, fm - 1 + i, 1));
+    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+/**
+ * The Subscriptions trend as MonthlyRows: one series ("Subscriptions")
+ * summing the ACTIVE subscriptions' cluster charges per month — the
+ * detector's own charge history, filtered to the current person view
+ * exactly as the Subscriptions screen filters its cards (household =
+ * everyone's, otherwise the owner's). Months run continuously over the
+ * visible subs' charge span so a charge-free month reads as a gap in
+ * the bill, not a missing bucket.
+ */
+export function subscriptionMonthlyRows(person: Person): MonthlyRows {
+  const visible = SUBS.filter(
+    (s) => s.status === "Active" && (person === "household" || s.owner === person),
+  );
+  const perMonth = new Map<string, number>();
+  for (const s of visible) {
+    for (const cm of s.chargeMonths ?? []) {
+      perMonth.set(cm.month, (perMonth.get(cm.month) ?? 0) + cm.total);
+    }
+  }
+  if (perMonth.size === 0) return { months: [], rows: [] };
+  const keys = [...perMonth.keys()].sort();
+  const months = continuousMonths(keys[0]!, keys[keys.length - 1]!);
+  return {
+    months,
+    rows: [
+      {
+        category: "Subscriptions",
+        series: months.map((m) => perMonth.get(m) ?? 0),
+      },
+    ],
+  };
 }
 
 /* ---------------- Daily (fetched) ---------------- */

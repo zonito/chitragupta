@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, categoryColor, availableFor, formatMoney, dateLabel, type IncomeEntry, type Person } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, categoryColor, availableFor, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
+import { SpendTimelineSection } from "@/components/spend-chart";
 
 export const Route = createFileRoute("/")({
   head: () => meta("This month", "This month at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note."),
@@ -127,6 +128,10 @@ export function AvailableBreakdown({ person }: { person: Person }) {
 export function Index() {
   const { person } = usePerson();
   const [availableOpen, setAvailableOpen] = useState(false);
+  // The spend trend under the summary: the shared timeline section in
+  // its compact form, over the same snapshot monthly history the
+  // Categories chart reads (person-view aware, no fetch but Daily).
+  const monthly = useMemo(() => monthlyHistoryFor(person), [person]);
   // No data at all: one honest empty state instead of five £0 panels
   // and captions with a dangling month ("Spent in ", "Coming up · ").
   // The month-interpolating captions below only render past this guard.
@@ -248,6 +253,14 @@ export function Index() {
           <AnimatedBar percent={total > 0 ? small.total / total * 100 : 0} className="bg-primary/60" />
         </div>
       </Panel>
+    </div>
+    <div className="mt-5 lg:mt-6">
+      <SpendTimelineSection
+        title="Spending trend"
+        monthly={monthly}
+        dailyPerson={person}
+        compact
+      />
     </div>
     <Sheet open={availableOpen} onClose={() => setAvailableOpen(false)}>
       <AvailableBreakdown person={person} />

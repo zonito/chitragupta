@@ -362,6 +362,26 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     },
   );
 
+  // Per-month charge totals for the Subscriptions trend, summed from
+  // the very rows the detector clustered (chargeIds are their
+  // fingerprints), so the trend can never disagree with the charges
+  // the detail view lists for the same subscription.
+  const chargeByFingerprint = new Map(allSpend.map((r) => [r.fingerprint, r]));
+  for (const sub of subs) {
+    const perMonth = new Map<string, number>();
+    for (const id of sub.chargeIds) {
+      const row = chargeByFingerprint.get(id);
+      if (!row) continue;
+      perMonth.set(
+        row.year_month,
+        (perMonth.get(row.year_month) ?? 0) + Math.abs(row.amount_minor) / 100,
+      );
+    }
+    sub.chargeMonths = [...perMonth.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, total]) => ({ month, total }));
+  }
+
   // Upcoming regulars on Home are the SAME subscriptions the Subscriptions
   // screen shows, not a second heuristic: an Active sub whose next
   // expected charge is still to come (after the store's latest
