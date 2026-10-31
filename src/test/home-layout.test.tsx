@@ -23,92 +23,206 @@ vi.mock("@tanstack/react-router", async () => {
 const { Index } = await import("@/routes/index");
 
 /**
- * Home is a defined grid ordered by value (hero + Available with the
- * forecast stacked beneath it, the trend chart at full width, Coming
- * up + Biggest changes/Coach, Money in + Small spends, Moved aside
- * strip). Cards take their natural height (the grid aligns items to
- * the start, so nothing is stretched to a row-mate's height). Plus
- * the shared chart's rendering fixes: full £ axis labels, a faint
+ * Home is bands of two independent stacks ordered by value: band 1
+ * pairs the hero with Biggest changes (left) against Available with
+ * the forecast beneath it (right); the trend chart is a full-width
+ * divider; band 3 pairs Coming up with Small spends (left) against
+ * Coach over Money in (right); the Moved aside strip is last. Within
+ * a band each column is a stack of natural-height cards, so no card
+ * shares a row with a taller row-mate and a band's columns can
+ * differ only at the band's own bottom. On mobile the band/stack
+ * wrappers collapse (display: contents) and each card's order class
+ * carries the single-column value order pinned below. Plus the
+ * shared chart's rendering fixes: full £ axis labels, a faint
  * active-bucket tint, a bold current-period label.
- * DOM order in these tests IS the mobile single-column order.
  */
 
 afterEach(() => {
   hydrateData(SAMPLE_SNAPSHOT);
 });
 
-const ORDER = [
-  "Spent in",
-  "Available",
-  "Rest of",
-  "Spending trend",
-  "Coming up",
-  "Biggest changes",
-  "Coach",
-  "Money in",
-  "Small spends",
-  "Moved aside",
-];
+/** Class tokens of an element (className is a plain string on the
+ *  HTML elements these helpers walk). */
+const tokens = (el: Element | null): string[] =>
+  typeof el?.className === "string" ? el.className.split(/\s+/).filter(Boolean) : [];
 
-describe("Home value-ordered grid", () => {
-  it("renders the sections in the value order (which is also the mobile order)", () => {
-    const { container } = render(
-      <PersonProvider>
-        <Index />
-      </PersonProvider>,
-    );
-    const text = container.textContent ?? "";
-    let last = -1;
-    for (const marker of ORDER) {
-      const at = text.indexOf(marker);
-      expect(at, marker).toBeGreaterThan(last);
-      last = at;
+/** The order-N value a card carries (walking up from a text node to
+ *  the card element that carries the class). */
+const orderOf = (el: Element): number | null => {
+  let node: Element | null = el;
+  while (node) {
+    const hit = tokens(node).find((t) => /^order-\d+$/.test(t));
+    if (hit) return Number(hit.slice("order-".length));
+    node = node.parentElement;
+  }
+  return null;
+};
+
+/** The stack wrapper a card belongs to (the lg:flex-col ancestor),
+ *  or null when the card is a direct child of the page column. */
+const stackOf = (el: Element): HTMLElement | null => {
+  let node = el.parentElement;
+  while (node) {
+    if (tokens(node).includes("lg:flex-col")) return node as HTMLElement;
+    node = node.parentElement;
+  }
+  return null;
+};
+
+/** The page column itself: the flex flex-col ancestor of a card. */
+const pageOf = (el: Element): HTMLElement | null => {
+  let node: Element | null = el;
+  while (node) {
+    if (tokens(node).includes("flex") && tokens(node).includes("flex-col")) {
+      return node as HTMLElement;
     }
+    node = node.parentElement;
+  }
+  return null;
+};
+
+const availableButton = () =>
+  screen.getByRole("button", {
+    name: "Available balance, show breakdown by account",
   });
 
-  it("stacks Available over the forecast in row 1, chart full width in row 2, changes column in row 3", () => {
+describe("Home banded stacks", () => {
+  it("carries the mobile single-column value order in the cards' order classes", () => {
     render(
       <PersonProvider>
         <Index />
       </PersonProvider>,
     );
-    const hero = screen.getByText(/Spent in/);
-    expect(hero.closest(".hero-panel")!.className).toContain("lg:row-start-1");
-    expect(hero.closest(".hero-panel")!.className).toContain("lg:col-start-1");
-    // Natural heights: the grid aligns items to the start of their
-    // row, so no card is stretched to a taller row-mate's height.
-    expect(hero.closest(".hero-panel")!.parentElement!.className).toContain("items-start");
-    const available = screen.getByRole("button", {
-      name: "Available balance, show breakdown by account",
-    });
-    // Available and the forecast share ONE row-1 right cell (a stack):
-    // walk up to the grid cell that carries the placement classes.
-    let stack: HTMLElement | null = available.closest("section");
-    while (stack && !(stack.className ?? "").includes("lg:row-start-1")) {
-      stack = stack.parentElement;
+    // On mobile the wrappers collapse and the outer column lays the
+    // cards out by these order values, so they must run 1..10 in
+    // exactly the value order.
+    const expected: [Element, number][] = [
+      [screen.getByText(/Spent in/), 1],
+      [availableButton(), 2],
+      [screen.getByText(/Rest of/), 3],
+      [screen.getByText(/Spending trend/), 4],
+      [screen.getByText(/Coming up/), 5],
+      [screen.getByText(/Biggest changes/), 6],
+      [screen.getByText("Coach"), 7],
+      [screen.getByText(/Money in/), 8],
+      [screen.getByText(/Small spends/), 9],
+      [screen.getByText("Moved aside"), 10],
+    ];
+    for (const [el, n] of expected) {
+      expect(orderOf(el), `order for #${n}`).toBe(n);
     }
-    expect(stack).toBeTruthy();
-    expect(stack!.className).toContain("lg:col-start-2");
-    expect(stack!.className).toContain("space-y-5");
-    // The forecast card is inside the same stack, directly after
-    // Available, and Available's own card is not itself a grid cell.
-    expect(stack!.textContent).toContain("Rest of");
-    expect(stack!.querySelectorAll("section").length).toBe(2);
-    expect(available.closest("section")!.className).not.toContain("lg:row-start-1");
-    expect(available.closest("section")!.className).not.toContain("lg:col-start-2");
-    // The trend chart spans the full width of row 2.
+    // The page is one flex column, not a row grid: no card is placed
+    // by grid row/column classes any more.
+    const page = pageOf(screen.getByText(/Spent in/));
+    expect(page).toBeTruthy();
+    expect(page!.className).not.toContain("grid");
+  });
+
+  it("band 1: hero + Biggest changes in the left stack, Available + forecast in the right", () => {
+    const { container } = render(
+      <PersonProvider>
+        <Index />
+      </PersonProvider>,
+    );
+    const heroStack = stackOf(screen.getByText(/Spent in/));
+    expect(heroStack).toBeTruthy();
+    expect(heroStack!.textContent).toContain("Biggest changes");
+    expect(heroStack!.textContent).not.toContain("Rest of");
+    const moneyStack = stackOf(availableButton());
+    expect(moneyStack).toBeTruthy();
+    expect(moneyStack).not.toBe(heroStack);
+    expect(moneyStack!.textContent).toContain("Rest of");
+    expect(moneyStack!.textContent).not.toContain("Biggest changes");
+    // Both stacks belong to one band (a contents wrapper that
+    // becomes a flex row on desktop).
+    const band = heroStack!.parentElement;
+    expect(band).toBe(moneyStack!.parentElement);
+    expect(tokens(band).includes("contents")).toBe(true);
+    expect(tokens(band).includes("lg:flex")).toBe(true);
+    expect(tokens(band).includes("lg:flex-col")).toBe(false);
+    // The band wrapper's own order sequences the desktop bands
+    // around the chart (4) and the strip (10): band 1 is order 1.
+    expect(orderOf(band!)).toBe(1);
+    // No grid placement classes survive anywhere on Home.
+    expect(container.innerHTML).not.toMatch(/lg:(row|col)-start/);
+  });
+
+  it("the trend chart is a full-width band of its own, not inside any stack", () => {
+    render(
+      <PersonProvider>
+        <Index />
+      </PersonProvider>,
+    );
     const trend = screen.getByText("Spending trend").closest("section")!;
-    expect(trend.className).toContain("lg:col-span-2");
-    expect(trend.className).toContain("lg:row-start-2");
-    // Biggest changes and Coach share the row-3 right column; Coming
-    // up is not in it.
-    let cell: HTMLElement | null = screen.getByText("Biggest changes") as HTMLElement;
-    while (cell && !(cell.className ?? "").includes("lg:row-start-3")) {
-      cell = cell.parentElement;
-    }
-    expect(cell).toBeTruthy();
-    expect(cell!.textContent).toContain("Coach");
-    expect(cell!.textContent).not.toContain("Coming up");
+    expect(stackOf(trend)).toBeNull();
+    expect(trend.parentElement).toBe(pageOf(trend));
+  });
+
+  it("band 3: Coming up + Small spends left, Coach + Money in right", () => {
+    render(
+      <PersonProvider>
+        <Index />
+      </PersonProvider>,
+    );
+    const left = stackOf(screen.getByText(/Coming up/));
+    expect(left).toBeTruthy();
+    expect(left!.textContent).toContain("Small spends");
+    expect(left!.textContent).not.toContain("Money in");
+    const right = stackOf(screen.getByText("Coach"));
+    expect(right).toBeTruthy();
+    expect(right).not.toBe(left);
+    expect(right!.textContent).toContain("Money in");
+    expect(right!.textContent).not.toContain("Coming up");
+    expect(left!.parentElement).toBe(right!.parentElement);
+    // Band 3's wrapper order (5) sits between the chart (4) and
+    // the strip (10) in the desktop column.
+    expect(orderOf(left!.parentElement!)).toBe(5);
+  });
+
+  it("keeps the forecast in band 1's right stack in both forecast states", () => {
+    // Default fixture: statements run to 28 Oct, so the forecast is
+    // in its live (tall) form.
+    const { unmount } = render(
+      <PersonProvider>
+        <Index />
+      </PersonProvider>,
+    );
+    const live = screen.getByText(/On course to end/);
+    expect(stackOf(live)).toBe(stackOf(availableButton()));
+    unmount();
+    // Data runs to month end (a 31 Oct transaction, statements to
+    // the 31st): the forecast takes its short completed form, in
+    // the same stack.
+    hydrateData({
+      ...SAMPLE_SNAPSHOT,
+      txns: [
+        ...SAMPLE_SNAPSHOT.txns,
+        {
+          id: "e31",
+          date: "2026-10-31",
+          day: 31,
+          monthKey: "2026-10",
+          merchant: "TfL",
+          category: "Transport",
+          amount: 5,
+          owner: "zonito",
+          account: "Revolut Main · Zonito",
+          kind: "spend",
+        } as const,
+      ],
+      accounts: SAMPLE_SNAPSHOT.accounts.map((a) => ({
+        ...a,
+        last: "31 Oct",
+        lastDate: "2026-10-31",
+      })),
+    });
+    render(
+      <PersonProvider>
+        <Index />
+      </PersonProvider>,
+    );
+    const done = screen.getByText(/is complete in your statements/);
+    expect(stackOf(done)).toBe(stackOf(availableButton()));
   });
 
   it("Moved aside is a slim one-line strip, not a full card", () => {
@@ -121,7 +235,11 @@ describe("Home value-ordered grid", () => {
     const strip = caption.closest("section")!;
     expect(strip.className).toContain("flex");
     expect(strip.className).toContain("items-center");
-    expect(strip.className).toContain("lg:col-span-2");
+    // The strip closes the page: a direct child of the page column,
+    // inside no stack, carrying the last order value.
+    expect(strip.parentElement).toBe(pageOf(strip));
+    expect(stackOf(strip)).toBeNull();
+    expect(orderOf(strip)).toBe(10);
     // One line, in order: label, amount, what it is.
     const text = strip.textContent ?? "";
     const labelAt = text.indexOf("Moved aside");

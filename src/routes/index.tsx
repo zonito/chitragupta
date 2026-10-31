@@ -476,18 +476,30 @@ export function Index() {
   const overBudget = overallBudget !== null && total > overallBudget;
   return (
     <>
-    {/* Home is a defined grid ordered by value, highest first (source
-        order = the mobile single-column order):
-        row 1 hero + a stack of Available over the month-end forecast
-        (the forecast is about the Available money, so they sit
-        together), row 2 the trend chart at full width,
-        row 3 Coming up + Biggest changes with Coach in that column,
-        row 4 Money in + Small spends, row 5 Moved aside as a slim
-        strip. Cells align to the start of their row (items-start):
-        every card is exactly its content's height, so a short card
-        never carries the dead space of a taller row-mate. */}
-    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 lg:gap-6">
-      <div className="hero-panel rounded-xl p-5 lg:col-start-1 lg:row-start-1">
+    {/* Home is bands of two independent stacks, ordered by value,
+        highest first. Within a band each column is a vertical stack
+        of natural-height cards, so a short card never shares a row
+        with a taller row-mate: the only unevenness a band can show
+        is at its own bottom, where its shorter column ends. Band 1
+        pairs the hero with Biggest changes on the left and Available
+        with the month-end forecast on the right (the forecast is
+        about the Available money, so they sit together); the trend
+        chart is a full-width divider; band 3 pairs Coming up with
+        Small spends against Coach over Money in; Moved aside is a
+        slim strip last. On mobile the band and stack wrappers
+        collapse (display: contents), every card becomes a direct
+        item of the outer column, and each card's order class
+        restores the single-column value order: hero, Available,
+        forecast, trend, Coming up, Biggest changes, Coach, Money
+        in, Small spends, Moved aside. (The band wrappers carry
+        order classes of their own, 1 and 5, purely to sequence the
+        desktop bands around the chart's 4 and the strip's 10; on
+        mobile the wrappers have no box, so only the cards' order
+        classes act.) */}
+    <div className="flex flex-col gap-5 lg:gap-6">
+      <div className="contents order-1 lg:flex lg:gap-6">
+        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+      <div className="hero-panel order-1 rounded-xl p-5">
         <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">Spent in {currentMonthName()}</div>
         <div className="hero-number font-display num text-hero"><CountUpMoney value={total} /></div>
         <p className="hero-comparison num mt-2 text-caption">
@@ -529,12 +541,23 @@ export function Index() {
         )}
       </div>
 
-      {/* Row 1's right cell: Available with the forecast directly
-          beneath it, one stack, so the pair reads as one subject and
-          neither is stretched by the other's height. */}
-      <div className="space-y-5 lg:col-start-2 lg:row-start-1 lg:space-y-6">
-        <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} />
-        <ForecastCard person={person} />
+          <Panel className="order-6">
+            <Label>Biggest changes</Label>
+            {biggestChanges(person).map((c) => (
+              <div key={c.category} className="ledger-row flex items-center justify-between py-3">
+                <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(c.category) }} />{c.category}</span>
+                <span className="num text-body text-foreground">
+                  {c.diff > 0 ? "+" : "−"}{gbp(Math.abs(c.diff), false)}
+                </span>
+              </div>
+            ))}
+          </Panel>
+        </div>
+
+        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+          <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} className="order-2" />
+          <ForecastCard person={person} className="order-3" />
+        </div>
       </div>
 
       <SpendTimelineSection
@@ -543,10 +566,12 @@ export function Index() {
         monthly={monthly}
         dailyPerson={person}
         compact
-        className="lg:col-span-2 lg:row-start-2"
+        className="order-4"
       />
 
-      <Panel className="lg:col-start-1 lg:row-start-3">
+      <div className="contents order-5 lg:flex lg:gap-6">
+        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+      <Panel className="order-5">
         <Label>Coming up · {nextMonthName()}</Label>
         <p className="text-heading font-semibold leading-relaxed"><span className="num">{gbp(coming.total, false)}</span> of regulars already known</p>
         <div className="mt-3">
@@ -568,29 +593,30 @@ export function Index() {
         <p className="mt-3 text-caption leading-relaxed text-muted-foreground">The regulars we already know about. One-offs and day-to-day spending are on top.</p>
       </Panel>
 
-      <div className="space-y-5 lg:col-start-2 lg:row-start-3 lg:space-y-6">
-        <Panel>
-          <Label>Biggest changes</Label>
-          {biggestChanges(person).map((c) => (
-            <div key={c.category} className="ledger-row flex items-center justify-between py-3">
-              <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(c.category) }} />{c.category}</span>
-              <span className="num text-body text-foreground">
-                {c.diff > 0 ? "+" : "−"}{gbp(Math.abs(c.diff), false)}
-              </span>
-            </div>
-          ))}
-        </Panel>
+      <Panel className="order-9">
+        <Label>Small spends</Label>
+        <p className="num text-body leading-relaxed">
+          Spends under £10 added up to {gbp(small.total)} this month across {small.count} spends.{small.total >= 40 && " That is roughly a family day out."}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5" aria-hidden="true">
+          {Array.from({ length: small.count }, (_, i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-primary/60" />)}
+        </div>
+        <div className="mt-2 h-1 rounded-lg bg-muted" role="img" aria-label={`${gbp(small.total)} in small spends out of ${gbp(total)} spent in ${currentMonthName()}`}>
+          <AnimatedBar percent={total > 0 ? small.total / total * 100 : 0} className="bg-primary/60" />
+        </div>
+      </Panel>
+        </div>
 
-        <Link to="/coach" className="block">
+        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+        <Link to="/coach" className="order-7 block">
           <Panel className="bg-accent/8!">
             <Label>Coach</Label>
             <p className="num text-body leading-relaxed">{coachNote(person)}</p>
             <JevCoachOpinion person={person} />
           </Panel>
         </Link>
-      </div>
 
-      <Panel className="lg:col-start-1 lg:row-start-4">
+      <Panel className="order-8">
         <Label>Money in · {currentMonthName()}</Label>
         <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
         <div className="mt-3">
@@ -604,24 +630,14 @@ export function Index() {
         {asideTotal(person) > 0 && <p className="num mt-3 text-caption text-muted-foreground">Of this, {gbp(asideTotal(person), false)} was moved aside.</p>}
       </Panel>
 
-      <Panel className="lg:col-start-2 lg:row-start-4">
-        <Label>Small spends</Label>
-        <p className="num text-body leading-relaxed">
-          Spends under £10 added up to {gbp(small.total)} this month across {small.count} spends.{small.total >= 40 && " That is roughly a family day out."}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-1.5" aria-hidden="true">
-          {Array.from({ length: small.count }, (_, i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-primary/60" />)}
         </div>
-        <div className="mt-2 h-1 rounded-lg bg-muted" role="img" aria-label={`${gbp(small.total)} in small spends out of ${gbp(total)} spent in ${currentMonthName()}`}>
-          <AnimatedBar percent={total > 0 ? small.total / total * 100 : 0} className="bg-primary/60" />
-        </div>
-      </Panel>
+      </div>
 
       {/* Moved aside is context, not a headline: a slim one-line strip
           (label, amount, what it is), not a full card. The label is a
           span here, not <Label>: the strip is a single flex line and
           Label's block margin would misalign it. */}
-      <Panel className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3! lg:col-span-2 lg:row-start-5">
+      <Panel className="order-10 flex flex-wrap items-center gap-x-3 gap-y-1 py-3!">
         <span className="text-micro font-medium uppercase tracking-[0.08em] text-muted-foreground">Moved aside</span>
         <span className="num text-heading font-semibold text-aside">{gbp(asideTotal(person), false)}</span>
         <span className="text-caption text-muted-foreground">Savings & investments, not spending</span>
