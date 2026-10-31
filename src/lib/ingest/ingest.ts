@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   INGEST_ACCOUNTS,
@@ -63,13 +63,28 @@ export function findOriginalFile(
   return match;
 }
 
+/** Where an assignment's rows come from, beyond the Originals default. */
+export type IngestOptions = {
+  /** File path relative to the data dir (the Barclays tree); absent
+   * means the file sits in Originals under its bare name. */
+  relPath?: string;
+  /** Ingest only the rows whose Product column equals this value —
+   * one prepared file can hold several accounts (the Barclays file
+   * holds the current account and the credit card side by side). */
+  product?: string;
+};
+
 function readOriginals(
   dataDir: string,
   account: IngestAccount,
   file?: string,
+  opts?: IngestOptions,
 ): { rows: StatementRow[] | SavingsRow[]; file: string } {
   const name = file ?? findOriginalFile(dataDir, account);
-  const text = readFileSync(join(dataDir, "Originals", name), "utf8");
+  const path = opts?.relPath
+    ? join(dataDir, opts.relPath)
+    : join(dataDir, "Originals", name);
+  const text = readFileSync(path, "utf8");
   return {
     rows: isSavingsAccount(account) ? parseSavingsCsv(text) : parseAccountCsv(text),
     file: name,
@@ -166,8 +181,20 @@ export function ingestAccount(
   account: IngestAccount,
   dataDir: string,
   file?: string,
+  opts?: IngestOptions,
 ): IngestResult {
-  const { rows, file: readFile } = readOriginals(dataDir, account, file);
+  const { rows: parsedRows, file: readFile } = readOriginals(
+    dataDir,
+    account,
+    file,
+    opts,
+  );
+  // A multi-product file ingests one account at a time: keep only this
+  // assignment's Product rows, so counts, balances and fingerprints
+  // are all per-account from here on.
+  const rows: StatementRow[] | SavingsRow[] = opts?.product
+    ? (parsedRows as StatementRow[]).filter((r) => r.product === opts.product)
+    : parsedRows;
   // A found file that parses to nothing is not an empty statement, it is
   // a corrupt or wrong-format export (a real export always has ≥1 row):
   // fail this account by name instead of silently recording a no-op run
@@ -316,9 +343,15 @@ export function ingestAccount(
         balMinor,
         movement,
       ]);
-      const prev = lastByCurrency.get(r.currency);
-      if (!prev || effective >= prev.date)
-        lastByCurrency.set(r.currency, { date: effective, bal: balMinor });
+      // Only a row that actually records a balance moves the account's
+      // known balance: an export with no Balance column at all (the
+      // Barclays current account) must stay "not recorded", never a
+      // fabricated £0.00 from an empty cell.
+      if (r.balance.trim() !== "") {
+        const prev = lastByCurrency.get(r.currency);
+        if (!prev || effective >= prev.date)
+          lastByCurrency.set(r.currency, { date: effective, bal: balMinor });
+      }
     }
     rowsAdded = runInsert(items as never);
     const gbp = lastByCurrency.get("GBP");
@@ -384,6 +417,7 @@ export function ingestAccountSafe(
   account: IngestAccount,
   dataDir: string,
   file?: string,
+  opts?: IngestOptions,
 ): IngestResult {
   let named: string | null = file ?? null;
   if (named === null) {
@@ -394,7 +428,7 @@ export function ingestAccountSafe(
     }
   }
   try {
-    return ingestAccount(db, person, account, dataDir, file);
+    return ingestAccount(db, person, account, dataDir, file, opts);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     try {
@@ -490,27 +524,68 @@ export function recomputeAggregates(
  * products with none holding 90%) is ambiguous: it fails loudly as its
  * own ingest result instead of being guessed into somebody's account.
  */
-export type FileAssignment = { file: string; person: string; account: string };
+/** The prepared Barclays export: its bare filename (the persistence
+ * identity), where it lives under the data dir, and the two accounts
+ * its Product column distinguishes. */
+const BARCLAYS_FILE = "barclaycard-full-history.csv";
+const BARCLAYS_REL_PATH = "Zonito/Barclay/Barclaycard/barclaycard-full-history.csv";
+const BARCLAYS_PRODUCTS: { product: string; account: string }[] = [
+  { product: "Current", account: "Barclays Current" },
+  { product: "Barclaycard", account: "Barclaycard" },
+];
+
+export type FileAssignment = {
+  file: string;
+  person: string;
+  account: string;
+  /** Path relative to the data dir when the file lives outside
+   * Originals (the Barclays tree); absent for Originals files. */
+  relPath?: string;
+  /** The Product value this assignment ingests, when one file holds
+   * several accounts (the Barclays file); absent when the whole file
+   * is one account. */
+  product?: string;
+};
 
 const ASSIGNMENT_KEY_PREFIX = "file_assignment:";
 
+/**
+ * The persistence key for an assignment: the bare filename for a
+ * whole-file assignment, `file#Product` for one slice of a
+ * multi-product file — one file can then hold several persisted
+ * assignments without them overwriting each other.
+ */
+function assignmentKey(a: { file: string; product?: string }): string {
+  return a.product ? `${a.file}#${a.product}` : a.file;
+}
+
 function persistedAssignments(
   db: import("better-sqlite3").Database,
-): Map<string, { person: string; account: string }> {
+): Map<string, FileAssignment> {
   const rows = db
     .prepare("SELECT key, value FROM meta WHERE key LIKE ?")
     .all(`${ASSIGNMENT_KEY_PREFIX}%`) as { key: string; value: string }[];
-  const map = new Map<string, { person: string; account: string }>();
+  const map = new Map<string, FileAssignment>();
   for (const row of rows) {
     try {
       const parsed = JSON.parse(row.value) as {
         person?: unknown;
         account?: unknown;
+        relPath?: unknown;
+        product?: unknown;
       };
       if (typeof parsed.person === "string" && typeof parsed.account === "string") {
-        map.set(row.key.slice(ASSIGNMENT_KEY_PREFIX.length), {
+        const key = row.key.slice(ASSIGNMENT_KEY_PREFIX.length);
+        map.set(key, {
+          file: key.split("#")[0]!,
           person: parsed.person,
           account: parsed.account,
+          ...(typeof parsed.relPath === "string"
+            ? { relPath: parsed.relPath }
+            : {}),
+          ...(typeof parsed.product === "string"
+            ? { product: parsed.product }
+            : {}),
         });
       }
     } catch {
@@ -528,8 +603,13 @@ function persistAssignment(
     `INSERT INTO meta (key, value) VALUES (?, ?)
      ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
   ).run(
-    `${ASSIGNMENT_KEY_PREFIX}${assignment.file}`,
-    JSON.stringify({ person: assignment.person, account: assignment.account }),
+    `${ASSIGNMENT_KEY_PREFIX}${assignmentKey(assignment)}`,
+    JSON.stringify({
+      person: assignment.person,
+      account: assignment.account,
+      ...(assignment.relPath ? { relPath: assignment.relPath } : {}),
+      ...(assignment.product ? { product: assignment.product } : {}),
+    }),
   );
 }
 
@@ -567,7 +647,7 @@ export function discoverFiles(
   const assign = (a: FileAssignment) => {
     assignments.push(a);
     claimed.add(a.file);
-    if (!persisted.has(a.file)) persistAssignment(db, a);
+    if (!persisted.has(assignmentKey(a))) persistAssignment(db, a);
   };
 
   // Zonito first: a persisted assignment rules; otherwise the standing
@@ -592,6 +672,39 @@ export function discoverFiles(
     // No file at all: ingestAccountSafe below is not run for this
     // account; the missing file surfaces when the account is attempted
     // through its own result (see the unassigned pass in ingestAccounts).
+  }
+
+  // The Barclays file: one prepared export living outside Originals
+  // (Zonito/Barclay/Barclaycard/), holding two products side by side —
+  // his current account and his credit card — so it discovers as TWO
+  // assignments for Zonito, one per Product, each persisted under its
+  // own composite key. It is found by its known path, never by the
+  // Originals listing, so the Nikhila pass below never sees it. No
+  // file at the path, no accounts: the pair simply does not exist
+  // until the export is placed there.
+  if (existsSync(join(dataDir, BARCLAYS_REL_PATH))) {
+    for (const { product, account } of BARCLAYS_PRODUCTS) {
+      const known = persisted.get(
+        assignmentKey({ file: BARCLAYS_FILE, product }),
+      );
+      if (known) {
+        assign({
+          file: BARCLAYS_FILE,
+          person: known.person,
+          account: known.account,
+          ...(known.relPath ? { relPath: known.relPath } : {}),
+          product,
+        });
+      } else {
+        assign({
+          file: BARCLAYS_FILE,
+          person: "zonito",
+          account,
+          relPath: BARCLAYS_REL_PATH,
+          product,
+        });
+      }
+    }
   }
 
   // Nikhila: every remaining statement file is hers.
@@ -682,7 +795,10 @@ export function ingestAccounts(
 ): IngestResult[] {
   const { assignments, failures } = discoverFiles(db, dataDir);
   const results = assignments.map((a) =>
-    ingestAccountSafe(db, a.person, a.account, dataDir, a.file),
+    ingestAccountSafe(db, a.person, a.account, dataDir, a.file, {
+      ...(a.relPath ? { relPath: a.relPath } : {}),
+      ...(a.product ? { product: a.product } : {}),
+    }),
   );
   const assignedZonito = new Set(
     assignments.filter((a) => a.person === "zonito").map((a) => a.account),
