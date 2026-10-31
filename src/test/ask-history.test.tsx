@@ -104,7 +104,7 @@ describe("Ask full-history record search", () => {
     expect(deferred.fetchMock.mock.calls[0]![0]).toContain("q=mahavir");
   });
 
-  it("answers the India in August example with that month's total", async () => {
+  it("answers a typed India in August question with that month's total", async () => {
     hydrateData({
       ...SAMPLE_SNAPSHOT,
       months: [...SAMPLE_SNAPSHOT.months, { key: "2026-08", label: "August 2026" }],
@@ -114,7 +114,11 @@ describe("Ask full-history record search", () => {
       apiRow({ id: "fp-in2", date: "2026-08-20", description: "Air India", merchant: "Air India", amountMinor: -8840, category: "Holidays" }),
     ]);
     renderAsk();
-    fireEvent.click(screen.getByRole("button", { name: "What did we spend in India in August?" }));
+    // Typed, not clicked: this question is no longer an example chip
+    // (G20d), but a user typing it must still get the month's total.
+    const input = screen.getByLabelText("Question about your records");
+    fireEvent.change(input, { target: { value: "What did we spend in India in August?" } });
+    fireEvent.submit(input.closest("form")!);
 
     expect(await screen.findByText(/Total in August 2026: £600\.40 across 2 transactions\./)).toBeTruthy();
     const url = fetchMock.mock.calls[0]![0];
@@ -129,8 +133,31 @@ describe("Ask full-history record search", () => {
     });
     stubTransactions([]);
     renderAsk();
-    fireEvent.click(screen.getByRole("button", { name: "What did we spend in India in August?" }));
+    const input = screen.getByLabelText("Question about your records");
+    fireEvent.change(input, { target: { value: "What did we spend in India in August?" } });
+    fireEvent.submit(input.closest("form")!);
     expect(await screen.findByText(/Total in August 2026: £0\.00\./)).toBeTruthy();
+  });
+
+  it("answers the Air India example chip from the records search, with exactly three chips shown", async () => {
+    const fetchMock = stubTransactions([
+      apiRow({ id: "fp-ai1", date: "2026-09-05", month: "2026-09", description: "Air India", merchant: "Air India", amountMinor: -51200, category: "Holidays" }),
+      apiRow({ id: "fp-ai2", date: "2026-09-12", month: "2026-09", description: "Air India", merchant: "Air India", amountMinor: -8840, category: "Holidays" }),
+    ]);
+    renderAsk();
+    // Exactly three chips, and the old India-in-August chip is gone.
+    expect(screen.getByRole("button", { name: "How much on Ocado this month?" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "When did we last get the boiler serviced?" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "What did we spend in India in August?" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "What did we spend with Air India?" }));
+    expect(
+      await screen.findByText(/The latest matching record is Air India, dated 12 Sept 2026 — £88\.40/),
+    ).toBeTruthy();
+    // No month is named, so the search is a merchant search, not a month pull.
+    const url = fetchMock.mock.calls[0]![0];
+    expect(url).toContain("q=air");
+    expect(url).not.toContain("month=");
   });
 
   it("falls back to the snapshot search with an honest note when the fetch fails", async () => {

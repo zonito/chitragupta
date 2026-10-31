@@ -10,6 +10,14 @@ describe("parseAskQuery", () => {
     expect(plan.category).toBeUndefined();
   });
 
+  it("routes the Air India example chip to the merchant, with no month and no 'with' term", () => {
+    const plan = parseAskQuery("What did we spend with Air India?", "2026-10");
+    expect(plan.month).toBeUndefined();
+    expect(plan.terms).toEqual(["air", "india"]);
+    expect(plan.apiQuery).toBe("air");
+    expect(plan.category).toBeUndefined();
+  });
+
   it("keeps every content term for a merchant question with no month", () => {
     const plan = parseAskQuery("When did we last pay Mahavir Sweet Mart?", "2026-10");
     expect(plan.month).toBeUndefined();

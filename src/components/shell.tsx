@@ -243,8 +243,8 @@ const TRIP_QUESTION = "What have holidays cost this month?";
 const OCADO_QUESTION = "How much on Ocado this month?";
 const BOILER_QUESTION = "When did we last get the boiler serviced?";
 const WARRANTY_QUESTION = "When does the washing machine warranty end?";
-const INDIA_QUESTION = "What did we spend in India in August?";
-const EXAMPLES = [OCADO_QUESTION, INDIA_QUESTION, BOILER_QUESTION];
+const AIR_INDIA_QUESTION = "What did we spend with Air India?";
+const EXAMPLES = [OCADO_QUESTION, AIR_INDIA_QUESTION, BOILER_QUESTION];
 
 export function AskButton() {
   const { person } = usePerson();
@@ -381,7 +381,7 @@ export function AskButton() {
               setQ(e);
               if (e === TRIP_QUESTION) { setWorkedExample("trip"); setAiResult(null); setAskedText(""); }
               if (e === OCADO_QUESTION) { setWorkedExample("ocado"); setAiResult(null); setAskedText(""); }
-              if (e === BOILER_QUESTION || e === WARRANTY_QUESTION || e === INDIA_QUESTION) submitQuestion(e);
+              if (e === BOILER_QUESTION || e === WARRANTY_QUESTION || e === AIR_INDIA_QUESTION) submitQuestion(e);
             }} className="h-auto whitespace-normal rounded-lg border bg-card px-3 py-1.5 text-left text-xs font-normal text-muted-foreground shadow-none">{e}</Button>)}
           </div>
           <Label>You asked</Label>

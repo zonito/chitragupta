@@ -23,6 +23,9 @@ const MONTH_INDEX: Record<string, number> = {
 const FRAMING = new Set([
   "what", "spend", "spent", "spending", "money", "transaction",
   "transactions", "record", "records", "during", "year", "went", "go", "goes",
+  // "with" links the question to its merchant ("spend with Air India");
+  // as a search term it would poison the every-term-must-match rule.
+  "with",
   // Pure framing and period words: they describe the question's shape,
   // never a merchant, so they must not reach record search as terms
   // (its every-term-must-match rule would filter the answer to zero).
