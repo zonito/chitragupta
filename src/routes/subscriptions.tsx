@@ -73,6 +73,7 @@ export function Subs() {
       {list.length > 0 && (
         <SpendTimelineSection
           title="Recurring cost over time"
+          surface="subscriptions"
           monthly={subsMonthly}
           seriesName="Subscriptions"
           className="mb-6"

@@ -152,6 +152,7 @@ export function Categories() {
 
       <SpendTimelineSection
         title="Spending over time"
+        surface="categories"
         monthly={monthly}
         dailyPerson={person}
         className="mb-6"

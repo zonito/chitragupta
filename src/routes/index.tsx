@@ -183,6 +183,7 @@ export function Index() {
 
       <SpendTimelineSection
         title="Spending trend"
+        surface="home"
         monthly={monthly}
         dailyPerson={person}
         compact

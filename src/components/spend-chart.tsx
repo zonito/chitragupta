@@ -12,6 +12,12 @@ import {
   type DailyData,
   type MonthlyRows,
 } from "@/lib/timeline";
+import {
+  chartStateKey,
+  restoreChartState,
+  serializeChartState,
+  type ChartSurface,
+} from "@/lib/chart-state";
 
 /**
  * The shared spending-over-time chart (Categories timeline, Home trend,
@@ -26,6 +32,9 @@ import {
 
 export interface SpendTimelineSectionProps {
   title: string;
+  /** Which screen this is: the chart's interactive state (preset +
+   * isolated category) persists per surface in localStorage. */
+  surface: ChartSurface;
   /** Monthly series the monthly-family presets bucket (snapshot
    * monthly history for Categories/Home; subscription charge months
    * for Subscriptions). */
@@ -52,6 +61,7 @@ export interface SpendTimelineSectionProps {
  */
 export function SpendTimelineSection({
   title,
+  surface,
   monthly,
   dailyPerson,
   presets,
@@ -63,16 +73,60 @@ export function SpendTimelineSection({
   const presetIds = (presets ?? CHART_PRESETS.map((p) => p.id)).filter(
     (id) => id !== "daily" || dailyPerson !== undefined,
   );
-  const [preset, setPreset] = useState<ChartPreset>(
-    presetIds.includes("monthly") ? "monthly" : (presetIds[0] ?? "monthly"),
-  );
+  const defaultPreset: ChartPreset = presetIds.includes("monthly")
+    ? "monthly"
+    : (presetIds[0] ?? "monthly");
+  const [preset, setPreset] = useState<ChartPreset>(defaultPreset);
   const [selected, setSelected] = useState<string | null>(null);
   const [daily, setDaily] = useState<{ person: Person; data: DailyData } | null>(null);
   const [dailyFailed, setDailyFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setSelected(null);
   }, [monthly]);
+
+  // Restore this surface's saved chart state after mount (the theme /
+  // calculators pattern: SSR and first paint render the defaults, so
+  // nothing mismatches; saving is gated on `loaded` so the defaults
+  // never overwrite the stored state before it is read). A stored
+  // value is restored only when still valid against current data:
+  // the preset must exist on this surface and the isolated category
+  // must be in that preset's current legend. For Daily the day
+  // buckets are a subset of the all-history categories, which is the
+  // legend proxy (SpendChart also guards at render).
+  useEffect(() => {
+    try {
+      const restored = restoreChartState(
+        localStorage.getItem(chartStateKey(surface)),
+        presetIds,
+        defaultPreset,
+        (p) =>
+          categoryTotals(
+            presetBuckets(p === "daily" ? "all" : p, monthly, null),
+          ).map((t) => t.name),
+      );
+      setPreset(restored.preset);
+      setSelected(restored.selected);
+    } catch {
+      /* Storage is optional: defaults stand. */
+    }
+    setLoaded(true);
+    // Mount-only: presetIds/monthly are the mount-time surface shape.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(
+        chartStateKey(surface),
+        serializeChartState({ preset, selected }),
+      );
+    } catch {
+      /* Storage is optional. */
+    }
+  }, [loaded, preset, selected, surface]);
 
   useEffect(() => {
     if (preset !== "daily" || !dailyPerson || daily?.person === dailyPerson || dailyFailed) return;
