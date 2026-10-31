@@ -966,6 +966,10 @@ async function routeWithDb(
     const person = url.searchParams.get("person");
     const account = url.searchParams.get("account");
     const month = url.searchParams.get("month");
+    // Month ranges (Activity's period presets): inclusive YYYY-MM
+    // bounds; string comparison is exact for zero-padded month keys.
+    const fromMonth = url.searchParams.get("from");
+    const toMonth = url.searchParams.get("to");
     const merchant = url.searchParams.get("merchant")?.trim();
     const q = url.searchParams.get("q")?.trim();
     const category = url.searchParams.get("category");
@@ -974,9 +978,12 @@ async function routeWithDb(
       .map((s) => s.trim())
       .filter(Boolean)
       .slice(0, 1000);
+    // A range legitimately holds a year of rows (thousands), so its
+    // cap is higher; a single month keeps the historical 1000 cap.
+    const limitCap = fromMonth || toMonth ? 10000 : 1000;
     const limit = Math.min(
       Math.max(Number(url.searchParams.get("limit") ?? 200) || 200, 1),
-      1000,
+      limitCap,
     );
     const where: string[] = [];
     const params: unknown[] = [];
@@ -1000,6 +1007,14 @@ async function routeWithDb(
     if (month) {
       where.push("t.year_month = ?");
       params.push(month);
+    }
+    if (fromMonth) {
+      where.push("t.year_month >= ?");
+      params.push(fromMonth);
+    }
+    if (toMonth) {
+      where.push("t.year_month <= ?");
+      params.push(toMonth);
     }
     if (merchant) {
       // Exact merchant match (unlike q's LIKE over merchant+description) —

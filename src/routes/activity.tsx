@@ -5,7 +5,8 @@ import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/compon
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { ACCOUNTS, ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, ownerName, personLabel, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { ACCOUNTS, ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, dateLabel, ownerName, personLabel, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { PERIOD_PRESETS, parsePreset, presetValue, rangeForPreset } from "@/lib/periods";
 import { fetchApiTransactions } from "@/lib/txn-map";
 
 export const Route = createFileRoute("/activity")({
@@ -35,7 +36,10 @@ export function Activity() {
   const [q, setQ] = useState("");
   const [who, setWho] = useState("all");
   const [cat, setCat] = useState("all");
-  const [month, setMonth] = useState(() => currentMonthKey());
+  // The selected period: a month key ("2026-10") or a range preset
+  // ("preset:last12" — This quarter / Year to date / Last 12 months,
+  // anchored to the store's latest data month, not the wall clock).
+  const [period, setPeriod] = useState<string>(() => currentMonthKey());
   const [open, setOpen] = useState<Txn | null>(null);
   // Account scope from the URL (set by the Cards account cards). Read
   // once at mount — in-app navigation to /activity remounts the route —
@@ -73,35 +77,56 @@ export function Activity() {
   const [fetchedMonths, setFetchedMonths] = useState<Record<string, Txn[]>>({});
 
   const snapshotMonthKeys = useMemo(() => new Set(ALL_TXNS.map((t) => t.monthKey)), []);
-  const inSnapshot = snapshotMonthKeys.has(month);
-  // The fetched-month cache is keyed by month AND account scope: a
+  const preset = parsePreset(period);
+  const range = useMemo(
+    () => (preset ? rangeForPreset(preset, currentMonthKey()) : null),
+    [preset],
+  );
+  const inSnapshot = !range && snapshotMonthKeys.has(period);
+  // The fetched-rows cache is keyed by period AND account scope: a
   // scoped fetch returns only that account's rows (the server filters
-  // before LIMIT), so it must never stand in for the whole month once
-  // the scope clears.
+  // before LIMIT), so it must never stand in for the whole period once
+  // the scope clears. Range presets fetch their whole range in one
+  // from/to call under their own key.
   const scopeCacheKey = accountScope
     ? `${accountScope.person}:${accountScope.account}`
     : "all";
-  const monthCacheKey = `${month}|${scopeCacheKey}`;
+  const monthCacheKey = range
+    ? `range:${range.from}..${range.to}|${scopeCacheKey}`
+    : `${period}|${scopeCacheKey}`;
   const monthLoaded = inSnapshot || monthCacheKey in fetchedMonths;
-  const monthTxns = inSnapshot ? txnsInMonth(month) : (fetchedMonths[monthCacheKey] ?? []);
+  const monthTxns = useMemo(() => {
+    if (!range) {
+      return inSnapshot ? txnsInMonth(period) : (fetchedMonths[monthCacheKey] ?? []);
+    }
+    // Merge the snapshot months inside the range with the fetched
+    // range rows, fingerprint-keyed: a month the snapshot already
+    // carries never duplicates when the fetch returns it too.
+    const byId = new Map<string, Txn>();
+    for (const t of ALL_TXNS) {
+      if (t.monthKey >= range.from && t.monthKey <= range.to) byId.set(t.id, t);
+    }
+    for (const t of fetchedMonths[monthCacheKey] ?? []) {
+      if (!byId.has(t.id)) byId.set(t.id, t);
+    }
+    return [...byId.values()];
+  }, [range, inSnapshot, period, monthCacheKey, fetchedMonths]);
 
   useEffect(() => {
     if (inSnapshot || monthCacheKey in fetchedMonths) return;
     let cancelled = false;
-    // Unscoped: no person parameter — fetch the whole month, then the
+    // Unscoped: no person parameter — fetch the whole period, then the
     // same shareOf / who filtering below applies, exactly as snapshot
     // months. Scoped: person + account go to the server so its filter
     // runs before LIMIT and the account's rows are never truncated
-    // away by the rest of the month.
+    // away by the rest of the period.
+    const scopeParams = accountScope
+      ? { person: accountScope.person, account: accountScope.account }
+      : {};
     fetchApiTransactions(
-      accountScope
-        ? {
-            month,
-            person: accountScope.person,
-            account: accountScope.account,
-            limit: "1000",
-          }
-        : { month, limit: "1000" },
+      range
+        ? { from: range.from, to: range.to, ...scopeParams, limit: "10000" }
+        : { month: period, ...scopeParams, limit: "1000" },
     )
       .then((rows) => {
         if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [monthCacheKey]: rows }));
@@ -112,7 +137,7 @@ export function Activity() {
     return () => {
       cancelled = true;
     };
-  }, [month, inSnapshot, fetchedMonths, monthCacheKey, accountScope]);
+  }, [period, range, inSnapshot, fetchedMonths, monthCacheKey, accountScope]);
 
   // Notes saved in this session, applied over both month sources so a
   // save reflects immediately (list indicator, sheet, search) without
@@ -145,7 +170,9 @@ export function Activity() {
     });
   }, [monthTxns, accountScope, noteOverrides]);
 
-  const monthSpend = scopedMonthTxns
+  // The header total sums the WHOLE selected period — one month or
+  // the full preset range — over the same scoped rows the list shows.
+  const periodSpend = scopedMonthTxns
     .filter((t) => t.kind === "spend")
     .reduce((s, t) => s + shareOf(t, person), 0);
 
@@ -179,7 +206,28 @@ export function Activity() {
         .sort((a, b) => b.date.localeCompare(a.date)),
     [person, q, whoActive, cat, scopedMonthTxns],
   );
-  const days = [...new Set(list.map((t) => t.day))];
+  // Day groups, newest first (the list is already sorted). A single
+  // month groups by day-of-month exactly as before; a range groups by
+  // full date, since a day number alone repeats across months.
+  const groups = useMemo(() => {
+    const out: { key: string; label: string; rows: Txn[] }[] = [];
+    const byKey = new Map<string, (typeof out)[number]>();
+    for (const t of list) {
+      const key = range ? t.date : `${t.monthKey}-${t.day}`;
+      let g = byKey.get(key);
+      if (!g) {
+        g = {
+          key,
+          label: range ? dateLabel(t.date) : dayLabel(t.day, false, t.monthKey),
+          rows: [],
+        };
+        byKey.set(key, g);
+        out.push(g);
+      }
+      g.rows.push(t);
+    }
+    return out;
+  }, [list, range]);
 
   // The sheet renders the freshest copy of the opened transaction, so a
   // saved correction (which refreshes the snapshot and any fetched month)
@@ -263,7 +311,7 @@ export function Activity() {
 
   return (
     <div className="lg:max-w-3xl">
-      <PageTitle sub={`${gbp(monthSpend)} spent · transfers and savings not counted`}>Activity</PageTitle>
+      <PageTitle sub={`${gbp(periodSpend)} spent · transfers and savings not counted`}>Activity</PageTitle>
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
@@ -297,17 +345,24 @@ export function Activity() {
           <option value="all">All categories</option>
           {[...categoryNames(), "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
         </select>
-        <select className={sel} value={month} onChange={(e) => setMonth(e.target.value)}>
-          {monthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+        <select className={sel} value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Period">
+          <optgroup label="Ranges">
+            {PERIOD_PRESETS.map((p) => (
+              <option key={p.id} value={presetValue(p.id)}>{p.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Months">
+            {monthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+          </optgroup>
         </select>
       </div>
 
-      {days.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">{monthLoaded ? "Nothing here." : "Loading…"}</p>}
-      {days.map((d) => (
-        <div key={d} className="mb-5">
-          <Label>{dayLabel(d, false, month)}</Label>
+      {groups.length === 0 && <p className="py-12 text-center text-body text-muted-foreground">{monthLoaded ? "Nothing here." : "Loading…"}</p>}
+      {groups.map((g) => (
+        <div key={g.key} className="mb-5">
+          <Label>{g.label}</Label>
           <div className="rounded-xl border bg-card px-4">
-            {list.filter((t) => t.day === d).map((t) => (
+            {g.rows.map((t) => (
               <button key={t.id} onClick={() => setOpen(t)} className="ledger-row flex w-full items-center justify-between gap-3 py-3 text-left">
                 <div className="flex min-w-0 items-center gap-2">
                   <MerchantTile merchant={t.merchant} category={t.category} />
