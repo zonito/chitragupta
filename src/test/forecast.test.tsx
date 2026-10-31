@@ -110,6 +110,50 @@ describe("detectIncomeRegulars", () => {
     expect(found[0]!.amount).toBe(2620);
   });
 
+  it("detects a salary varying by ±25% through the median band, projected at the median", () => {
+    const charges = [
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-08-28", 400000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-09-28", 500000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-10-28", 450000),
+    ];
+    // No 7% cluster exists here (the amounts are far too spread), so
+    // this can only be the median band: median £4,500, gaps 31 + 30.
+    const found = detectIncomeRegulars(charges, "2026-11-15");
+    expect(found).toHaveLength(1);
+    expect(found[0]!.name).toBe("EXAMPLE EMPLOYER LTD BGC");
+    expect(found[0]!.amount).toBe(4500);
+    expect(found[0]!.periodDays).toBe(31);
+    expect(found[0]!.nextExpected).toBe("2026-11-28");
+  });
+
+  it("median band still rejects wild variation and non-monthly cadences", () => {
+    // ±50%-class swings: only the median itself sits inside ±35%,
+    // so there is no three-landing stream to find.
+    const wild = [
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-08-28", 200000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-09-28", 450000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-10-28", 700000),
+    ];
+    expect(detectIncomeRegulars(wild, "2026-11-15")).toEqual([]);
+    // Salary amounts but a fortnightly cadence is not a monthly
+    // stream for this detector. (Amounts are spread so no two form
+    // a 7% pair either — the case isolates the cadence rule.)
+    const fortnightly = [
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-09-04", 400000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-09-18", 520000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-10-02", 440000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-10-16", 560000),
+    ];
+    expect(detectIncomeRegulars(fortnightly, "2026-11-15")).toEqual([]);
+    // Only two landings: the median band demands three (the 7%
+    // cluster's two-landing rule does not widen with it).
+    const two = [
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-09-28", 400000),
+      charge("EXAMPLE EMPLOYER LTD BGC", "2026-10-28", 500000),
+    ];
+    expect(detectIncomeRegulars(two, "2026-11-15")).toEqual([]);
+  });
+
   it("rejects varying-amount transfers, one-offs, weekly streams and stale streams", () => {
     const varying = [
       charge("SHARMA L", "2026-06-30", 200000),

@@ -8,6 +8,7 @@ import {
   type IngestResult,
 } from "@/lib/ingest/ingest";
 import { openStore } from "@/lib/ingest/store";
+import { detectIncomeRegulars, forecastEvents } from "@/lib/forecast";
 
 /**
  * The Barclays integration over a fully synthetic data dir: an
@@ -218,6 +219,51 @@ describe("Barclays movement mapping and transfer matching", () => {
       .get() as { income: number; spend: number };
     expect(agg.income).toBe(550000);
     expect(agg.spend).toBe(18850);
+    db.close();
+  });
+
+  it("the varying salary is an income regular for the forecast, so the no-income label is gone", () => {
+    const db = makeStore();
+    ingestAccounts(db, makeDataDir());
+    // Exactly the rows the snapshot feeds the detector: GBP income.
+    const incomeRows = db
+      .prepare(
+        "SELECT person, account, effective_date, merchant, amount_minor FROM transactions WHERE currency = 'GBP' AND movement = 'income' AND amount_minor > 0 ORDER BY effective_date",
+      )
+      .all() as {
+      person: string;
+      account: string;
+      effective_date: string;
+      merchant: string;
+      amount_minor: number;
+    }[];
+    const regulars = detectIncomeRegulars(
+      incomeRows.map((r) => ({
+        merchant: r.merchant,
+        date: r.effective_date,
+        amountMinor: r.amount_minor,
+        account: r.account,
+        person: r.person,
+      })),
+      "2026-10-28",
+    );
+    const salary = regulars.find(
+      (r) => r.name === "EXAMPLE EMPLOYER LTD BGC",
+    );
+    expect(salary).toBeDefined();
+    // £4,000 / £5,000 / £4,500: no 7% cluster, so the median band
+    // carries it, projected at the £4,500 median.
+    expect(salary!.amount).toBe(4500);
+    // forecastEvents is what decides the card's "No regular income
+    // detected" label: with the salary detected, hasIncome is true.
+    const { hasIncome } = forecastEvents(
+      "household",
+      [],
+      regulars,
+      "2026-10-28",
+      "2026-10-31",
+    );
+    expect(hasIncome).toBe(true);
     db.close();
   });
 

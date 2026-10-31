@@ -78,6 +78,15 @@ function medianOf(values: number[]): number {
 // payments plus an in-band gap are a pattern, not a coincidence), and a
 // stream counts as still landing when its last payment is within 1.5
 // cadences of the store's latest date — the detector's own rule.
+//
+// A salary also escapes the 7% window legitimately: pay varies with
+// bonuses, overtime and tax-code changes by far more than a bill does.
+// So a merchant the cluster search cannot see gets a second, wider
+// look — the median band: at least three landings on the same monthly
+// cadence whose amounts sit within ±35% of their own median, projected
+// at that median. The union is deduplicated by merchant (the tighter
+// cluster reading wins where both fire). The SPEND detector is
+// untouched: bills do not vary like pay, so 7% stays right there.
 // ---------------------------------------------------------------------------
 
 export interface IncomeCharge {
@@ -91,6 +100,53 @@ export interface IncomeCharge {
 }
 
 const MONTHLY_BAND = { min: 25, max: 35 };
+
+/**
+ * The cadence discipline shared by both income readings: the median
+ * gap inside the Monthly band and at least 60% of gaps in band.
+ * Returns the median gap, or null when the dates are not a monthly
+ * stream.
+ */
+function monthlyCadence(dates: string[]): number | null {
+  const gaps: number[] = [];
+  for (let i = 1; i < dates.length; i++) {
+    gaps.push((dayMs(dates[i]!) - dayMs(dates[i - 1]!)) / DAY);
+  }
+  if (gaps.length === 0) return null;
+  const medianGap = medianOf(gaps);
+  if (medianGap < MONTHLY_BAND.min || medianGap > MONTHLY_BAND.max) {
+    return null;
+  }
+  const inBand = gaps.filter(
+    (g) => g >= MONTHLY_BAND.min && g <= MONTHLY_BAND.max,
+  ).length;
+  return inBand / gaps.length >= 0.6 ? medianGap : null;
+}
+
+/**
+ * The median band for one merchant's charges: at least three
+ * landings on a monthly cadence, amounts within ±35% of their
+ * median. Wild outliers (a one-off bonus far outside the band) are
+ * simply not members; the stream is what recurs.
+ */
+function medianBandStream(group: IncomeCharge[]): {
+  charges: IncomeCharge[];
+  medianGap: number;
+  medianAmount: number;
+} | null {
+  if (group.length < 3) return null;
+  const sorted = [...group].sort((a, b) => dayMs(a.date) - dayMs(b.date));
+  const medianAmount = medianOf(sorted.map((c) => Math.abs(c.amountMinor)));
+  if (medianAmount <= 0) return null;
+  const members = sorted.filter((c) => {
+    const a = Math.abs(c.amountMinor);
+    return a >= medianAmount * 0.65 && a <= medianAmount * 1.35;
+  });
+  if (members.length < 3) return null;
+  const medianGap = monthlyCadence(members.map((c) => c.date));
+  if (medianGap === null) return null;
+  return { charges: members, medianGap, medianAmount };
+}
 
 export function detectIncomeRegulars(
   charges: IncomeCharge[],
@@ -139,14 +195,40 @@ export function detectIncomeRegulars(
         best = { charges: members, medianGap };
       }
     }
-    if (!best) continue;
+    // The union, deduplicated by merchant: the tight 7% cluster
+    // reading where it fired (projected at its latest amount), else
+    // the median band (projected at the median).
+    let chosen: {
+      charges: IncomeCharge[];
+      medianGap: number;
+      amountMinor: number;
+    } | null = null;
+    if (best) {
+      chosen = {
+        charges: best.charges,
+        medianGap: best.medianGap,
+        amountMinor: Math.abs(
+          best.charges[best.charges.length - 1]!.amountMinor,
+        ),
+      };
+    } else {
+      const band = medianBandStream(group);
+      if (band) {
+        chosen = {
+          charges: band.charges,
+          medianGap: band.medianGap,
+          amountMinor: band.medianAmount,
+        };
+      }
+    }
+    if (!chosen) continue;
 
-    const cluster = best.charges;
+    const cluster = chosen.charges;
     const last = cluster[cluster.length - 1]!;
     const lastDate = last.date.slice(0, 10);
     // Still landing? The detector's rule: the last charge within
     // 1.5 cadences of the store's latest date.
-    if ((dayMs(latestDate) - dayMs(lastDate)) / DAY > best.medianGap * 1.5) {
+    if ((dayMs(latestDate) - dayMs(lastDate)) / DAY > chosen.medianGap * 1.5) {
       continue;
     }
 
@@ -164,10 +246,10 @@ export function detectIncomeRegulars(
 
     regulars.push({
       name,
-      amount: Math.abs(last.amountMinor) / 100,
+      amount: chosen.amountMinor / 100,
       owner: (last.account === "Joint" ? "joint" : last.person) as Owner,
-      nextExpected: addDays(lastDate, Math.round(best.medianGap)),
-      periodDays: Math.round(best.medianGap),
+      nextExpected: addDays(lastDate, Math.round(chosen.medianGap)),
+      periodDays: Math.round(chosen.medianGap),
     });
   }
   regulars.sort((a, b) => b.amount - a.amount);
