@@ -5,9 +5,11 @@ import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/compon
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { ACCOUNTS, ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, dateLabel, ownerName, personLabel, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { ACCOUNTS, ALL_TXNS, SUBS, SUB_OVERRIDES, categoryNames, docFor, docName, shareOf, gbp, dayLabel, dateLabel, ownerName, personLabel, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 import { PERIOD_PRESETS, parsePreset, presetValue, rangeForPreset } from "@/lib/periods";
 import { fetchApiTransactions } from "@/lib/txn-map";
+import { canonicalMerchant } from "@/lib/subscriptions";
+import { postSubscriptionOverride, type SubscriptionOverrideMode } from "@/lib/subscription-overrides";
 
 export const Route = createFileRoute("/activity")({
   head: () => meta("Activity", "Every transaction this month, grouped by day, with search and filters."),
@@ -436,6 +438,7 @@ export function Activity() {
               transaction={openTxn}
               onSaved={(note) => applyNoteLocally(openTxn.id, note)}
             />
+            <TransactionSubscription key={`sub-${openTxn.id}`} txn={openTxn} />
             <TransactionReceipt key={openTxn.id} transaction={openTxn} />
             <TransactionIdLine id={openTxn.id} />
           </div>
@@ -498,6 +501,90 @@ function TransactionNote({
           {busy ? "Saving…" : "Save note"}
         </Button>
         {saved && <span className="text-caption text-muted-foreground">Saved</span>}
+      </div>
+      {error && (
+        <p className="mt-2 text-caption text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Subscription corrections for this transaction's merchant, written
+ * through POST /api/subscriptions/override. Subscriptions are
+ * merchant-level here, so every action states that it applies to all
+ * of the merchant's payments. The current state comes from the
+ * snapshot (detected sub + any override), with the just-saved mode
+ * held locally so the block reflects a save immediately.
+ */
+function TransactionSubscription({ txn }: { txn: Txn }) {
+  const router = useRouter();
+  const key = canonicalMerchant(txn.merchant);
+  const snapshotOverride = SUB_OVERRIDES.find((o) => o.merchant === key);
+  const sub = SUBS.find((s) => canonicalMerchant(s.name) === key);
+  const [local, setLocal] = useState<{ mode: SubscriptionOverrideMode | null } | null>(null);
+  const mode = local ? local.mode : (snapshotOverride?.mode ?? null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const act = async (next: SubscriptionOverrideMode | null) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await postSubscriptionOverride(txn.merchant, next);
+      setLocal({ mode: next });
+      void router?.invalidate().catch(() => {});
+    } catch {
+      setError("That could not be saved — please try again.");
+    }
+    setBusy(false);
+  };
+
+  const stateLine =
+    mode === "suppress"
+      ? "Not a subscription — you removed it."
+      : mode === "cancelled"
+        ? "A subscription you marked cancelled."
+        : mode === "force"
+          ? "A subscription you added."
+          : sub?.status === "Active"
+            ? "This merchant is a subscription."
+            : sub?.status === "Ended"
+              ? "This merchant was a subscription (ended)."
+              : sub?.status === "Cancelled"
+                ? "A subscription marked cancelled."
+                : null;
+
+  return (
+    <section className="mt-5 border-t pt-4">
+      <Label>Subscription</Label>
+      {stateLine && <p className="mt-1 text-body">{stateLine}</p>}
+      <p className="mt-1 text-caption text-muted-foreground">
+        Applies to all {txn.merchant} payments.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {!sub && mode === null && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void act("force")}>
+            Mark as subscription
+          </Button>
+        )}
+        {(sub?.status === "Active" || mode === "force") && mode !== "cancelled" && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void act("cancelled")}>
+            Mark cancelled
+          </Button>
+        )}
+        {mode !== "suppress" && (sub || mode !== null) && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void act("suppress")}>
+            Not a subscription
+          </Button>
+        )}
+        {mode !== null && (
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => void act(null)}>
+            Undo correction
+          </Button>
+        )}
       </div>
       {error && (
         <p className="mt-2 text-caption text-destructive" role="alert">

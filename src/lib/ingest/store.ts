@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS txn_notes (
   note TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS subscription_overrides (
+  merchant TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'user',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   merchant TEXT NOT NULL,

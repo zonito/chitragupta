@@ -170,6 +170,7 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
     { name: "PureGym", day: 21, date: "2026-11-21", amount: 34.99, owner: "nikhila" },
     { name: "The Times", day: 14, date: "2026-11-14", amount: 26, owner: "zonito" },
   ],
+  subOverrides: [],
   subs: [
     { name: "Netflix", amount: 18.99, freq: "Monthly", last: "5 Oct 2026", card: "Virtual ending 7730", owner: "zonito", status: "Active", charges: 14, nextExpected: "2026-11-05", variants: ["Netflix"], note: "£17.99 → £18.99 · Moved to the new card", chargeIds: ["netflix-1", "netflix-2", "netflix-3", "netflix-4", "netflix-5", "netflix-6", "netflix-7", "netflix-8", "netflix-9", "netflix-10", "netflix-11", "netflix-12", "netflix-13", "netflix-14"] },
     { name: "Spotify Family", amount: 19.99, freq: "Monthly", last: "2 Oct 2026", card: "Virtual ending 7730", owner: "zonito", status: "Active", charges: 11, nextExpected: "2026-11-02", variants: ["Spotify Family"], note: "Moved to the new card", chargeIds: ["spotify-family-1", "spotify-family-2", "spotify-family-3", "spotify-family-4", "spotify-family-5", "spotify-family-6", "spotify-family-7", "spotify-family-8", "spotify-family-9", "spotify-family-10", "spotify-family-11"] },

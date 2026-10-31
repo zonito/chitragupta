@@ -13,12 +13,13 @@ import {
   type Owner,
   type Person,
   type Sub,
+  type SubOverride,
   type Txn,
   type UpcomingPayment,
 } from "./data";
 import { accountTxnLabel } from "./txn-map";
 import { listCategories } from "./ingest/categories";
-import { detectSubscriptions } from "./subscriptions";
+import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
 import {
   documentRowToDoc,
   type DocumentRow,
@@ -350,22 +351,39 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     .prepare(`SELECT MAX(substr(effective_date, 1, 10)) AS d FROM transactions`)
     .get() as { d: string | null };
   const latestDate = latestRow.d ?? current;
-  const subs: Sub[] = detectSubscriptions(
-    allSpend.map((r) => ({
-      id: r.fingerprint,
+  const subCharges = allSpend.map((r) => ({
+    id: r.fingerprint,
+    merchant: r.merchant,
+    date: r.effective_date,
+    amountMinor: r.amount_minor,
+    account: r.account,
+    person: r.person,
+  }));
+  const subFormat = {
+    // Full dateLabel ("5 Oct 2026"), so a card's last-charged date is
+    // in the same format as the next-expected date it renders beside.
+    dateLabel,
+    accountLabel: (account: string, person: string) => accountTxnLabel(person, account),
+  };
+  // Human overrides on the detector (subscription_overrides): applied
+  // HERE, at the one place subscriptions are computed, so the
+  // Subscriptions screen, Coach and Home's Coming up — all snapshot
+  // readers — honour every correction at once.
+  const overrideRows = db
+    .prepare("SELECT merchant, label, mode FROM subscription_overrides ORDER BY label")
+    .all() as { merchant: string; label: string; mode: string }[];
+  const subOverrides: SubOverride[] = overrideRows
+    .filter((r) => r.mode === "force" || r.mode === "suppress" || r.mode === "cancelled")
+    .map((r) => ({
       merchant: r.merchant,
-      date: r.effective_date,
-      amountMinor: r.amount_minor,
-      account: r.account,
-      person: r.person,
-    })),
-    latestDate,
-    {
-      // Full dateLabel ("5 Oct 2026"), so a card's last-charged date is
-      // in the same format as the next-expected date it renders beside.
-      dateLabel,
-      accountLabel: (account, person) => accountTxnLabel(person, account),
-    },
+      label: r.label,
+      mode: r.mode as SubOverride["mode"],
+    }));
+  const subs: Sub[] = applySubscriptionOverrides(
+    detectSubscriptions(subCharges, latestDate, subFormat),
+    subCharges,
+    new Map(subOverrides.map((o) => [o.merchant, o.mode])),
+    subFormat,
   );
 
   // Per-month charge totals for the Subscriptions trend, summed from
@@ -522,6 +540,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     income,
     upcoming,
     subs,
+    subOverrides,
     cards: [],
     migration: { moved: [], waiting: [] },
     reviewTotal,

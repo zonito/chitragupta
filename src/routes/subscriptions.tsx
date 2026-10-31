@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { usePerson, PageTitle, Panel, Chip, Label, Sheet, meta } from "@/components/shell";
-import { SUBS, monthlyOf, yearlyOf, gbp, personLabel, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
+import { Button } from "@/components/ui/button";
+import { SUBS, SUB_OVERRIDES, monthlyOf, yearlyOf, gbp, personLabel, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
 import { subscriptionMonthlyRows } from "@/lib/timeline";
 import { SpendTimelineSection } from "@/components/spend-chart";
 import { MerchantTile } from "@/components/tiles";
+import { canonicalMerchant } from "@/lib/subscriptions";
+import { postSubscriptionOverride, type SubscriptionOverrideMode } from "@/lib/subscription-overrides";
 
 export const Route = createFileRoute("/subscriptions")({
   head: () => meta("Subscriptions", "Recurring charges, yearly cost, and which card each one sits on."),
@@ -35,7 +38,17 @@ export function Subs() {
   const [endedOpen, setEndedOpen] = useState(false);
   const list = SUBS.filter((s) => person === "household" || s.owner === person);
   const active = list.filter((s) => s.status === "Active");
-  const ended = list.filter((s) => s.status === "Ended");
+  // The Ended area also holds user-cancelled subs (their chip says
+  // Cancelled, distinct from the detector's Ended).
+  const ended = list.filter((s) => s.status !== "Active");
+  // Merchants the user suppressed outright: not subscriptions at all,
+  // listed in the Ended area with a Restore for each.
+  const removed = SUB_OVERRIDES.filter((o) => o.mode === "suppress");
+  // The detail sheet renders the freshest copy of the selected sub,
+  // so a correction saved from inside it shows in place.
+  const selectedSub = selected
+    ? (SUBS.find((s) => s.name === selected.name) ?? selected)
+    : null;
   const m = active.reduce((a, s) => a + monthlyOf(s), 0);
   const yearly = active.reduce((a, s) => a + yearlyOf(s), 0);
   const largest = [...active].sort((a, b) => yearlyOf(b) - yearlyOf(a))[0];
@@ -80,7 +93,7 @@ export function Subs() {
         );
       })}
 
-      {ended.length > 0 && (
+      {(ended.length > 0 || removed.length > 0) && (
         <section className="mb-8">
           <h2 className="mb-3 text-heading font-semibold">
             <button
@@ -99,23 +112,71 @@ export function Subs() {
             </button>
           </h2>
           {endedOpen && (
-            <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
-              {ended.map((s) => <SubCard key={s.name} sub={s} person={person} onOpen={() => setSelected(s)} />)}
-            </div>
+            <>
+              {ended.length > 0 && (
+                <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+                  {ended.map((s) => <SubCard key={s.name} sub={s} person={person} onOpen={() => setSelected(s)} />)}
+                </div>
+              )}
+              {removed.length > 0 && (
+                <div className="mt-5">
+                  <Label>Removed by you</Label>
+                  <div className="mt-2 space-y-2">
+                    {removed.map((o) => (
+                      <div
+                        key={o.merchant}
+                        className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3"
+                      >
+                        <span className="text-body">{o.label}</span>
+                        <RestoreButton label={o.label} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}
 
-      {list.length === 0 && (
+      {list.length === 0 && removed.length === 0 && (
         <Panel className="p-4 text-body text-muted-foreground">
           No recurring charges detected yet. A subscription appears here once the same amount has been charged on a regular cycle.
         </Panel>
       )}
 
-      <Sheet open={!!selected} onClose={() => setSelected(null)}>
-        {selected && <SubDetail key={selected.name} sub={selected} />}
+      <Sheet open={!!selectedSub} onClose={() => setSelected(null)}>
+        {selectedSub && (
+          <SubDetail
+            key={selectedSub.name}
+            sub={selectedSub}
+            onClose={() => setSelected(null)}
+          />
+        )}
       </Sheet>
     </div>
+  );
+}
+
+/** Restore a suppressed merchant: clearing its override lets the
+ * detector's own verdict return on the next snapshot. */
+function RestoreButton({ label }: { label: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const restore = async () => {
+    setBusy(true);
+    try {
+      await postSubscriptionOverride(label, null);
+      await router?.invalidate().catch(() => {});
+    } catch {
+      // The row stays; the user can retry.
+    }
+    setBusy(false);
+  };
+  return (
+    <Button variant="outline" size="sm" disabled={busy} onClick={() => void restore()}>
+      Restore
+    </Button>
   );
 }
 
@@ -148,7 +209,7 @@ function SubCard({ sub: s, person, onOpen }: { sub: Sub; person: string; onOpen:
   );
 }
 
-function SubDetail({ sub }: { sub: Sub }) {
+function SubDetail({ sub, onClose }: { sub: Sub; onClose: () => void }) {
   const [txns, setTxns] = useState<Txn[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [page, setPage] = useState(0);
@@ -227,6 +288,96 @@ function SubDetail({ sub }: { sub: Sub }) {
           </div>
         </div>
       )}
+
+      <SubOverrideActions sub={sub} onClose={onClose} />
     </div>
+  );
+}
+
+/**
+ * The user's corrections for this subscription, written through
+ * POST /api/subscriptions/override (merchant-wide). Cancelling keeps
+ * the sub visible as Cancelled in the Ended area; "Not a
+ * subscription" removes it outright (it lands in Removed by you,
+ * restorable). Undo returns the detector's own verdict exactly.
+ */
+function SubOverrideActions({ sub, onClose }: { sub: Sub; onClose: () => void }) {
+  const router = useRouter();
+  const override = SUB_OVERRIDES.find(
+    (o) => o.merchant === canonicalMerchant(sub.name),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const act = async (mode: SubscriptionOverrideMode | null, close = false) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await postSubscriptionOverride(sub.name, mode);
+      await router?.invalidate().catch(() => {});
+      if (close) {
+        onClose();
+        return;
+      }
+      setDone(
+        mode === null
+          ? "Correction undone — the detector's own result is back."
+          : mode === "cancelled"
+            ? "Marked cancelled."
+            : "Removed from subscriptions.",
+      );
+    } catch {
+      setError("That could not be saved — please try again.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <section className="mt-5 border-t pt-4">
+      <Label>Your correction</Label>
+      {override?.mode === "force" && (
+        <p className="mt-1 text-caption text-muted-foreground">You added this subscription.</p>
+      )}
+      {override?.mode === "cancelled" && (
+        <p className="mt-1 text-caption text-muted-foreground">
+          You marked this subscription cancelled.
+        </p>
+      )}
+      <p className="mt-1 text-caption text-muted-foreground">
+        Applies to all {sub.name} payments.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {sub.status === "Active" && override?.mode !== "cancelled" && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void act("cancelled")}>
+            Mark cancelled
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => void act("suppress", true)}
+        >
+          Not a subscription
+        </Button>
+        {override && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => void act(null, override.mode === "force")}
+          >
+            Undo correction
+          </Button>
+        )}
+      </div>
+      {done && <p className="mt-2 text-caption text-muted-foreground">{done}</p>}
+      {error && (
+        <p className="mt-2 text-caption text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

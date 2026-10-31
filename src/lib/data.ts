@@ -127,7 +127,10 @@ export interface IncomeEntry {
 }
 export interface Sub {
   name: string; amount: number; freq: "Weekly" | "Monthly" | "Quarterly" | "Yearly"; last: string; card: string;
-  owner: Owner; status: "Active" | "Ended"; note?: string;
+  /** "Cancelled" is a human override label, distinct from the
+   * detector's own "Ended"; it behaves like Ended everywhere totals
+   * and Coming up are computed. */
+  owner: Owner; status: "Active" | "Ended" | "Cancelled"; note?: string;
   /** Number of charges in the recurring amount cluster that defines this sub. */
   charges: number;
   /** Store fingerprints of those cluster charges, in charge order. The
@@ -212,6 +215,14 @@ export interface MonthlyHistory {
   series: Record<string, Partial<Record<Person, number[]>>>; // pounds
 }
 
+/** A human correction to subscription detection (subscription_overrides),
+ * keyed by canonical merchant; label is the name as acted on, for display. */
+export interface SubOverride {
+  merchant: string;
+  label: string;
+  mode: "force" | "suppress" | "cancelled";
+}
+
 export interface DataSnapshot {
   configured: boolean;
   monthKey: string; // current month, YYYY-MM ("" when no data)
@@ -222,6 +233,7 @@ export interface DataSnapshot {
   income: IncomeEntry[]; // current month
   upcoming: UpcomingPayment[];
   subs: Sub[];
+  subOverrides: SubOverride[];
   cards: CardItem[];
   migration: { moved: { name: string; seen: string }[]; waiting: { name: string; seen: string }[] };
   reviewTotal: number; // TRUE review-queue size; the sheet fetches the items itself from /api/review-queue
@@ -244,6 +256,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   income: [],
   upcoming: [],
   subs: [],
+  subOverrides: [],
   cards: [],
   migration: { moved: [], waiting: [] },
   reviewTotal: 0,
@@ -267,6 +280,7 @@ export const ALL_TXNS: Txn[] = [];
 export const INCOME: IncomeEntry[] = [];
 export const UPCOMING: UpcomingPayment[] = [];
 export const SUBS: Sub[] = [];
+export const SUB_OVERRIDES: SubOverride[] = [];
 export const CARDS: CardItem[] = [];
 export const ACCOUNTS: AccountInfo[] = [];
 export const CATEGORY_DEFS: CategoryDef[] = [];
@@ -287,6 +301,7 @@ export function hydrateData(next: DataSnapshot): void {
   replace(INCOME, next.income);
   replace(UPCOMING, next.upcoming);
   replace(SUBS, next.subs);
+  replace(SUB_OVERRIDES, next.subOverrides ?? []);
   replace(CARDS, next.cards);
   replace(ACCOUNTS, next.accounts);
   replace(CATEGORY_DEFS, next.categories ?? []);

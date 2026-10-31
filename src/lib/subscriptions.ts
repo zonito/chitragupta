@@ -218,3 +218,118 @@ export function detectSubscriptions(
   subs.sort((a, b) => b.amount - a.amount);
   return subs;
 }
+
+/**
+ * Human overrides on top of the pattern-only detector, keyed by
+ * canonical merchant (the subscription_overrides table):
+ * - suppress: the merchant never appears (kills detector false
+ *   positives, e.g. a yearly cluster that is really just shopping);
+ * - cancelled: the sub stays visible with status "Cancelled" — a
+ *   label distinct from the detector's own "Ended" — and, like Ended,
+ *   it drops out of Active totals, Coach and Coming up;
+ * - force: the merchant appears as an Active subscription even with
+ *   no detected pattern, derived from its charges (below).
+ * With no overrides the detector's output passes through untouched.
+ */
+export type SubscriptionOverrideMode = "force" | "suppress" | "cancelled";
+
+const FREQ_PERIOD_DAYS: Record<SubFreq, number> = {
+  Weekly: 7,
+  Monthly: 30,
+  Quarterly: 91,
+  Yearly: 365,
+};
+
+/** The cadence band most of the gaps fall in; Monthly when none do. */
+function mostCommonFreq(gaps: number[]): SubFreq {
+  const counts = new Map<SubFreq, number>();
+  for (const gap of gaps) {
+    const band = BANDS.find((b) => gap >= b.min && gap <= b.max);
+    if (band) counts.set(band.freq, (counts.get(band.freq) ?? 0) + 1);
+  }
+  let best: SubFreq = "Monthly";
+  let bestCount = 0;
+  // Monthly is also the fallback, so it wins ties.
+  for (const freq of ["Monthly", "Weekly", "Quarterly", "Yearly"] as SubFreq[]) {
+    const count = counts.get(freq) ?? 0;
+    if (count > bestCount) {
+      best = freq;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/**
+ * A forced subscription, derived from ALL of the merchant's spend
+ * charges: the amount is its latest charge, the cadence its most
+ * common charge interval (Monthly fallback), first/last from the
+ * charges themselves, status Active.
+ */
+function forcedSub(group: SubCharge[], format: DetectFormat): Sub {
+  const sorted = [...group].sort((a, b) => dayMs(a.date) - dayMs(b.date));
+  const last = sorted[sorted.length - 1]!;
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    gaps.push((dayMs(sorted[i]!.date) - dayMs(sorted[i - 1]!.date)) / DAY);
+  }
+  const freq = mostCommonFreq(gaps);
+  const step = gaps.length > 0 ? Math.round(medianOf(gaps)) : FREQ_PERIOD_DAYS[freq];
+  const variantCounts = new Map<string, number>();
+  for (const c of sorted) {
+    variantCounts.set(c.merchant, (variantCounts.get(c.merchant) ?? 0) + 1);
+  }
+  const variants = [...variantCounts.keys()].sort();
+  const name = [...variantCounts.entries()].sort(
+    (a, b) =>
+      b[1] - a[1] ||
+      (a[0] === last.merchant ? -1 : b[0] === last.merchant ? 1 : 0),
+  )[0]![0];
+  const lastDate = last.date.slice(0, 10);
+  return {
+    name,
+    amount: Math.abs(last.amountMinor) / 100,
+    freq,
+    last: format.dateLabel(lastDate),
+    card: format.accountLabel(last.account, last.person),
+    owner: (last.account === "Joint" ? "joint" : last.person) as Owner,
+    status: "Active",
+    charges: sorted.length,
+    chargeIds: sorted.map((c) => c.id),
+    nextExpected: addDays(lastDate, step),
+    variants,
+  };
+}
+
+export function applySubscriptionOverrides(
+  detected: Sub[],
+  charges: SubCharge[],
+  overrides: ReadonlyMap<string, SubscriptionOverrideMode>,
+  format: DetectFormat,
+): Sub[] {
+  if (overrides.size === 0) return detected;
+  const out: Sub[] = [];
+  const detectedKeys = new Set<string>();
+  for (const sub of detected) {
+    const key = canonicalMerchant(sub.name);
+    detectedKeys.add(key);
+    const mode = overrides.get(key);
+    if (mode === "suppress") continue;
+    if (mode === "cancelled") {
+      out.push({ ...sub, status: "Cancelled", nextExpected: null });
+      continue;
+    }
+    out.push(sub);
+  }
+  const forcedGroups = new Map<string, SubCharge[]>();
+  for (const charge of charges) {
+    const key = canonicalMerchant(charge.merchant);
+    if (overrides.get(key) !== "force" || detectedKeys.has(key)) continue;
+    const list = forcedGroups.get(key) ?? [];
+    list.push(charge);
+    forcedGroups.set(key, list);
+  }
+  for (const group of forcedGroups.values()) out.push(forcedSub(group, format));
+  out.sort((a, b) => b.amount - a.amount);
+  return out;
+}

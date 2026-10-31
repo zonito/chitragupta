@@ -37,6 +37,7 @@ import {
   claudeConfig,
 } from "./ingest/classify";
 import { answerAsk } from "./ask.server";
+import { canonicalMerchant, type SubscriptionOverrideMode } from "./subscriptions";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -167,6 +168,7 @@ export async function handleChitraguptaApi(
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
     path === "/api/transactions/note" ||
+    path === "/api/subscriptions/override" ||
     path === "/api/accounts" ||
     path === "/api/aggregates" ||
     path === "/api/aggregates/daily" ||
@@ -1088,6 +1090,40 @@ async function routeWithDb(
          note = excluded.note, updated_at = excluded.updated_at`,
     ).run(body.id, note);
     return json({ ok: true, id: body.id, note });
+  }
+
+  if (path === "/api/subscriptions/override" && request.method === "POST") {
+    // A human correction to subscription detection, keyed by
+    // CANONICAL merchant so name variants share one correction. mode
+    // null removes the override (undo — the detector's own output
+    // returns exactly). The snapshot applies overrides where
+    // subscriptions are computed, so one write corrects every screen.
+    let body: { merchant?: string; mode?: string | null };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    if (!body.merchant) {
+      return json({ ok: false, error: "merchant is required" }, 400);
+    }
+    const key = canonicalMerchant(body.merchant);
+    if (body.mode === null || body.mode === undefined) {
+      db.prepare("DELETE FROM subscription_overrides WHERE merchant = ?").run(key);
+      return json({ ok: true, merchant: body.merchant, mode: null });
+    }
+    const MODES: ReadonlySet<string> = new Set(["force", "suppress", "cancelled"]);
+    if (!MODES.has(body.mode)) {
+      return json({ ok: false, error: "mode must be force, suppress, cancelled or null" }, 400);
+    }
+    db.prepare(
+      `INSERT INTO subscription_overrides (merchant, label, mode, source, updated_at)
+       VALUES (?, ?, ?, 'user', strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+       ON CONFLICT (merchant) DO UPDATE SET
+         label = excluded.label, mode = excluded.mode,
+         updated_at = excluded.updated_at`,
+    ).run(key, body.merchant, body.mode as SubscriptionOverrideMode);
+    return json({ ok: true, merchant: body.merchant, mode: body.mode });
   }
 
   if (path === "/api/accounts" && request.method === "GET") {

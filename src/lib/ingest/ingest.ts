@@ -775,6 +775,35 @@ function carryTxnNotes(
   copy(rows);
 }
 
+const OVERRIDE_COLUMNS = "merchant, label, mode, source, updated_at";
+
+/**
+ * Subscription overrides are the user's corrections to the detector
+ * (force / suppress / cancelled, keyed by canonical merchant) — same
+ * treatment as notes: copied into the rebuild's temp store up front,
+ * and the live table itself is outside the swap set, so they survive
+ * rebuilds by construction as well.
+ */
+function carrySubscriptionOverrides(
+  from: import("better-sqlite3").Database,
+  to: import("better-sqlite3").Database,
+): void {
+  const rows = from
+    .prepare(`SELECT ${OVERRIDE_COLUMNS} FROM subscription_overrides`)
+    .all() as Record<string, unknown>[];
+  if (rows.length === 0) return;
+  const insert = to.prepare(
+    `INSERT OR REPLACE INTO subscription_overrides (${OVERRIDE_COLUMNS})
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  const copy = to.transaction((items: Record<string, unknown>[]) => {
+    for (const r of items) {
+      insert.run(r["merchant"], r["label"], r["mode"], r["source"], r["updated_at"]);
+    }
+  });
+  copy(rows);
+}
+
 /**
  * File assignments (meta) are likewise not derivable state the rebuild
  * may drop: the temp store receives the live store's assignments before
@@ -851,6 +880,7 @@ function rebuildStore(
   try {
     carryMerchantMemory(db, tmp);
     carryTxnNotes(db, tmp);
+    carrySubscriptionOverrides(db, tmp);
     carryFileAssignments(db, tmp);
     results = ingestAccounts(tmp, dataDir);
     tmp.pragma("wal_checkpoint(TRUNCATE)");
