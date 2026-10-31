@@ -228,6 +228,19 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
   typical,
   sparks,
   monthly,
+  // Moved-aside totals over the same months as the spend history:
+  // flat at each view's October figure (£1,050 household = the three
+  // aside rows in SAMPLE_TXNS; Zonito £650, Nikhila £400), so a
+  // typical month equals this month and no pace lever fires on the
+  // plain fixture.
+  asideMonthly: {
+    months: ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"],
+    totals: {
+      household: [1050, 1050, 1050, 1050, 1050, 1050],
+      zonito: [650, 650, 650, 650, 650, 650],
+      nikhila: [400, 400, 400, 400, 400, 400],
+    },
+  },
   months6: ["May", "Jun", "Jul", "Aug", "Sep", "Oct"],
   newMerchants: [
     { merchant: "Bao Borough", category: "Eating out", amount: 46.8, date: "2026-10-18" },

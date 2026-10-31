@@ -215,6 +215,17 @@ export interface MonthlyHistory {
   series: Record<string, Partial<Record<Person, number[]>>>; // pounds
 }
 
+/** Monthly moved-aside totals (outgoing aside only, pounds) per person
+ * view, from month_aggregates.aside_minor summed across categories,
+ * aligned to the same month range as MonthlyHistory. Coach's floor
+ * pace and typical-aside figures read this. Household follows the
+ * stored-rows rule: the stored 'household' aggregates when they
+ * exist, else the two people's rows summed — never both. */
+export interface MonthlyAside {
+  months: string[];
+  totals: Partial<Record<Person, number[]>>; // pounds, aligned to months
+}
+
 /** A human correction to subscription detection (subscription_overrides),
  * keyed by canonical merchant; label is the name as acted on, for display. */
 export interface SubOverride {
@@ -262,6 +273,7 @@ export interface DataSnapshot {
   typical: Record<string, Partial<Record<Person, number>>>;
   sparks: Record<string, Partial<Record<Person, number[]>>>;
   monthly: MonthlyHistory;
+  asideMonthly: MonthlyAside;
   months6: string[];
   newMerchants: NewMerchant[];
   biggestOneOff: Partial<Record<Person, { merchant: string; amount: number; date: string }>>;
@@ -286,6 +298,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   typical: {},
   sparks: {},
   monthly: { months: [], series: {} },
+  asideMonthly: { months: [], totals: {} },
   months6: [],
   newMerchants: [],
   biggestOneOff: {},
@@ -308,6 +321,7 @@ export const DOCS: Doc[] = [];
 export const MONTHS6: string[] = [];
 export let MIGRATION: DataSnapshot["migration"] = { moved: [], waiting: [] };
 export let MONTHLY_HISTORY: MonthlyHistory = { months: [], series: {} };
+export let MONTHLY_ASIDE: MonthlyAside = { months: [], totals: {} };
 
 function replace<T>(target: T[], next: T[]): void {
   target.length = 0;
@@ -329,6 +343,7 @@ export function hydrateData(next: DataSnapshot): void {
   replace(MONTHS6, next.months6);
   MIGRATION = next.migration;
   MONTHLY_HISTORY = next.monthly ?? { months: [], series: {} };
+  MONTHLY_ASIDE = next.asideMonthly ?? { months: [], totals: {} };
 }
 
 export function getSnapshot(): DataSnapshot {
@@ -687,26 +702,208 @@ export function weekdayLunchFact(person: Person = "household") {
   return { count: lunches.length, each, total, year: Math.round(total * 12) };
 }
 
+function shiftMonthKey(key: string, delta: number): string {
+  const { year, month } = monthParts(key);
+  const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function medianOf(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]!
+    : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+}
+const monthNameOf = (key: string) => MONTH_NAMES[monthParts(key).month - 1] ?? "";
+
+/** This view's monthly moved-aside totals, aligned to the aside
+ * series' month range (missing entries read as 0). */
+export function asideMonthlyFor(p: Person): { months: string[]; totals: number[] } {
+  const months = MONTHLY_ASIDE.months;
+  const raw = MONTHLY_ASIDE.totals[p] ?? [];
+  return { months, totals: months.map((_, i) => raw[i] ?? 0) };
+}
+export function asideInMonth(p: Person, monthKey: string): number {
+  const { months, totals } = asideMonthlyFor(p);
+  const i = months.indexOf(monthKey);
+  return i >= 0 ? totals[i]! : 0;
+}
 /**
- * The Coach note, composed from the loaded month's facts — never invented.
- * Replaces the old hardcoded COACH_NOTE strings (which described sample
- * data: a Tenerife booking and a solicitor that may not exist in real data).
+ * The savings pace for the floor path: what was moved aside in the
+ * latest COMPLETE month — the month before the current (still-open)
+ * one — for this view. The current month never supplies the pace: it
+ * may only be days old, which would understate it.
  */
-export function coachNote(person: Person): string {
-  if (person === "nikhila" && spendTotal("nikhila") === 0 && incomeTotal("nikhila") === 0) {
-    return "No statements from Nikhila yet — her view fills in as soon as her files are imported.";
+export function asidePace(p: Person): { monthKey: string; total: number } {
+  const prev = snapshot.monthKey ? shiftMonthKey(snapshot.monthKey, -1) : "";
+  return { monthKey: prev, total: prev ? asideInMonth(p, prev) : 0 };
+}
+/** A typical month's moved-aside total: median of the previous 6
+ * calendar months, the same window and median as the spend typicals. */
+export function typicalAside(p: Person): number {
+  if (!snapshot.monthKey) return 0;
+  return medianOf(
+    [1, 2, 3, 4, 5, 6].map((d) => asideInMonth(p, shiftMonthKey(snapshot.monthKey, -d))),
+  );
+}
+
+/** Spends under £10 in the loaded month, this view's share — the same
+ * definition as calculators.smallSpendFact, kept local because
+ * calculators imports this module, not the other way round. */
+function smallSpends(p: Person): { count: number; total: number } {
+  let count = 0;
+  let total = 0;
+  for (const t of TXNS) {
+    const share = shareOf(t, p);
+    if (t.kind === "spend" && share > 0 && share < 10) {
+      count += 1;
+      total += share;
+    }
   }
-  const facts: string[] = [];
+  return { count, total };
+}
+
+interface CoachLever {
+  impact: number;
+  category?: string;
+  kind: "budget" | "typical" | "small" | "pace";
+  line: string;
+}
+
+/**
+ * The Coach lines, composed from the loaded month's facts, the
+ * configured floor and budgets, and the aside series — every figure
+ * computed here, never invented, and phrased as facts and options
+ * only. Order: the floor position first (when a floor is set), then
+ * the two biggest saving levers by £ impact, then the forward check
+ * against next month's known regulars, then the standing facts (big
+ * one-off, biggest change vs a usual month, moved aside) — a standing
+ * fact is skipped only when a chosen lever already states it for the
+ * same category or figure. With no floor and no budgets set, the
+ * floor and budget lines simply never appear; nothing here ever asks
+ * the user to configure one.
+ */
+export function coachLines(person: Person): string[] {
+  if (person === "nikhila" && spendTotal("nikhila") === 0 && incomeTotal("nikhila") === 0) {
+    return ["No statements from Nikhila yet — her view fills in as soon as her files are imported."];
+  }
+  const settings = appSettings();
+  const available = availableFor(person).gbpTotal;
+  const lines: string[] = [];
+
+  // 1. Floor first: the gap and the path at last month's saving pace,
+  // or the headroom when the floor is already met.
+  if (settings.availableFloorMinor !== null && available !== null) {
+    const floor = settings.availableFloorMinor / 100;
+    if (available < floor) {
+      const gap = floor - available;
+      const pace = asidePace(person);
+      if (pace.total > 0) {
+        const months = Math.max(1, Math.ceil(gap / pace.total));
+        lines.push(
+          `${gbp(gap, false)} below your ${gbp(floor, false)} floor. You moved ${gbp(pace.total, false)} aside in ${monthNameOf(pace.monthKey)}; at that pace the floor is reached in about ${months} ${months === 1 ? "month" : "months"}.`,
+        );
+      } else {
+        lines.push(
+          `${gbp(gap, false)} below your ${gbp(floor, false)} floor. Nothing was moved aside in ${monthNameOf(pace.monthKey)}.`,
+        );
+      }
+    } else {
+      lines.push(`${gbp(available - floor, false)} above your floor.`);
+    }
+  }
+
+  // 2. Levers, ranked by £ impact; the top two are stated.
+  const levers: CoachLever[] = [];
+  const nowByCat = new Map(byCategory(person).map((c) => [c.category as string, c.amount]));
+  const overBudget = new Set<string>();
+  for (const [category, minor] of Object.entries(settings.categoryBudgets)) {
+    const over = (nowByCat.get(category) ?? 0) - minor / 100;
+    if (over > 0) {
+      overBudget.add(category);
+      levers.push({
+        impact: over,
+        category,
+        kind: "budget",
+        line: `${category} is ${gbp(over, false)} over its budget; back to budget adds ${gbp(over, false)}.`,
+      });
+    }
+  }
+  for (const name of categoryNames()) {
+    if (overBudget.has(name)) continue;
+    const usual = typicalFor(name, person);
+    const diff = (nowByCat.get(name) ?? 0) - usual;
+    if (usual > 0 && diff >= 50 && diff >= usual * 0.2) {
+      levers.push({
+        impact: diff,
+        category: name,
+        kind: "typical",
+        line: `${name} ran ${gbp(diff, false)} above a usual month.`,
+      });
+    }
+  }
+  const small = smallSpends(person);
+  if (small.total >= 40) {
+    levers.push({
+      impact: small.total,
+      kind: "small",
+      line: `Spends under £10 added up to ${gbp(small.total)} this month across ${small.count} spends.`,
+    });
+  }
+  const asideNow = asideTotal(person);
+  const asideTypical = typicalAside(person);
+  if (asideNow > 0 && asideTypical > 0 && asideNow > asideTypical) {
+    levers.push({
+      impact: asideNow - asideTypical,
+      kind: "pace",
+      line: `You moved ${gbp(asideNow, false)} aside this month, ${gbp(asideNow - asideTypical, false)} more than a typical month.`,
+    });
+  }
+  levers.sort((a, b) => b.impact - a.impact);
+  const chosen = levers.slice(0, 2);
+  lines.push(...chosen.map((l) => l.line));
+  const leverCategories = new Set(
+    chosen.map((l) => l.category).filter((c): c is string => typeof c === "string"),
+  );
+  const paceChosen = chosen.some((l) => l.kind === "pace");
+
+  // 3. Forward check: next month's known regulars against Available.
+  const upcoming = upcomingTotal(person);
+  if (upcoming > 0 && available !== null) {
+    lines.push(
+      `${gbp(upcoming, false)} of ${nextMonthName()} regulars already known against ${gbp(available)} available.`,
+    );
+  }
+
+  // 4. The standing facts, minus any a chosen lever already stated.
   const oneOff = biggestOneOff(person);
   if (oneOff && oneOff.amount >= 250) {
-    facts.push(`The big one-off is ${oneOff.merchant} at ${gbp(oneOff.amount, false)} — tagged one-off, so it won't skew your usual month.`);
+    lines.push(`The big one-off is ${oneOff.merchant} at ${gbp(oneOff.amount, false)} — tagged one-off, so it won't skew your usual month.`);
   }
   const [topChange] = biggestChanges(person);
-  if (topChange && Math.abs(topChange.diff) >= 25 && topChange.usual > 0) {
-    facts.push(`${topChange.category} is ${gbp(Math.abs(topChange.diff), false)} ${topChange.diff > 0 ? "above" : "below"} a usual month.`);
+  if (
+    topChange &&
+    Math.abs(topChange.diff) >= 25 &&
+    topChange.usual > 0 &&
+    !leverCategories.has(topChange.category)
+  ) {
+    lines.push(`${topChange.category} is ${gbp(Math.abs(topChange.diff), false)} ${topChange.diff > 0 ? "above" : "below"} a usual month.`);
   }
-  const aside = asideTotal(person);
-  if (aside > 0) facts.push(`${gbp(aside, false)} was moved aside into savings and investments.`);
-  if (facts.length === 0) return "A quiet month so far — nothing stands out against a usual month.";
-  return facts.join(" ");
+  if (asideNow > 0 && !paceChosen) {
+    lines.push(`${gbp(asideNow, false)} was moved aside into savings and investments.`);
+  }
+
+  if (lines.length === 0) return ["A quiet month so far — nothing stands out against a usual month."];
+  return lines;
+}
+
+/**
+ * The Coach note for the Home card: the coachLines joined into the
+ * card's single paragraph. Replaces the old hardcoded COACH_NOTE
+ * strings (which described sample data: a Tenerife booking and a
+ * solicitor that may not exist in real data).
+ */
+export function coachNote(person: Person): string {
+  return coachLines(person).join(" ");
 }

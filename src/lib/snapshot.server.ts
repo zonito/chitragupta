@@ -252,9 +252,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   // spark series, from the precomputed aggregates — GBP rows only.
   const aggRows = db
     .prepare(
-      `SELECT person, year_month, category, spend_minor FROM month_aggregates WHERE currency = 'GBP'`,
+      `SELECT person, year_month, category, spend_minor, aside_minor FROM month_aggregates WHERE currency = 'GBP'`,
     )
-    .all() as { person: string; year_month: string; category: string; spend_minor: number }[];
+    .all() as { person: string; year_month: string; category: string; spend_minor: number; aside_minor: number }[];
   // Household reads the stored 'household' aggregate rows (true
   // both-people sums). A store that predates them has none, so fall
   // back to summing the per-person rows — and never both, or every
@@ -338,6 +338,40 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       }
     }
     return { months, series };
+  })();
+
+  // Monthly moved-aside totals per person, from the same GBP aggregate
+  // rows (aside_minor is outgoing aside only, stored positive), aligned
+  // to the spend history's month range and summed across categories —
+  // Coach's floor pace and typical-aside math read this. Household
+  // follows the same stored-rows rule as aggGet and the spend history:
+  // the stored 'household' rows when they exist, else the two people's
+  // rows summed — never both, or every household figure would double.
+  const asideMonthly: DataSnapshot["asideMonthly"] = (() => {
+    const months = monthly.months;
+    if (months.length === 0) return { months: [], totals: {} };
+    const minor = new Map<string, number>();
+    for (const r of aggRows) {
+      const key = `${r.person}|${r.year_month}`;
+      minor.set(key, (minor.get(key) ?? 0) + r.aside_minor);
+    }
+    const totals: DataSnapshot["asideMonthly"]["totals"] = {};
+    for (const p of persons) {
+      totals[p] = months.map((ym) => {
+        if (p !== "household") {
+          return (minor.get(`${p}|${ym}`) ?? 0) / 100;
+        }
+        if (hasHouseholdRows) {
+          return (minor.get(`household|${ym}`) ?? 0) / 100;
+        }
+        return (
+          ((minor.get(`zonito|${ym}`) ?? 0) +
+            (minor.get(`nikhila|${ym}`) ?? 0)) /
+          100
+        );
+      });
+    }
+    return { months, totals };
   })();
 
   // Subscriptions: pattern-only detection (recurring amount cluster on a
@@ -555,6 +589,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     typical,
     sparks,
     monthly,
+    asideMonthly,
     months6,
     newMerchants,
     biggestOneOff,
