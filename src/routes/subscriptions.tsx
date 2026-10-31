@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { usePerson, PageTitle, Panel, Chip, Label, Sheet, meta } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { SUBS, SUB_OVERRIDES, monthlyOf, yearlyOf, gbp, personLabel, dateLabel, latestDataDate, type Sub, type Txn } from "@/lib/data";
+import { SUBS, SUB_OVERRIDES, monthlyOf, yearlyOf, gbp, personLabel, dateLabel, latestDataDate, appSettings, type Sub, type Txn } from "@/lib/data";
+import { askJevAboutSubscription, fetchJevSubOpinion, type JevOpinion } from "@/lib/jev-client";
 import { fetchApiTransactions } from "@/lib/txn-map";
 import { subscriptionMonthlyRows } from "@/lib/timeline";
 import { SpendTimelineSection } from "@/components/spend-chart";
@@ -290,8 +291,87 @@ function SubDetail({ sub, onClose }: { sub: Sub; onClose: () => void }) {
         </div>
       )}
 
+      <SubJevOpinion sub={sub} />
       <SubOverrideActions sub={sub} onClose={onClose} />
     </div>
+  );
+}
+
+/**
+ * Jev's second opinion on this subscription: its posture and value
+ * choices, shown verbatim with the date Jev gave them. Opening the
+ * detail only reads the cached opinion; a fresh answer takes an
+ * explicit tap on Ask Jev and replaces the cached one. Jev's answer
+ * is advice only — the correction controls below stay the only way
+ * anything changes. When Jev is switched off the section is absent;
+ * when a fresh ask finds Jev down, one quiet line says so.
+ */
+function SubJevOpinion({ sub }: { sub: Sub }) {
+  const enabled = appSettings().jevEnabled;
+  const [opinion, setOpinion] = useState<JevOpinion | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    (async () => {
+      const next = await fetchJevSubOpinion(sub.name);
+      if (!cancelled) setOpinion(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sub.name, enabled]);
+
+  if (!enabled) return null;
+
+  const ask = async () => {
+    setBusy(true);
+    setUnavailable(false);
+    const result = await askJevAboutSubscription(sub.name);
+    if (result.kind === "ok") setOpinion(result.opinion);
+    else if (result.kind === "unavailable") setUnavailable(true);
+    setBusy(false);
+  };
+
+  const posture = opinion?.answers["posture"];
+  const value = opinion?.answers["value"];
+  return (
+    <section className="mt-5 border-t pt-4">
+      <Label>Jev&rsquo;s opinion</Label>
+      {opinion ? (
+        <div className="mt-1">
+          {posture && (
+            <p className="text-body leading-relaxed">
+              Posture: <span className="font-medium">{posture}</span>
+            </p>
+          )}
+          {value && (
+            <p className="text-body leading-relaxed">
+              Value: <span className="font-medium">{value}</span>
+            </p>
+          )}
+          <p className="num mt-0.5 text-caption text-muted-foreground">
+            {dateLabel(opinion.at.slice(0, 10))}
+          </p>
+        </div>
+      ) : (
+        <p className="mt-1 text-caption text-muted-foreground">
+          A second opinion from Jev, based on this subscription&rsquo;s own charges.
+        </p>
+      )}
+      <div className="mt-3">
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => void ask()}>
+          {opinion ? "Ask Jev again" : "Ask Jev"}
+        </Button>
+      </div>
+      {unavailable && (
+        <p className="mt-2 text-caption text-muted-foreground">
+          Jev is unavailable right now
+        </p>
+      )}
+    </section>
   );
 }
 

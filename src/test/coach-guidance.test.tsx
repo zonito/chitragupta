@@ -54,6 +54,8 @@ const withSettings = (settings: Partial<AppSettings>): DataSnapshot => ({
     availableFloorMinor: null,
     overallMonthlyBudgetMinor: null,
     categoryBudgets: {},
+    jevEnabled: true,
+    jevLastOutcome: null,
     ...settings,
   },
 });

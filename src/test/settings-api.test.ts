@@ -62,6 +62,8 @@ type SettingsBody = {
     availableFloorMinor: number | null;
     overallMonthlyBudgetMinor: number | null;
     categoryBudgets: Record<string, number>;
+    jevEnabled: boolean;
+    jevLastOutcome: { status: "ok" | "unavailable"; at: string } | null;
   };
 };
 
@@ -69,6 +71,8 @@ const UNSET = {
   availableFloorMinor: null,
   overallMonthlyBudgetMinor: null,
   categoryBudgets: {},
+  jevEnabled: true,
+  jevLastOutcome: null,
 };
 
 describe("settings API (scratch store)", () => {
@@ -90,6 +94,8 @@ describe("settings API (scratch store)", () => {
       availableFloorMinor: 1000000,
       overallMonthlyBudgetMinor: 600000,
       categoryBudgets: { Groceries: 50000, Transport: 20000 },
+      jevEnabled: true,
+      jevLastOutcome: null,
     });
 
     // Partial: only the floor moves; the rest is untouched.
@@ -100,6 +106,8 @@ describe("settings API (scratch store)", () => {
       availableFloorMinor: 1100000,
       overallMonthlyBudgetMinor: 600000,
       categoryBudgets: { Groceries: 50000, Transport: 20000 },
+      jevEnabled: true,
+      jevLastOutcome: null,
     });
 
     // An empty patch changes nothing.
@@ -115,6 +123,8 @@ describe("settings API (scratch store)", () => {
       availableFloorMinor: null,
       overallMonthlyBudgetMinor: 600000,
       categoryBudgets: { Groceries: 50000 },
+      jevEnabled: true,
+      jevLastOutcome: null,
     });
 
     const after = (await (await request(api, "GET", "/api/settings"))!.json()) as SettingsBody;
@@ -243,6 +253,8 @@ describe("settings storage", () => {
       availableFloorMinor: 1000000,
       overallMonthlyBudgetMinor: 600000,
       categoryBudgets: { Groceries: 50000 },
+      jevEnabled: true,
+      jevLastOutcome: null,
     });
     db.close();
     rmSync(dir, { recursive: true, force: true });
@@ -270,6 +282,8 @@ describe("settings storage", () => {
       availableFloorMinor: 250000,
       overallMonthlyBudgetMinor: null,
       categoryBudgets: { Transport: 20000 },
+      jevEnabled: true,
+      jevLastOutcome: null,
     });
     try {
       hydrateData(snap);

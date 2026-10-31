@@ -130,6 +130,7 @@ export function Settings() {
       </Panel>
       <CategoriesManager />
       <FloorsBudgets />
+      <JevSettings />
       <p className="px-1 text-body leading-relaxed text-muted-foreground">
         Your data stays with you. Transfers between Zonito and Nikhila are never counted as spending, and money moved to savings or investments shows separately as "Moved aside".
       </p>
@@ -386,6 +387,98 @@ function FloorsBudgets() {
           Save
         </Button>
         {saved && !dirty && <Chip tone="good">Saved</Chip>}
+      </div>
+      {error && (
+        <p className="pb-2 text-caption text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * Jev: the second-opinion switch and the status of the app's most
+ * recent live call to it. Jev is on by default; switching it off
+ * removes its blocks from Home and the subscription detail entirely.
+ * The status line reads the persisted last outcome — Jev's upstream
+ * is intermittent, so "unavailable at last check" is a normal,
+ * expected state, and cached opinions keep showing meanwhile.
+ */
+function JevSettings() {
+  const router = useRouter();
+  const settings = appSettings();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const outcome = settings.jevLastOutcome;
+  const when = outcome
+    ? new Date(outcome.at).toLocaleString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const status =
+    outcome === null
+      ? "Not called yet"
+      : outcome.status === "ok"
+        ? `Jev answered ${when}`
+        : `Jev unavailable at last check ${when}`;
+
+  const toggle = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jevEnabled: !settings.jevEnabled }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error ?? "could not save the Jev setting");
+      }
+      try {
+        await router.invalidate();
+      } catch {
+        /* no live router in some renders */
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save the Jev setting");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Panel className="py-2">
+      <Label>Jev</Label>
+      <div className="ledger-row flex items-center justify-between gap-3 py-3">
+        <span>
+          Second opinions
+          <span className="block text-caption text-muted-foreground">{status}</span>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={settings.jevEnabled}
+          aria-label="Jev second opinions"
+          disabled={busy}
+          onClick={() => void toggle()}
+          className={`rounded-full px-3 py-1 text-caption transition ${
+            settings.jevEnabled
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {settings.jevEnabled ? "On" : "Off"}
+        </button>
       </div>
       {error && (
         <p className="pb-2 text-caption text-destructive" role="alert">

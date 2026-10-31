@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
 import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, type IncomeEntry, type Person } from "@/lib/data";
@@ -7,6 +7,7 @@ import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
 import { SpendTimelineSection } from "@/components/spend-chart";
+import { fetchJevCoachOpinion, type JevOpinion } from "@/lib/jev-client";
 
 export const Route = createFileRoute("/")({
   head: () => meta("This month", "This month at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note."),
@@ -164,6 +165,56 @@ export function AvailableBreakdown({ person }: { person: Person }) {
   );
 }
 
+/**
+ * Jev's second opinion on the Coach card: a separated, labelled block
+ * under the deterministic Coach note, showing the two choices Jev
+ * picked — verbatim, with no figures of its own. Fetched after render
+ * (the server caches per view per day and fails open), so the card
+ * never waits on Jev; when Jev is off, down, or has never answered,
+ * this renders nothing and the card is exactly the pre-Jev card.
+ */
+export function JevCoachOpinion({ person }: { person: Person }) {
+  const enabled = appSettings().jevEnabled;
+  const [opinion, setOpinion] = useState<JevOpinion | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    (async () => {
+      const next = await fetchJevCoachOpinion(person);
+      if (!cancelled) setOpinion(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [person, enabled]);
+
+  if (!enabled || !opinion) return null;
+  const posture = opinion.answers["posture"];
+  const lever = opinion.answers["lever"];
+  if (!posture && !lever) return null;
+  return (
+    <div className="mt-3 border-t border-foreground/10 pt-3">
+      <div className="text-caption font-semibold tracking-wide text-muted-foreground uppercase">
+        Jev&rsquo;s second opinion
+      </div>
+      {posture && (
+        <p className="mt-1 text-body leading-relaxed">
+          Posture: <span className="font-medium">{posture}</span>
+        </p>
+      )}
+      {lever && (
+        <p className="text-body leading-relaxed">
+          Lever: <span className="font-medium">{lever}</span>
+        </p>
+      )}
+      <p className="num mt-1 text-caption text-muted-foreground">
+        {dateLabel(opinion.at.slice(0, 10))}
+      </p>
+    </div>
+  );
+}
+
 export function Index() {
   const { person } = usePerson();
   const [availableOpen, setAvailableOpen] = useState(false);
@@ -301,6 +352,7 @@ export function Index() {
           <Panel className="bg-accent/8!">
             <Label>Coach</Label>
             <p className="num text-body leading-relaxed">{coachNote(person)}</p>
+            <JevCoachOpinion person={person} />
           </Panel>
         </Link>
       </div>

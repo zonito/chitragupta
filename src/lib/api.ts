@@ -42,6 +42,7 @@ import {
   type SettingsPatch,
 } from "./ingest/settings";
 import { answerAsk } from "./ask.server";
+import { coachJevOpinion, subJevAsk, subJevCached } from "./jev.server";
 import { canonicalMerchant, type SubscriptionOverrideMode } from "./subscriptions";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
@@ -170,6 +171,8 @@ export async function handleChitraguptaApi(
     path === "/api/merchants" ||
     path === "/api/categories" ||
     path === "/api/settings" ||
+    path === "/api/jev/coach" ||
+    path === "/api/jev/subscription" ||
     path === "/api/digest" ||
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
@@ -890,9 +893,68 @@ async function routeWithDb(
     if ("categoryBudgets" in body) {
       patch.categoryBudgets = body.categoryBudgets;
     }
+    if ("jevEnabled" in body) {
+      patch.jevEnabled = body.jevEnabled as boolean;
+    }
     const result = updateSettings(db, patch);
     if (!result.ok) return json({ ok: false, error: result.error }, 400);
     return json({ ok: true, settings: result.settings });
+  }
+
+  // Jev second opinions (the app's own integration; the blind proxy
+  // at /api/jev/ask above is separate and untouched). Fail-open by
+  // design: a null jev means "render nothing", never an error state.
+  if (path === "/api/jev/coach" && request.method === "GET") {
+    const raw = url.searchParams.get("person") ?? "household";
+    if (raw !== "household" && raw !== "zonito" && raw !== "nikhila") {
+      return json({ ok: false, error: "unknown person" }, 400);
+    }
+    const opinion = await coachJevOpinion(db, raw);
+    if (!opinion) return json({ ok: true, jev: null });
+    return json({
+      ok: true,
+      jev: { answers: opinion.answers, at: opinion.at, cached: opinion.cached },
+    });
+  }
+
+  if (path === "/api/jev/subscription" && request.method === "GET") {
+    const merchant = url.searchParams.get("merchant")?.trim();
+    if (!merchant) {
+      return json({ ok: false, error: "merchant is required" }, 400);
+    }
+    const opinion = subJevCached(db, merchant);
+    if (!opinion) return json({ ok: true, jev: null });
+    return json({
+      ok: true,
+      jev: { answers: opinion.answers, at: opinion.at, cached: true },
+    });
+  }
+
+  if (path === "/api/jev/subscription" && request.method === "POST") {
+    let body: { merchant?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const merchant = typeof body.merchant === "string" ? body.merchant.trim() : "";
+    if (!merchant) {
+      return json({ ok: false, error: "merchant is required" }, 400);
+    }
+    const result = await subJevAsk(db, merchant);
+    if (result.kind === "ok") {
+      return json({
+        ok: true,
+        jev: { answers: result.opinion.answers, at: result.opinion.at, cached: false },
+      });
+    }
+    if (result.kind === "unavailable") {
+      return json({ ok: false, jev: "unavailable" }, 502);
+    }
+    if (result.kind === "not-found") {
+      return json({ ok: false, error: "subscription not found" }, 404);
+    }
+    return json({ ok: true, jev: null, reason: "disabled" });
   }
 
   if (path === "/api/ask" && request.method === "POST") {

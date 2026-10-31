@@ -245,11 +245,20 @@ export interface AppSettings {
   availableFloorMinor: number | null;
   overallMonthlyBudgetMinor: number | null;
   categoryBudgets: Record<string, number>; // category name -> minor units
+  /** Jev second opinions: on unless the household switched them off
+   * in Settings (a missing stored value reads as on). */
+  jevEnabled: boolean;
+  /** The app's most recent live Jev call, for the Settings status
+   * line; null until the first call is made. Cache serves never
+   * update it — no call happened. */
+  jevLastOutcome: { status: "ok" | "unavailable"; at: string } | null;
 }
 export const EMPTY_SETTINGS: AppSettings = {
   availableFloorMinor: null,
   overallMonthlyBudgetMinor: null,
   categoryBudgets: {},
+  jevEnabled: true,
+  jevLastOutcome: null,
 };
 
 export interface DataSnapshot {
@@ -764,7 +773,7 @@ function smallSpends(p: Person): { count: number; total: number } {
   return { count, total };
 }
 
-interface CoachLever {
+export interface CoachLever {
   impact: number;
   category?: string;
   kind: "budget" | "typical" | "small" | "pace";
@@ -772,49 +781,15 @@ interface CoachLever {
 }
 
 /**
- * The Coach lines, composed from the loaded month's facts, the
- * configured floor and budgets, and the aside series — every figure
- * computed here, never invented, and phrased as facts and options
- * only. Order: the floor position first (when a floor is set), then
- * the two biggest saving levers by £ impact, then the forward check
- * against next month's known regulars, then the standing facts (big
- * one-off, biggest change vs a usual month, moved aside) — a standing
- * fact is skipped only when a chosen lever already states it for the
- * same category or figure. With no floor and no budgets set, the
- * floor and budget lines simply never appear; nothing here ever asks
- * the user to configure one.
+ * Every saving lever for this view, ranked by £ impact (largest
+ * first): categories over their configured budget, categories running
+ * above a usual month, the small-spends pile, and an above-typical
+ * moved-aside pace. coachLines states the top two; Jev's coach
+ * second opinion builds its lever choices from the same list, so the
+ * two never disagree about what the levers are.
  */
-export function coachLines(person: Person): string[] {
-  if (person === "nikhila" && spendTotal("nikhila") === 0 && incomeTotal("nikhila") === 0) {
-    return ["No statements from Nikhila yet — her view fills in as soon as her files are imported."];
-  }
+export function coachLevers(person: Person): CoachLever[] {
   const settings = appSettings();
-  const available = availableFor(person).gbpTotal;
-  const lines: string[] = [];
-
-  // 1. Floor first: the gap and the path at last month's saving pace,
-  // or the headroom when the floor is already met.
-  if (settings.availableFloorMinor !== null && available !== null) {
-    const floor = settings.availableFloorMinor / 100;
-    if (available < floor) {
-      const gap = floor - available;
-      const pace = asidePace(person);
-      if (pace.total > 0) {
-        const months = Math.max(1, Math.ceil(gap / pace.total));
-        lines.push(
-          `${gbp(gap, false)} below your ${gbp(floor, false)} floor. You moved ${gbp(pace.total, false)} aside in ${monthNameOf(pace.monthKey)}; at that pace the floor is reached in about ${months} ${months === 1 ? "month" : "months"}.`,
-        );
-      } else {
-        lines.push(
-          `${gbp(gap, false)} below your ${gbp(floor, false)} floor. Nothing was moved aside in ${monthNameOf(pace.monthKey)}.`,
-        );
-      }
-    } else {
-      lines.push(`${gbp(available - floor, false)} above your floor.`);
-    }
-  }
-
-  // 2. Levers, ranked by £ impact; the top two are stated.
   const levers: CoachLever[] = [];
   const nowByCat = new Map(byCategory(person).map((c) => [c.category as string, c.amount]));
   const overBudget = new Set<string>();
@@ -861,12 +836,60 @@ export function coachLines(person: Person): string[] {
     });
   }
   levers.sort((a, b) => b.impact - a.impact);
-  const chosen = levers.slice(0, 2);
+  return levers;
+}
+
+/**
+ * The Coach lines, composed from the loaded month's facts, the
+ * configured floor and budgets, and the aside series — every figure
+ * computed here, never invented, and phrased as facts and options
+ * only. Order: the floor position first (when a floor is set), then
+ * the two biggest saving levers by £ impact, then the forward check
+ * against next month's known regulars, then the standing facts (big
+ * one-off, biggest change vs a usual month, moved aside) — a standing
+ * fact is skipped only when a chosen lever already states it for the
+ * same category or figure. With no floor and no budgets set, the
+ * floor and budget lines simply never appear; nothing here ever asks
+ * the user to configure one.
+ */
+export function coachLines(person: Person): string[] {
+  if (person === "nikhila" && spendTotal("nikhila") === 0 && incomeTotal("nikhila") === 0) {
+    return ["No statements from Nikhila yet — her view fills in as soon as her files are imported."];
+  }
+  const settings = appSettings();
+  const available = availableFor(person).gbpTotal;
+  const lines: string[] = [];
+
+  // 1. Floor first: the gap and the path at last month's saving pace,
+  // or the headroom when the floor is already met.
+  if (settings.availableFloorMinor !== null && available !== null) {
+    const floor = settings.availableFloorMinor / 100;
+    if (available < floor) {
+      const gap = floor - available;
+      const pace = asidePace(person);
+      if (pace.total > 0) {
+        const months = Math.max(1, Math.ceil(gap / pace.total));
+        lines.push(
+          `${gbp(gap, false)} below your ${gbp(floor, false)} floor. You moved ${gbp(pace.total, false)} aside in ${monthNameOf(pace.monthKey)}; at that pace the floor is reached in about ${months} ${months === 1 ? "month" : "months"}.`,
+        );
+      } else {
+        lines.push(
+          `${gbp(gap, false)} below your ${gbp(floor, false)} floor. Nothing was moved aside in ${monthNameOf(pace.monthKey)}.`,
+        );
+      }
+    } else {
+      lines.push(`${gbp(available - floor, false)} above your floor.`);
+    }
+  }
+
+  // 2. Levers, ranked by £ impact; the top two are stated.
+  const chosen = coachLevers(person).slice(0, 2);
   lines.push(...chosen.map((l) => l.line));
   const leverCategories = new Set(
     chosen.map((l) => l.category).filter((c): c is string => typeof c === "string"),
   );
   const paceChosen = chosen.some((l) => l.kind === "pace");
+  const asideNow = asideTotal(person);
 
   // 3. Forward check: next month's known regulars against Available.
   const upcoming = upcomingTotal(person);

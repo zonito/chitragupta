@@ -208,6 +208,8 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
     availableFloorMinor: null,
     overallMonthlyBudgetMinor: null,
     categoryBudgets: {},
+    jevEnabled: true,
+    jevLastOutcome: null,
   },
   accounts: [
     { name: "Revolut Main", owner: "zonito", last: "28 Oct", lastDate: "2026-10-28", added: 31, stale: false, balanceMinor: 125000, currency: "GBP", accountId: "Main", person: "zonito" },

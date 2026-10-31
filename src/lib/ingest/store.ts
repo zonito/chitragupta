@@ -93,6 +93,14 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS jev_cache (
+  key TEXT PRIMARY KEY,
+  surface TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  answers TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_jev_cache_subject ON jev_cache (surface, subject);
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   merchant TEXT NOT NULL,
