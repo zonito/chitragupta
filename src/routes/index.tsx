@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePerson, Panel, Label, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR, type IncomeEntry } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR, type IncomeEntry } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 
@@ -20,6 +20,22 @@ export const incomeEntryKey = (entry: IncomeEntry): string =>
 
 export function Index() {
   const { person } = usePerson();
+  // No data at all: one honest empty state instead of five £0 panels
+  // and captions with a dangling month ("Spent in ", "Coming up · ").
+  // The month-interpolating captions below only render past this guard.
+  if (!currentMonthKey() || TXNS.length === 0) {
+    return (
+      <Panel>
+        <Label>Home</Label>
+        <p className="text-heading font-semibold">No statements imported yet</p>
+        <p className="mt-2 text-body leading-relaxed text-muted-foreground">
+          Once statements are imported, this screen shows the month at a glance. Head to{" "}
+          <Link to="/import" className="font-medium text-primary underline underline-offset-4">Import</Link>{" "}
+          to add the first ones.
+        </p>
+      </Panel>
+    );
+  }
   const coming = upcomingPanel(person);
   const total = spendTotal(person);
   const usual = typicalTotal(person);

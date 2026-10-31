@@ -161,6 +161,9 @@ export function Import() {
       )}
 
       <div className="rounded-xl border bg-card px-4">
+        {list.length === 0 && (
+          <p className="py-6 text-center text-body text-muted-foreground">No accounts yet — accounts appear here once statements have been imported.</p>
+        )}
         {list.map((a) => {
           const status = statusByName.get(a.name);
           return (
