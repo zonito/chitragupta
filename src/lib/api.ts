@@ -1,5 +1,19 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve, sep } from "node:path";
 import { openStore } from "./ingest/store";
+import {
+  DOC_EXTENSIONS,
+  DOC_TYPES,
+  MAX_DOCUMENT_BYTES,
+  contentTypeForPath,
+  documentExtension,
+  documentRelativePath,
+  documentRowToDoc,
+  type DocumentRow,
+} from "./documents.server";
+import type { DocType } from "./data";
 import {
   ingestAll,
   recomputeAggregates,
@@ -131,6 +145,9 @@ export async function handleChitraguptaApi(
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
     path === "/api/aggregates" ||
+    path === "/api/documents" ||
+    path === "/api/documents/detach" ||
+    /^\/api\/documents\/[^/]+\/file$/.test(path) ||
     path === "/api/ask";
   if (needDb) {
     const ensured = requireDb(db);
@@ -503,6 +520,212 @@ async function routeWithDb(
       )
       .all(resolvedPerson, month);
     return json({ ok: true, person, month, rows, otherCurrencies });
+  }
+
+  if (path === "/api/documents" && request.method === "POST") {
+    let body: {
+      filename?: unknown;
+      contentBase64?: unknown;
+      type?: unknown;
+      merchant?: unknown;
+      date?: unknown;
+      amount?: unknown;
+      txnId?: unknown;
+      warrantyEnds?: unknown;
+    };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const filename = typeof body.filename === "string" ? body.filename : "";
+    const extension = documentExtension(filename);
+    if (!DOC_EXTENSIONS.has(extension)) {
+      return json(
+        { ok: false, error: "file must be a PDF or an image (pdf, jpg, jpeg, png)" },
+        400,
+      );
+    }
+    if (
+      typeof body.type !== "string" ||
+      !(DOC_TYPES as readonly string[]).includes(body.type)
+    ) {
+      return json(
+        { ok: false, error: "type must be Receipt, Bill, Invoice or Warranty" },
+        400,
+      );
+    }
+    const merchant =
+      typeof body.merchant === "string" ? body.merchant.trim() : "";
+    if (!merchant) {
+      return json({ ok: false, error: "merchant is required" }, 400);
+    }
+    const date = typeof body.date === "string" ? body.date.trim() : "";
+    const parsedDate = new Date(`${date}T00:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== date
+    ) {
+      return json({ ok: false, error: "date must be YYYY-MM-DD" }, 400);
+    }
+    if (typeof body.amount !== "number" || !Number.isFinite(body.amount)) {
+      return json({ ok: false, error: "amount is required" }, 400);
+    }
+    if (typeof body.contentBase64 !== "string" || !body.contentBase64) {
+      return json({ ok: false, error: "contentBase64 is required" }, 400);
+    }
+    const bytes = Buffer.from(body.contentBase64, "base64");
+    if (bytes.length === 0) {
+      return json({ ok: false, error: "file is empty" }, 400);
+    }
+    if (bytes.length > MAX_DOCUMENT_BYTES) {
+      return json({ ok: false, error: "file is larger than 10 MB" }, 400);
+    }
+    const dir = dataDir();
+    if (!dir)
+      return json({ ok: false, error: "CHITRAGUPTA_DATA_DIR is not set" }, 503);
+    const type = body.type as DocType;
+    const amount = body.amount;
+    const txnId =
+      typeof body.txnId === "string" && body.txnId.trim()
+        ? body.txnId.trim()
+        : null;
+    const warrantyEnds =
+      typeof body.warrantyEnds === "string" && body.warrantyEnds.trim()
+        ? body.warrantyEnds.trim()
+        : null;
+    const root = resolve(dir);
+    let relative = documentRelativePath({
+      type,
+      date,
+      merchant,
+      amount,
+      extension,
+    });
+    let target = resolve(root, relative);
+    if (!target.startsWith(root + sep)) {
+      return json({ ok: false, error: "invalid document path" }, 400);
+    }
+    if (existsSync(target)) {
+      const existingBytes = readFileSync(target);
+      if (existingBytes.equals(bytes)) {
+        const existing = db
+          .prepare("SELECT * FROM documents WHERE path = ?")
+          .get(relative) as DocumentRow | undefined;
+        if (existing) {
+          // The same file filed again is the same document: link it as
+          // asked if it is not linked yet, but never duplicate it.
+          if (txnId && existing.txn_id !== txnId) {
+            db.prepare(
+              "UPDATE documents SET txn_id = NULL WHERE txn_id = ?",
+            ).run(txnId);
+            db.prepare("UPDATE documents SET txn_id = ? WHERE id = ?").run(
+              txnId,
+              existing.id,
+            );
+            existing.txn_id = txnId;
+          }
+          return json({ ok: true, document: documentRowToDoc(existing) });
+        }
+        // Identical bytes already filed on disk but unregistered: fall
+        // through and register them under the same path, no rewrite.
+      } else {
+        // Different bytes would collide on the convention name; suffix
+        // until the name is free rather than overwriting a filed file.
+        let n = 2;
+        let candidate = relative;
+        while (existsSync(resolve(root, candidate))) {
+          candidate = relative.replace(/(\.[^.]+)$/, `_${n}$1`);
+          n += 1;
+        }
+        relative = candidate;
+        target = resolve(root, relative);
+      }
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    if (!existsSync(target)) writeFileSync(target, bytes);
+    // One document per transaction: a new attachment for a transaction
+    // detaches the previous one, which stays filed as unmatched.
+    if (txnId) {
+      db.prepare("UPDATE documents SET txn_id = NULL WHERE txn_id = ?").run(
+        txnId,
+      );
+    }
+    const row: DocumentRow = {
+      id: randomUUID(),
+      merchant,
+      date,
+      amount_minor: Math.round(amount * 100),
+      type,
+      txn_id: txnId,
+      path: relative,
+      warranty_ends: warrantyEnds,
+    };
+    db.prepare(
+      `INSERT INTO documents (id, merchant, date, amount_minor, type, txn_id, path, warranty_ends)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row.id,
+      row.merchant,
+      row.date,
+      row.amount_minor,
+      row.type,
+      row.txn_id,
+      row.path,
+      row.warranty_ends,
+    );
+    return json({ ok: true, document: documentRowToDoc(row) });
+  }
+
+  if (path === "/api/documents/detach" && request.method === "POST") {
+    let body: { txnId?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const txnId = typeof body.txnId === "string" ? body.txnId.trim() : "";
+    if (!txnId) {
+      return json({ ok: false, error: "txnId is required" }, 400);
+    }
+    // Detaching only clears the link: the file and its record stay,
+    // listed as unmatched (the house rule for documents).
+    const info = db
+      .prepare("UPDATE documents SET txn_id = NULL WHERE txn_id = ?")
+      .run(txnId);
+    return json({ ok: true, detached: info.changes });
+  }
+
+  const fileMatch = path.match(/^\/api\/documents\/([^/]+)\/file$/);
+  if (fileMatch && request.method === "GET") {
+    const id = decodeURIComponent(fileMatch[1]!);
+    const row = db
+      .prepare("SELECT * FROM documents WHERE id = ?")
+      .get(id) as DocumentRow | undefined;
+    if (!row) {
+      return json({ ok: false, error: "document not found" }, 404);
+    }
+    const dir = dataDir();
+    if (!dir)
+      return json({ ok: false, error: "CHITRAGUPTA_DATA_DIR is not set" }, 503);
+    const root = resolve(dir);
+    const target = resolve(root, row.path);
+    // The stored path must stay inside the data dir, whatever it holds.
+    if (!target.startsWith(root + sep)) {
+      return json({ ok: false, error: "invalid document path" }, 400);
+    }
+    if (!existsSync(target)) {
+      return json({ ok: false, error: "document file not found" }, 404);
+    }
+    const bytes = readFileSync(target);
+    return new Response(bytes, {
+      headers: {
+        "content-type": contentTypeForPath(row.path),
+        "content-disposition": `inline; filename="${basename(row.path).replace(/"/g, "")}"`,
+        "content-length": String(bytes.length),
+      },
+    });
   }
 
   return null;

@@ -17,6 +17,11 @@ import {
 } from "./data";
 import { ACCOUNT_TXN_LABEL, uiCategory } from "./txn-map";
 import { detectSubscriptions } from "./subscriptions";
+import {
+  documentRowToDoc,
+  type DocumentRow,
+} from "./documents.server";
+import type { Doc } from "./data";
 
 /**
  * Builds the UI snapshot from the real store. Server-only (better-sqlite3);
@@ -128,12 +133,26 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     (db.prepare("SELECT merchant, category FROM merchant_memory").all() as { merchant: string; category: string }[])
       .map((r) => [r.merchant, r.category]),
   );
+  // Filed documents, from the documents table (files under the data
+  // dir's Documents/ tree). An empty table is honestly docs: [].
+  let docs: Doc[] = [];
+  try {
+    const docRows = db
+      .prepare(
+        `SELECT id, merchant, date, amount_minor, type, txn_id, path, warranty_ends
+         FROM documents ORDER BY date DESC, created_at DESC`,
+      )
+      .all() as DocumentRow[];
+    docs = docRows.map(documentRowToDoc);
+  } catch {
+    docs = [];
+  }
   const monthRows = db
     .prepare(
       "SELECT DISTINCT year_month FROM transactions ORDER BY year_month DESC",
     )
     .all() as { year_month: string }[];
-  if (monthRows.length === 0) return { ...EMPTY_SNAPSHOT, configured: true };
+  if (monthRows.length === 0) return { ...EMPTY_SNAPSHOT, configured: true, docs };
   const current = monthRows[0]!.year_month;
   const included = monthRows.slice(0, 2).map((r) => r.year_month);
 
@@ -342,7 +361,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     migration: { moved: [], waiting: [] },
     reviewTotal,
     accounts,
-    docs: [],
+    docs,
     typical,
     sparks,
     months6,

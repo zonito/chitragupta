@@ -70,6 +70,19 @@ CREATE TABLE IF NOT EXISTS dismissed_merchants (
   merchant TEXT PRIMARY KEY,
   dismissed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS documents (
+  id TEXT PRIMARY KEY,
+  merchant TEXT NOT NULL,
+  date TEXT NOT NULL,
+  amount_minor INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  txn_id TEXT,
+  path TEXT NOT NULL,
+  warranty_ends TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_documents_txn ON documents (txn_id);
+CREATE INDEX IF NOT EXISTS idx_documents_path ON documents (path);
 `;
 
 export const STORE_FILENAME = "chitragupta.sqlite";
