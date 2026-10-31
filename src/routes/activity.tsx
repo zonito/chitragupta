@@ -177,7 +177,7 @@ export function Activity() {
         }}
       >
         {openTxn && (
-          <div className="max-h-[75vh] overflow-y-auto">
+          <div>
             <div className="text-body text-muted-foreground">{openTxn.merchant}</div>
             <div className="mb-5">
               <div className="num text-title font-semibold">{gbp(shareOf(openTxn, person))}</div>

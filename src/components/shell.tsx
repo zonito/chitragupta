@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog } from "lucide-react";
+import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog, X } from "lucide-react";
 import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, CATEGORY_COLOR, CATEGORY_INK, CATEGORIES, type Category, type Txn } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
@@ -217,11 +217,36 @@ export function Sparkline({ data, w = 120, h = 32, className = "text-primary" }:
 }
 
 export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+  // No caller wires Escape itself, so the shared Sheet owns it: one
+  // listener while open, removed on close/unmount.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 dark:bg-background/70 lg:items-center" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-xl border-t bg-card p-6 pb-10 lg:max-w-lg lg:rounded-xl lg:border lg:pb-8" onClick={(e) => e.stopPropagation()}>
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-xl border-t bg-card p-6 pb-10 lg:max-w-lg lg:rounded-xl lg:border lg:pb-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative mb-5">
+          <div className="mx-auto h-1 w-10 rounded-full bg-border" />
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="absolute right-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border bg-card text-muted-foreground transition hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
         {children}
       </div>
     </div>
@@ -370,7 +395,7 @@ export function AskButton() {
         </button>
       </div>
       <Sheet open={open} onClose={() => setOpen(false)}>
-        <div className="max-h-[75vh] overflow-y-auto">
+        <div>
           <h2 className="mb-4 text-heading font-semibold">Ask about your spending</h2>
           <form onSubmit={(e) => { e.preventDefault(); submitQuestion(q); }} className="relative mb-4">
             <input aria-label="Question about your records" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about your money…" className="w-full rounded-xl border bg-card py-3 pl-4 pr-12 text-body outline-none focus:ring-2 focus:ring-ring" />

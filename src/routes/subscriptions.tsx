@@ -165,7 +165,7 @@ function SubDetail({ sub }: { sub: Sub }) {
   const visible = txns ? txns.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE) : [];
 
   return (
-    <div className="max-h-[75vh] overflow-y-auto">
+    <div>
       <div className="text-body text-muted-foreground">{sub.name}</div>
       <div className="num mb-1 text-title font-semibold">{gbp(sub.amount)}</div>
       <p className="mb-5 text-caption text-muted-foreground">
