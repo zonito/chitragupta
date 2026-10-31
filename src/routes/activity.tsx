@@ -60,11 +60,17 @@ export function Activity() {
     .filter((t) => t.kind === "spend")
     .reduce((s, t) => s + shareOf(t, person), 0);
 
+  // The person dropdown is a Household-view filter only. A single-
+  // person view is already scoped by the global switch, so the local
+  // selection is ignored there: a leftover household-era choice must
+  // never silently narrow (or empty) that person's list.
+  const whoActive = person === "household" ? who : "all";
+
   const list = useMemo(
     () =>
       monthTxns
         .filter((t) => shareOf(t, person) > 0)
-        .filter((t) => who === "all" || t.owner === who)
+        .filter((t) => whoActive === "all" || t.owner === whoActive)
         .filter((t) => cat === "all" || t.category === cat)
         .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
         // Newest first by full date. The sort is stable, so rows within
@@ -72,7 +78,7 @@ export function Activity() {
         // (snapshot builder and /api/transactions) produce their rows
         // newest-first within the day, so the two agree.
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [person, q, who, cat, monthTxns],
+    [person, q, whoActive, cat, monthTxns],
   );
   const days = [...new Set(list.map((t) => t.day))];
 
@@ -164,9 +170,13 @@ export function Activity() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
       </div>
       <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
-        <select className={sel} value={who} onChange={(e) => setWho(e.target.value)}>
-          <option value="all">Anyone</option><option value="zonito">Zonito</option><option value="nikhila">Nikhila</option><option value="joint">Joint</option>
-        </select>
+        {/* A filter whose value the global view already fixes is not
+            shown: the person dropdown exists only in Household view. */}
+        {person === "household" && (
+          <select className={sel} value={who} onChange={(e) => setWho(e.target.value)} aria-label="Person">
+            <option value="all">Anyone</option><option value="zonito">Zonito</option><option value="nikhila">Nikhila</option><option value="joint">Joint</option>
+          </select>
+        )}
         <select className={sel} value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="all">All categories</option>
           {[...categoryNames(), "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
