@@ -167,6 +167,7 @@ export async function handleChitraguptaApi(
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
     path === "/api/aggregates" ||
+    path === "/api/aggregates/daily" ||
     path === "/api/documents" ||
     path === "/api/documents/detach" ||
     /^\/api\/documents\/[^/]+\/file$/.test(path) ||
@@ -208,6 +209,105 @@ const SCOPE_PERSONS: ReadonlySet<string> = new Set([
   "zonito",
   "nikhila",
 ]);
+
+/**
+ * Fold a resolved category name to the UI list (built-ins + customs in
+ * the store's categories table), exactly as aggregatesScope and the
+ * snapshot builder do: system movement labels pass through, a live
+ * category passes through, anything else is One-off.
+ */
+function categoryFolder(db: Database.Database): (name: string) => string {
+  const uiCategories: ReadonlySet<string> = new Set(
+    listCategories(db).map((c) => c.name),
+  );
+  return (name: string): string =>
+    name === "Transfer" || name === "Moved aside" || uiCategories.has(name)
+      ? name
+      : "One-off";
+}
+
+/** Shift an ISO day (YYYY-MM-DD) by delta days, UTC. */
+function shiftDay(iso: string, delta: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Daily spend buckets for the Categories timeline's Daily preset:
+ * GET /api/aggregates/daily?person=&days=30.
+ *
+ * The monthly presets read the precomputed month_aggregates from the
+ * snapshot; days exist only in transactions, so this endpoint computes
+ * them on demand (no new precomputed table). The window is the last
+ * `days` days ending at the store's LATEST transaction date — never
+ * the wall clock, so a quiet week does not slide the window past the
+ * data. Category resolution is recomputeAggregates' order (explicit
+ * category → merchant memory → movement fallback, the CATEGORY_SQL
+ * expression), spend movement only, GBP only, unweighted per stored
+ * person exactly as month_aggregates are (household = both people).
+ * Every day in the window is returned, zero-filled, in minor units.
+ */
+function aggregatesDaily(db: Database.Database, url: URL): Response {
+  const person = url.searchParams.get("person") ?? "household";
+  if (!SCOPE_PERSONS.has(person)) {
+    return json({ ok: false, error: "person must be household, zonito or nikhila" }, 400);
+  }
+  const daysParam = Number(url.searchParams.get("days") ?? 30);
+  const days = Number.isFinite(daysParam)
+    ? Math.min(Math.max(Math.trunc(daysParam), 1), 366)
+    : 30;
+  const span = db
+    .prepare(
+      "SELECT MIN(substr(effective_date, 1, 10)) AS first, MAX(substr(effective_date, 1, 10)) AS last FROM transactions",
+    )
+    .get() as { first: string | null; last: string | null };
+  if (!span.last) {
+    return json({ ok: true, person, days, start: null, end: null, dataStart: null, buckets: [] });
+  }
+  const end = span.last;
+  const start = shiftDay(end, -(days - 1));
+  const rows = db
+    .prepare(
+      `SELECT substr(t.effective_date, 1, 10) AS day, ${CATEGORY_SQL} AS raw_category,
+              SUM(-t.amount_minor) AS spend
+       FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+       WHERE t.currency = 'GBP' AND t.movement = 'spend' AND t.amount_minor < 0
+         AND substr(t.effective_date, 1, 10) BETWEEN ? AND ?
+         ${person === "household" ? "" : "AND t.person = ?"}
+       GROUP BY day, raw_category`,
+    )
+    .all(...(person === "household" ? [start, end] : [start, end, person])) as {
+    day: string;
+    raw_category: string;
+    spend: number;
+  }[];
+  const fold = categoryFolder(db);
+  const byDay = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const category = fold(r.raw_category);
+    let dayMap = byDay.get(r.day);
+    if (!dayMap) byDay.set(r.day, (dayMap = new Map()));
+    dayMap.set(category, (dayMap.get(category) ?? 0) + r.spend);
+  }
+  const buckets: { date: string; total_minor: number; categories: Record<string, number> }[] = [];
+  for (let i = 0; i < days; i++) {
+    const date = shiftDay(start, i);
+    const dayMap = byDay.get(date);
+    const categories: Record<string, number> = {};
+    let total = 0;
+    if (dayMap) {
+      for (const [category, spend] of dayMap) {
+        if (spend > 0) {
+          categories[category] = spend;
+          total += spend;
+        }
+      }
+    }
+    buckets.push({ date, total_minor: total, categories });
+  }
+  return json({ ok: true, person, days, start, end, dataStart: span.first, buckets });
+}
 
 /**
  * Scoped category aggregates for the Categories period selector.
@@ -803,6 +903,10 @@ async function routeWithDb(
       category: string;
     }[];
     return json({ ok: true, count: rows.length, transactions: rows });
+  }
+
+  if (path === "/api/aggregates/daily" && request.method === "GET") {
+    return aggregatesDaily(db, url);
   }
 
   if (path === "/api/aggregates" && request.method === "GET") {

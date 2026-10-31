@@ -180,6 +180,15 @@ export interface Doc {
 }
 export interface NewMerchant { merchant: string; category: Category; amount: number; date: string }
 
+/** Full monthly spend history per category, from the precomputed
+ * month_aggregates (GBP rows): the Categories timeline chart and the
+ * Home trend read it straight from the snapshot, no fetch. `months` is
+ * a continuous ascending YYYY-MM range; each series aligns with it. */
+export interface MonthlyHistory {
+  months: string[];
+  series: Record<string, Partial<Record<Person, number[]>>>; // pounds
+}
+
 export interface DataSnapshot {
   configured: boolean;
   monthKey: string; // current month, YYYY-MM ("" when no data)
@@ -198,6 +207,7 @@ export interface DataSnapshot {
   docs: Doc[];
   typical: Record<string, Partial<Record<Person, number>>>;
   sparks: Record<string, Partial<Record<Person, number[]>>>;
+  monthly: MonthlyHistory;
   months6: string[];
   newMerchants: NewMerchant[];
   biggestOneOff: Partial<Record<Person, { merchant: string; amount: number; date: string }>>;
@@ -219,6 +229,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   docs: [],
   typical: {},
   sparks: {},
+  monthly: { months: [], series: {} },
   months6: [],
   newMerchants: [],
   biggestOneOff: {},
@@ -239,6 +250,7 @@ export const CATEGORY_DEFS: CategoryDef[] = [];
 export const DOCS: Doc[] = [];
 export const MONTHS6: string[] = [];
 export let MIGRATION: DataSnapshot["migration"] = { moved: [], waiting: [] };
+export let MONTHLY_HISTORY: MonthlyHistory = { months: [], series: {} };
 
 function replace<T>(target: T[], next: T[]): void {
   target.length = 0;
@@ -258,6 +270,7 @@ export function hydrateData(next: DataSnapshot): void {
   replace(DOCS, next.docs);
   replace(MONTHS6, next.months6);
   MIGRATION = next.migration;
+  MONTHLY_HISTORY = next.monthly ?? { months: [], series: {} };
 }
 
 export function getSnapshot(): DataSnapshot {
@@ -401,6 +414,29 @@ export function biggestChanges(p: Person) {
 
 export function sparkFor(c: string, p: Person): number[] {
   return snapshot.sparks[c]?.[p] ?? [];
+}
+
+/** The snapshot's monthly history shaped for the timeline charts: the
+ * continuous month range plus one aligned series per category for this
+ * person view. Series are padded/truncated to the range defensively;
+ * the builder already emits them aligned. */
+export function monthlyHistoryFor(p: Person): {
+  months: string[];
+  rows: { category: string; series: number[] }[];
+} {
+  const months = MONTHLY_HISTORY.months;
+  const rows = Object.entries(MONTHLY_HISTORY.series)
+    .map(([category, byPerson]) => {
+      const raw = byPerson[p] ?? [];
+      const series = months.map((_, i) => raw[i] ?? 0);
+      return { category, series };
+    })
+    .filter((r) => r.series.some((v) => v > 0));
+  rows.sort(
+    (a, b) =>
+      b.series.reduce((s, v) => s + v, 0) - a.series.reduce((s, v) => s + v, 0),
+  );
+  return { months, rows };
 }
 
 const PER_YEAR: Record<Sub["freq"], number> = { Weekly: 52, Monthly: 12, Quarterly: 4, Yearly: 1 };

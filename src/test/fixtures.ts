@@ -126,6 +126,25 @@ function buildTypical() {
 
 const { typical, sparks } = buildTypical();
 
+// Monthly history over the same six months as the sparks (May–Oct
+// 2026): household is the spark series itself; the people's shares use
+// the same Z_SHARE split as typical, with Nikhila taking the remainder
+// so the two always sum back to the household figure exactly.
+function buildMonthly(): DataSnapshot["monthly"] {
+  const months = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"];
+  const series: DataSnapshot["monthly"]["series"] = {};
+  for (const c of CATEGORIES) {
+    const household = sparks[c]?.household ?? [];
+    const z = Z_SHARE[c] ?? 0.5;
+    const zonito = household.map((v) => Math.round(v * z));
+    const nikhila = household.map((v, i) => v - (zonito[i] ?? 0));
+    series[c] = { household, zonito, nikhila };
+  }
+  return { months, series };
+}
+
+const monthly = buildMonthly();
+
 export const SAMPLE_SNAPSHOT: DataSnapshot = {
   configured: true,
   monthKey: "2026-10",
@@ -202,6 +221,7 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
   ],
   typical,
   sparks,
+  monthly,
   months6: ["May", "Jun", "Jul", "Aug", "Sep", "Oct"],
   newMerchants: [
     { merchant: "Bao Borough", category: "Eating out", amount: 46.8, date: "2026-10-18" },

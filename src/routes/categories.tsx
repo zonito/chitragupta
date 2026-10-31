@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { usePerson, PageTitle, Sheet, Sparkline, Label, meta } from "@/components/shell";
-import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, categoryColor, type Category } from "@/lib/data";
+import { useEffect, useMemo, useState } from "react";
+import { usePerson, PageTitle, Panel, Sheet, Sparkline, Label, meta } from "@/components/shell";
+import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, categoryColor, monthlyHistoryFor, type Category, type Person } from "@/lib/data";
 import { fetchCategoryMerchants, fetchCategoryScope, scopeLabel, scopeOptions, type CategoryScopeData } from "@/lib/category-scope";
+import { CHART_PRESETS, fetchDaily, presetBuckets, presetComparison, type ChartPreset, type DailyData } from "@/lib/timeline";
+import { SpendChart } from "@/components/spend-chart";
 import { AnimatedBar } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/item-icons";
@@ -14,6 +16,103 @@ export const Route = createFileRoute("/categories")({
 });
 
 const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
+
+/**
+ * Spending over time: the shared SpendChart with its own preset
+ * control (Daily / Monthly / Quarterly / YTD / 1Y cumulative / All).
+ * Monthly-family presets read the snapshot's monthly history — the
+ * precomputed month_aggregates — so the section renders with no fetch
+ * and every bucket equals the aggregates for the current person view.
+ * Only the Daily preset fetches (day-level rows from
+ * /api/aggregates/daily), lazily, the first time it is chosen. The
+ * chart's presets govern the chart alone; the category list below
+ * keeps the page's period selector. Tapping a legend category isolates
+ * it; the tiles below keep their merchant-sheet behaviour.
+ */
+export function SpendTimeline({ person }: { person: Person }) {
+  const [preset, setPreset] = useState<ChartPreset>("monthly");
+  const [selected, setSelected] = useState<string | null>(null);
+  const monthly = useMemo(() => monthlyHistoryFor(person), [person]);
+  const [daily, setDaily] = useState<{ person: Person; data: DailyData } | null>(null);
+  const [dailyFailed, setDailyFailed] = useState(false);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [person]);
+
+  useEffect(() => {
+    if (preset !== "daily" || daily?.person === person || dailyFailed) return;
+    let cancelled = false;
+    // 60 days fetched: the chart shows 30, the comparison line reads
+    // the previous 30 from the same response.
+    fetchDaily(person, 60)
+      .then((data) => {
+        if (!cancelled) setDaily({ person, data });
+      })
+      .catch(() => {
+        if (!cancelled) setDailyFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [preset, person, daily, dailyFailed]);
+
+  const dailyData = daily?.person === person ? daily.data : null;
+  const buckets = useMemo(
+    () => presetBuckets(preset, monthly, dailyData),
+    [preset, monthly, dailyData],
+  );
+  const comparison = useMemo(
+    () => presetComparison(preset, monthly, dailyData),
+    [preset, monthly, dailyData],
+  );
+  const dailyPending = preset === "daily" && !dailyData && !dailyFailed;
+
+  return (
+    <Panel className="mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label>Spending over time</Label>
+        <div className="flex flex-wrap gap-0.5 rounded-full bg-muted p-0.5" role="group" aria-label="Chart period">
+          {CHART_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={preset === p.id}
+              onClick={() => setPreset(p.id)}
+              className={`rounded-full px-2.5 py-1 text-caption ${preset === p.id ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {monthly.months.length === 0 ? (
+        <p className="mt-3 text-body text-muted-foreground">
+          Not enough history yet — the chart appears once statements cover a few months.
+        </p>
+      ) : dailyPending ? (
+        <p className="mt-3 text-body text-muted-foreground">Loading…</p>
+      ) : preset === "daily" && dailyFailed ? (
+        <p className="mt-3 text-body text-muted-foreground">Could not load daily spending just now.</p>
+      ) : (
+        <>
+          <div className="mt-3">
+            <SpendChart
+              buckets={buckets}
+              selected={selected}
+              onSelect={setSelected}
+              cumulative={preset === "oneyear"}
+            />
+          </div>
+          {comparison && <p className="num mt-3 text-body">{comparison}</p>}
+          <p className="mt-2 text-caption text-muted-foreground">
+            The chart follows its own period buttons; the list below keeps the period menu at the top.
+          </p>
+        </>
+      )}
+    </Panel>
+  );
+}
 
 export function Categories() {
   const { person } = usePerson();
@@ -145,6 +244,8 @@ export function Categories() {
           </select>
         )}
       </div>
+
+      <SpendTimeline person={person} />
 
       {!isDefault && !data && !loadFailed && (
         <p className="py-12 text-center text-body text-muted-foreground">Loading…</p>

@@ -282,6 +282,53 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${key}-02T00:00:00Z`)),
   );
 
+  // Full monthly history for the timeline charts, from the same GBP
+  // aggregate rows typical/sparks read: one series per category per
+  // person over a continuous month range, so a bucket total IS the
+  // month_aggregates figure for that month, nothing recomputed.
+  // Categories fold through the store's category list exactly as
+  // snapshot transactions do. Household follows aggGet's rule: the
+  // stored household rows when they exist, else the two people's rows
+  // summed (never both, or every household figure would double).
+  const monthly: DataSnapshot["monthly"] = (() => {
+    const aggMonths = [...new Set(aggRows.map((r) => r.year_month))].sort();
+    if (aggMonths.length === 0) return { months: [], series: {} };
+    const months: string[] = [];
+    for (let k = aggMonths[0]!; ; k = shiftMonth(k, 1)) {
+      months.push(k);
+      if (k === aggMonths[aggMonths.length - 1]) break;
+    }
+    const minor = new Map<string, number>();
+    for (const r of aggRows) {
+      const key = `${r.person}|${r.year_month}|${uiCategoryDb(r.category)}`;
+      minor.set(key, (minor.get(key) ?? 0) + r.spend_minor);
+    }
+    const cats = [...new Set(aggRows.map((r) => uiCategoryDb(r.category)))];
+    const series: DataSnapshot["monthly"]["series"] = {};
+    for (const cat of cats) {
+      const per: Partial<Record<Person, number[]>> = {};
+      for (const p of persons) {
+        per[p] = months.map((ym) => {
+          if (p !== "household") {
+            return (minor.get(`${p}|${ym}|${cat}`) ?? 0) / 100;
+          }
+          if (hasHouseholdRows) {
+            return (minor.get(`household|${ym}|${cat}`) ?? 0) / 100;
+          }
+          return (
+            ((minor.get(`zonito|${ym}|${cat}`) ?? 0) +
+              (minor.get(`nikhila|${ym}|${cat}`) ?? 0)) /
+            100
+          );
+        });
+      }
+      if (Object.values(per).some((s) => s!.some((v) => v > 0))) {
+        series[cat] = per;
+      }
+    }
+    return { months, series };
+  })();
+
   // Subscriptions: pattern-only detection (recurring amount cluster on a
   // regular cadence) — see src/lib/subscriptions.ts. Merchant memory's
   // category no longer admits or excludes anything here.
@@ -455,6 +502,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     docs,
     typical,
     sparks,
+    monthly,
     months6,
     newMerchants,
     biggestOneOff,
