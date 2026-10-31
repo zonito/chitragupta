@@ -77,8 +77,9 @@ function medianOf(values: number[]): number {
 // a month apart are enough evidence here (the spend side demands three
 // charges, but two matched salary payments plus an in-band gap are a
 // pattern, not a coincidence), and a stream counts as still landing
-// when its last payment is within 1.5 cadences of the store's latest
-// date — the detector's own rule.
+// when the group's most recent payment — member or outlier alike —
+// is within 1.5 of a reading's cadences of the store's latest date,
+// judged per reading (see the union below).
 //
 // A salary also escapes the 7% window legitimately: pay varies with
 // bonuses, overtime and tax-code changes by far more than a bill does.
@@ -217,42 +218,55 @@ export function detectIncomeRegulars(
         best = { charges: members, medianGap };
       }
     }
-    // The union, deduplicated by merchant: the tight 7% cluster
-    // reading where it fired (projected at its latest amount), else
-    // the median band (projected at the median).
-    let chosen: {
-      charges: IncomeCharge[];
-      medianGap: number;
-      amountMinor: number;
-    } | null = null;
-    if (best) {
-      chosen = {
-        charges: best.charges,
-        medianGap: best.medianGap,
-        amountMinor: Math.abs(
-          best.charges[best.charges.length - 1]!.amountMinor,
-        ),
-      };
-    } else {
-      const band = medianBandStream(group);
-      if (band) {
-        chosen = {
+    // The union, deduplicated by merchant. Both readings are
+    // computed, and each is judged on its own liveness — against
+    // the GROUP's most recent landing, never the reading's own
+    // last member. A reading is live when that landing (any
+    // amount, member or outlier) sits within 1.5 of the reading's
+    // cadences of the store's latest date. Judging by a reading's
+    // own members vetoed real salaries twice over: a small stale
+    // cluster mid-history (a pair of landings within 7% of each
+    // other, months old) was preferred and pronounced the whole
+    // merchant dead, and the band's own last member excludes the
+    // stream's most recent landing whenever that landing is an
+    // outlier (a double-amount month), so the band looked stale
+    // too — although the stream demonstrably landed last month.
+    // The tight cluster reading wins where it is live (projected
+    // at its latest amount); else the median band (projected at
+    // the median); a group whose newest landing is genuinely old
+    // yields nothing.
+    const clusterReading = best
+      ? {
+          charges: best.charges,
+          medianGap: best.medianGap,
+          amountMinor: Math.abs(
+            best.charges[best.charges.length - 1]!.amountMinor,
+          ),
+        }
+      : null;
+    const band = medianBandStream(group);
+    const bandReading = band
+      ? {
           charges: band.charges,
           medianGap: band.medianGap,
           amountMinor: band.medianAmount,
-        };
-      }
-    }
+        }
+      : null;
+    const groupLastMs = Math.max(...group.map((c) => dayMs(c.date)));
+    const groupAgeDays = (dayMs(latestDate) - groupLastMs) / DAY;
+    const isLive = (reading: { medianGap: number }): boolean =>
+      groupAgeDays <= reading.medianGap * 1.5;
+    const chosen =
+      clusterReading && isLive(clusterReading)
+        ? clusterReading
+        : bandReading && isLive(bandReading)
+          ? bandReading
+          : null;
     if (!chosen) continue;
 
     const cluster = chosen.charges;
     const last = cluster[cluster.length - 1]!;
     const lastDate = last.date.slice(0, 10);
-    // Still landing? The detector's rule: the last charge within
-    // 1.5 cadences of the store's latest date.
-    if ((dayMs(latestDate) - dayMs(lastDate)) / DAY > chosen.medianGap * 1.5) {
-      continue;
-    }
 
     // Display name: the variant with the most charges; ties go to the
     // variant of the most recent charge (the detector's rule).

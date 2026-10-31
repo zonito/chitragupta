@@ -246,6 +246,71 @@ describe("detectIncomeRegulars", () => {
     ];
     expect(detectIncomeRegulars(fiveDigit, "2026-10-15")).toEqual([]);
   });
+
+  // The live-found failure shape: nine monthly landings within
+  // ±25% of a £4,700 median, then a final landing at exactly
+  // double the median. Mid-history, the 23 Jun (£5,050) and 18 Jul
+  // (£5,300) landings sit within 7% of each other on a tight
+  // 25-day gap — the stream's only surviving 7% cluster. (Every
+  // other within-7% window fails the cluster cadence: its members
+  // are scattered months apart.) Under the old union the cluster
+  // was preferred unconditionally and its stale last member vetoed
+  // the merchant; the band was never even tried, and its own last
+  // member (18 Jul — the outlier is no member) looked stale too.
+  const varyingSalaryWithStalePair = [
+    charge("EXAMPLE EMPLOYER LTD BGC", "2025-11-27", 440000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2025-12-28", 520000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-01-28", 480000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-02-28", 420000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-03-28", 460000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-04-28", 390000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-05-28", 360000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-06-23", 505000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-07-18", 530000),
+    charge("EXAMPLE EMPLOYER LTD BGC", "2026-08-18", 940000),
+  ];
+
+  it("detects a varying salary past a stale 7% pair and a double-amount final landing", () => {
+    // The store's latest date is 41 days past the final landing:
+    // beyond 1.5 × the stale pair's 25-day cadence (37.5 days), so
+    // the cluster reading is dead even judged against the group —
+    // but inside 1.5 × the band's cadence (45.75 days), so the
+    // band carries the stream, projected at its £4,700 median.
+    const found = detectIncomeRegulars(
+      varyingSalaryWithStalePair,
+      "2026-09-28",
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.name).toBe("EXAMPLE EMPLOYER LTD BGC");
+    expect(found[0]!.amount).toBe(4700);
+    expect(found[0]!.periodDays).toBe(31);
+  });
+
+  it("still rejects that stream once its newest landing is genuinely old", () => {
+    // Same stream, but the final landing is four months before
+    // the store's latest date: group-judged liveness still gates,
+    // for both readings.
+    expect(
+      detectIncomeRegulars(varyingSalaryWithStalePair, "2026-12-18"),
+    ).toEqual([]);
+  });
+
+  it("a fresh tight cluster still wins over the band, at its latest amount", () => {
+    // All three landings sit inside one 7% window, so the cluster
+    // reading fires — and the band would too (median £2,580).
+    // The cluster is preferred while live: £2,650, the latest
+    // member's amount, not the median.
+    const charges = [
+      charge("Employer Ltd", "2026-07-28", 250000),
+      charge("Employer Ltd", "2026-08-28", 258000),
+      charge("Employer Ltd", "2026-09-28", 265000),
+    ];
+    const found = detectIncomeRegulars(charges, "2026-10-15");
+    expect(found).toHaveLength(1);
+    expect(found[0]!.amount).toBe(2650);
+    expect(found[0]!.periodDays).toBe(31);
+    expect(found[0]!.nextExpected).toBe("2026-10-29");
+  });
 });
 
 // ---------------------------------------------------------------------------
