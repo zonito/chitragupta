@@ -95,6 +95,45 @@ function effectiveDateOf(r: StatementRow): string {
   return r.completedDate || r.startedDate;
 }
 
+/**
+ * Movement adjustments for the two Barclays accounts, layered over
+ * the shared classifier (which was written for Revolut's shapes).
+ * A current account's life differs from a Revolut pocket's:
+ *
+ * - Barclays Current: any row naming Revolut is a move between his
+ *   own accounts (transfers out, "Sent from Revolut" credits in,
+ *   debit-card top-ups) — Moved aside, never income or spend. The
+ *   direct debits that settle the Barclaycard ("B/CARD PLAT VISA …")
+ *   are likewise aside: settling a card is not spending, the card's
+ *   purchases are. Remaining positive Transfer rows are genuine
+ *   credits (salary and other bank credits) and count as income;
+ *   direct debits and card payments keep the classifier's spend.
+ * - Barclaycard: its Transfer rows are the settlement credits
+ *   ("Payment, Thank You", "Payment By Direct Debit") — Moved aside.
+ *   Its Card Payment rows are purchases and stay spend.
+ */
+export function barclaysMovement(
+  account: IngestAccount,
+  type: string,
+  description: string,
+  amountMinor: number,
+  base: MoneyMovement,
+): MoneyMovement {
+  const t = type.toLowerCase();
+  const d = description.toLowerCase();
+  if (account === "Barclaycard") {
+    if (t === "transfer") return "aside";
+    return base;
+  }
+  if (account === "Barclays Current") {
+    if (/revolut/.test(d)) return "aside";
+    if (/^b\/card/.test(d.trim())) return "aside";
+    if (t === "transfer" && amountMinor > 0) return "income";
+    return base;
+  }
+  return base;
+}
+
 const SAVINGS_MONTHS: Record<string, string> = {
   Jan: "01",
   Feb: "02",
@@ -319,12 +358,18 @@ export function ingestAccount(
       const balMinor = gbpPence(r.balance);
       const merchant = merchantOf(r.description);
       const movement = learnedMovement(
-        classifyMovement(
+        barclaysMovement(
+          account,
           r.type,
           r.description,
           amountMinor,
-          r.currency,
-          r.state,
+          classifyMovement(
+            r.type,
+            r.description,
+            amountMinor,
+            r.currency,
+            r.state,
+          ),
         ),
         amountMinor,
         merchant,
@@ -502,6 +547,95 @@ export function recomputeAggregates(
      WHERE t.person = ?
      GROUP BY t.person, t.year_month, t.currency, ${AGGREGATE_CATEGORY}`,
   ).run(person);
+}
+
+/**
+ * Cross-account transfer matching: now that the Barclays current
+ * account is tracked, a Revolut top-up that came from it is visible
+ * from BOTH sides — the "TO REVOLUT" outflow on the Barclays side
+ * (already Moved aside at ingest) and the "Deposit" credit on the
+ * Revolut side, which ingest counted as income because the source
+ * used to be untracked. Pair them one-to-one (same absolute amount,
+ * dates within ±3 days, greedy in date order, closest date first)
+ * and mark the Revolut side Moved aside too, so the same money stops
+ * counting as household income. A Deposit with no Barclays
+ * counterpart stays income — the honest fallback when statements are
+ * incomplete. Deterministic (both candidate lists are date- then
+ * fingerprint-ordered) and idempotent: a matched pair is aside on
+ * both sides, so a re-run finds nothing new to flip.
+ *
+ * Returns the number of pairs matched.
+ */
+export function matchInternalTransfers(
+  db: import("better-sqlite3").Database,
+): number {
+  const outflows = db
+    .prepare(
+      `SELECT fingerprint, effective_date, amount_minor FROM transactions
+       WHERE person = 'zonito' AND account = 'Barclays Current'
+         AND currency = 'GBP' AND movement = 'aside' AND amount_minor < 0
+         AND LOWER(description) LIKE '%revolut%'
+       ORDER BY effective_date, fingerprint`,
+    )
+    .all() as {
+    fingerprint: string;
+    effective_date: string;
+    amount_minor: number;
+  }[];
+  if (outflows.length === 0) return 0;
+  const deposits = db
+    .prepare(
+      `SELECT fingerprint, effective_date, amount_minor FROM transactions
+       WHERE person = 'zonito'
+         AND account NOT IN ('Barclays Current', 'Barclaycard')
+         AND currency = 'GBP' AND movement = 'income' AND amount_minor > 0
+         AND (LOWER(description) LIKE '%deposit%'
+           OR LOWER(description) LIKE '%top-up%'
+           OR LOWER(description) LIKE '%top up%'
+           OR LOWER(description) LIKE 'payment from %')
+       ORDER BY effective_date, fingerprint`,
+    )
+    .all() as {
+    fingerprint: string;
+    effective_date: string;
+    amount_minor: number;
+  }[];
+  const dayMs = (iso: string) =>
+    Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) / 86400000;
+  const used = new Set<string>();
+  const pairs: [string, string][] = [];
+  for (const out of outflows) {
+    let best: (typeof deposits)[number] | null = null;
+    let bestDiff = Infinity;
+    for (const dep of deposits) {
+      if (used.has(dep.fingerprint)) continue;
+      if (dep.amount_minor !== -out.amount_minor) continue;
+      const diff = Math.abs(
+        dayMs(dep.effective_date) - dayMs(out.effective_date),
+      );
+      if (diff > 3) continue;
+      if (diff < bestDiff) {
+        best = dep;
+        bestDiff = diff;
+      }
+    }
+    if (best) {
+      used.add(best.fingerprint);
+      pairs.push([out.fingerprint, best.fingerprint]);
+    }
+  }
+  if (pairs.length > 0) {
+    const flip = db.prepare(
+      "UPDATE transactions SET movement = 'aside' WHERE fingerprint = ?",
+    );
+    db.transaction((items: [string, string][]) => {
+      for (const [a, b] of items) {
+        flip.run(a);
+        flip.run(b);
+      }
+    })(pairs);
+  }
+  return pairs.length;
 }
 
 /**
@@ -808,6 +942,11 @@ export function ingestAccounts(
       results.push(ingestAccountSafe(db, "zonito", account, dataDir));
     }
   }
+  // With every account in, pair up the transfers that are now
+  // visible from both sides (Barclays -> Revolut top-ups) so they
+  // net to zero in the aggregates, then rebuild both aggregate sets.
+  matchInternalTransfers(db);
+  recomputeAggregates(db, "zonito");
   recomputeAggregates(db, "household");
   return [...results, ...failures];
 }

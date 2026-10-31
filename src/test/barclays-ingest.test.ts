@@ -145,6 +145,98 @@ describe("Barclays discovery and account mapping", () => {
     db.close();
   });
 
+});
+
+describe("Barclays movement mapping and transfer matching", () => {
+  const movementOf = (
+    db: ReturnType<typeof makeStore>,
+    description: string,
+    account?: string,
+  ): string =>
+    (
+      db
+        .prepare(
+          `SELECT movement FROM transactions WHERE description = ?${
+            account ? " AND account = ?" : ""
+          }`,
+        )
+        .get(...(account ? [description, account] : [description])) as {
+        movement: string;
+      }
+    ).movement;
+
+  it("maps current-account rows: salary income, debits spend, own-account moves aside", () => {
+    const db = makeStore();
+    ingestAccounts(db, makeDataDir());
+    // Employer credits are income.
+    const salary = db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM transactions WHERE account = 'Barclays Current' AND description = 'EXAMPLE EMPLOYER LTD BGC' AND movement = 'income'",
+      )
+      .get() as { n: number };
+    expect(salary.n).toBe(3);
+    // Direct debits and card payments are spend under their merchants.
+    expect(movementOf(db, "EXAMPLE UTILITIES LTD DDR")).toBe("spend");
+    expect(movementOf(db, "EXAMPLE SHOP ON 05 SEP BCC")).toBe("spend");
+    // The transfer to his own Revolut is Moved aside, never income/spend.
+    expect(movementOf(db, "EXAMPLE NAME TO REVOLUT -ABCD- FT")).toBe("aside");
+    db.close();
+  });
+
+  it("treats the card settlement as Moved aside on BOTH sides; the purchase is the spend", () => {
+    const db = makeStore();
+    ingestAccounts(db, makeDataDir());
+    expect(
+      movementOf(db, "B/CARD PLAT VISA 0000000000000000 DDR", "Barclays Current"),
+    ).toBe("aside");
+    expect(movementOf(db, "Payment By Direct Debit", "Barclaycard")).toBe(
+      "aside",
+    );
+    expect(movementOf(db, "EXAMPLE STORE", "Barclaycard")).toBe("spend");
+    db.close();
+  });
+
+  it("matches the Revolut Deposit against the Barclays outflow so the money nets to zero", () => {
+    const db = makeStore();
+    ingestAccounts(db, makeDataDir());
+    // The £3,000 Deposit of 21 Sep (Barclays sent £3,000 on 20 Sep)
+    // is now Moved aside; the unmatched £500 Deposit stays income.
+    const deposits = db
+      .prepare(
+        "SELECT effective_date, movement FROM transactions WHERE account = 'Main' AND description = 'Bank transfer deposit' ORDER BY effective_date",
+      )
+      .all() as { effective_date: string; movement: string }[];
+    expect(deposits.map((d) => d.movement)).toEqual(["income", "aside"]);
+    // Household September: income is the £5,000 salary + the £500
+    // unmatched deposit only — the matched £3,000 contributes £0.
+    // Spend is utilities £100 + shop £25 + card purchase £59 +
+    // coffee £4.50; the settlement pair contributes £0.
+    const agg = db
+      .prepare(
+        "SELECT COALESCE(SUM(income_minor), 0) AS income, COALESCE(SUM(spend_minor), 0) AS spend FROM month_aggregates WHERE person = 'household' AND year_month = '2026-09' AND currency = 'GBP'",
+      )
+      .get() as { income: number; spend: number };
+    expect(agg.income).toBe(550000);
+    expect(agg.spend).toBe(18850);
+    db.close();
+  });
+
+  it("matching is idempotent: a second ingest flips nothing further", () => {
+    const db = makeStore();
+    const dataDir = makeDataDir();
+    ingestAccounts(db, dataDir);
+    ingestAccounts(db, dataDir);
+    const agg = db
+      .prepare(
+        "SELECT COALESCE(SUM(income_minor), 0) AS income FROM month_aggregates WHERE person = 'household' AND year_month = '2026-09' AND currency = 'GBP'",
+      )
+      .get() as { income: number };
+    expect(agg.income).toBe(550000);
+    db.close();
+  });
+});
+
+describe("Barclays discovery and account mapping", () => {
   it("is stable across re-ingests: same assignments, no duplicate rows", () => {
     const db = makeStore();
     const dataDir = makeDataDir();
