@@ -135,6 +135,21 @@ export interface IncomeEntry {
   owner: Exclude<Owner, "joint">;
   type: "Salary" | (string & {});
 }
+/** A recurring income stream detected server-side from the store's
+ * income rows (see forecast.ts detectIncomeRegulars): a near-identical
+ * amount landing on a monthly-ish cadence — salary-like. Amount is
+ * pounds, positive; nextExpected is the ISO date of the next expected
+ * landing and periodDays the median gap the forecast steps by. Only
+ * streams still landing (last seen within 1.5 cadences of the store's
+ * latest date) are carried. Moved-aside flows are never income here:
+ * detection reads movement 'income' rows only. */
+export interface IncomeRegular {
+  name: string;
+  amount: number;
+  owner: Owner;
+  nextExpected: string;
+  periodDays: number;
+}
 export interface Sub {
   name: string; amount: number; freq: "Weekly" | "Monthly" | "Quarterly" | "Yearly"; last: string; card: string;
   /** "Cancelled" is a human override label, distinct from the
@@ -153,6 +168,11 @@ export interface Sub {
   chargeMonths?: { month: string; total: number }[];
   /** ISO date of the next expected charge; Active subs only, else null. */
   nextExpected: string | null;
+  /** Median gap in days between the cluster's charges, rounded — the
+   * cadence the forecast steps future occurrences by. Absent on
+   * hand-built subs, whose readers fall back to the freq's nominal
+   * period. */
+  periodDays?: number;
   /** Store merchant names grouped into this sub (name variants). */
   variants: string[];
 }
@@ -279,6 +299,7 @@ export interface DataSnapshot {
   months: { key: string; label: string }[]; // every month with transactions in the store, newest first
   txns: Txn[]; // current + previous month only; older months load on demand via /api/transactions
   income: IncomeEntry[]; // current month
+  incomeRegulars: IncomeRegular[]; // detected recurring income streams, all history
   upcoming: UpcomingPayment[];
   subs: Sub[];
   subOverrides: SubOverride[];
@@ -304,6 +325,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   months: [],
   txns: [],
   income: [],
+  incomeRegulars: [],
   upcoming: [],
   subs: [],
   subOverrides: [],
@@ -330,6 +352,7 @@ let snapshot: DataSnapshot = EMPTY_SNAPSHOT;
 export const TXNS: Txn[] = [];
 export const ALL_TXNS: Txn[] = [];
 export const INCOME: IncomeEntry[] = [];
+export const INCOME_REGULARS: IncomeRegular[] = [];
 export const UPCOMING: UpcomingPayment[] = [];
 export const SUBS: Sub[] = [];
 export const SUB_OVERRIDES: SubOverride[] = [];
@@ -352,6 +375,7 @@ export function hydrateData(next: DataSnapshot): void {
   replace(ALL_TXNS, next.txns);
   replace(TXNS, next.txns.filter((t) => t.monthKey === next.monthKey));
   replace(INCOME, next.income);
+  replace(INCOME_REGULARS, next.incomeRegulars ?? []);
   replace(UPCOMING, next.upcoming);
   replace(SUBS, next.subs);
   replace(SUB_OVERRIDES, next.subOverrides ?? []);

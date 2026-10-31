@@ -211,6 +211,7 @@ export function detectSubscriptions(
       charges: cluster.length,
       chargeIds: cluster.map((c) => c.id),
       nextExpected: active ? addDays(lastDate, Math.round(best.medianGap)) : null,
+      periodDays: Math.round(best.medianGap),
       variants,
       ...(note ? { note } : {}),
     });
@@ -297,6 +298,7 @@ function forcedSub(group: SubCharge[], format: DetectFormat): Sub {
     charges: sorted.length,
     chargeIds: sorted.map((c) => c.id),
     nextExpected: addDays(lastDate, step),
+    periodDays: step,
     variants,
   };
 }

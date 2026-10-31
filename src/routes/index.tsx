@@ -8,6 +8,7 @@ import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
 import { SpendTimelineSection } from "@/components/spend-chart";
 import { fetchJevCoachOpinion, type JevOpinion } from "@/lib/jev-client";
+import { forecastFor, forecastIsStale, type MonthForecast } from "@/lib/forecast";
 
 export const Route = createFileRoute("/")({
   head: () => meta("This month", "This month at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note."),
@@ -165,6 +166,229 @@ export function AvailableBreakdown({ person }: { person: Person }) {
   );
 }
 
+const todayIso = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/**
+ * The forecast's mini chart: the projected end-of-day balance line to
+ * month end, drawn in the SpendChart's visual family (same width,
+ * axis padding, dashed gridlines and £ tick labels). The floor, when
+ * set, is a dashed line across; the low point is dotted and stated in
+ * the readout under the chart, never colour alone.
+ */
+export function ForecastChart({ forecast }: { forecast: MonthForecast }) {
+  const { series, floor, lowPoint } = forecast;
+  const W = 720;
+  const H = 168;
+  const padL = 58;
+  const padR = 8;
+  const padT = 10;
+  const padB = 20;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const balances = series.map((s) => s.balance);
+  let lo = Math.min(...balances, ...(floor !== null ? [floor] : []));
+  let hi = Math.max(...balances, ...(floor !== null ? [floor] : []));
+  if (hi - lo < 1) {
+    hi += 10;
+    lo -= 10;
+  }
+  const pad = (hi - lo) * 0.08;
+  lo -= pad;
+  hi += pad;
+  const x = (i: number) =>
+    padL + (series.length <= 1 ? plotW / 2 : (i / (series.length - 1)) * plotW);
+  const y = (v: number) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const ticks = [0, 1 / 3, 2 / 3, 1].map((f) => lo + f * (hi - lo));
+  const lowIdx = Math.max(0, series.findIndex((s) => s.date === lowPoint.date));
+  const points = series.map((s, i) => `${x(i)},${y(s.balance)}`).join(" ");
+  const shortDay = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    }).format(new Date(`${iso}T00:00:00Z`));
+  return (
+    <div className="mt-3">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        role="img"
+        aria-label={`Projected available balance to the end of the month: ends at ${gbp(forecast.projectedEnd)}, lowest ${gbp(lowPoint.amount)} on ${dateLabel(lowPoint.date)}.`}
+      >
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line
+              x1={padL}
+              x2={W - padR}
+              y1={y(t)}
+              y2={y(t)}
+              className="stroke-border"
+              strokeWidth={1}
+              strokeDasharray="3 4"
+            />
+            <text
+              x={padL - 6}
+              y={y(t) + 4}
+              textAnchor="end"
+              fontSize={11}
+              className="num fill-muted-foreground"
+            >
+              {gbp(t, false)}
+            </text>
+          </g>
+        ))}
+        {floor !== null && (
+          <g>
+            <line
+              x1={padL}
+              x2={W - padR}
+              y1={y(floor)}
+              y2={y(floor)}
+              className="stroke-destructive"
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+            />
+            <text
+              x={W - padR}
+              y={y(floor) - 5}
+              textAnchor="end"
+              fontSize={11}
+              className="fill-destructive"
+            >
+              floor
+            </text>
+          </g>
+        )}
+        <polygon
+          points={`${x(0)},${y(lo)} ${points} ${x(series.length - 1)},${y(lo)}`}
+          fill="var(--color-primary)"
+          opacity={0.07}
+        />
+        <polyline
+          points={points}
+          fill="none"
+          stroke="var(--color-primary)"
+          strokeWidth={2}
+        />
+        <circle cx={x(lowIdx)} cy={y(lowPoint.amount)} r={4.5} className="fill-destructive" />
+        <circle
+          cx={x(series.length - 1)}
+          cy={y(forecast.projectedEnd)}
+          r={3.5}
+          fill="var(--color-primary)"
+        />
+        <text x={padL} y={H - 5} fontSize={11} className="fill-muted-foreground">
+          {shortDay(series[0]!.date)}
+        </text>
+        <text
+          x={W - padR}
+          y={H - 5}
+          textAnchor="end"
+          fontSize={11}
+          fontWeight={700}
+          className="fill-foreground"
+        >
+          {shortDay(series[series.length - 1]!.date)}
+        </text>
+      </svg>
+      <p className="num mt-1 text-caption text-muted-foreground" aria-live="polite">
+        Lowest point {gbp(lowPoint.amount)} on {dateLabel(lowPoint.date)}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * "Rest of <Month>": the month-end forecast and safe-to-spend card,
+ * the trend chart's companion in row 2. Every figure comes from
+ * forecastFor (deterministic: Available's own start, the detector's
+ * regulars out, detected income streams in, this month's pace for the
+ * rest). With no recorded balance the forecast has no honest start
+ * and the card renders nothing — the Available card already says so.
+ */
+export function ForecastCard({ person, className }: { person: Person; className?: string }) {
+  const forecast = useMemo(() => forecastFor(person), [person]);
+  if (!forecast) return null;
+  const month = currentMonthName();
+  const stale = forecastIsStale(forecast.asOf, todayIso());
+  const stamp = (
+    <p className="mt-3 text-caption text-muted-foreground">
+      Projected from statements to {dateLabel(forecast.asOf)}
+      {stale ? " — figures may have moved since" : ""}
+    </p>
+  );
+  if (forecast.remainingDays === 0) {
+    return (
+      <Panel {...(className ? { className } : {})}>
+        <Label>Rest of {month}</Label>
+        <p className="text-heading font-semibold leading-relaxed">
+          {month} is complete in your statements — it ended at{" "}
+          <span className="num">{gbp(forecast.start)}</span> available.
+        </p>
+        {stamp}
+      </Panel>
+    );
+  }
+  const { breach, headroom, perWeek, floor } = forecast;
+  return (
+    <Panel {...(className ? { className } : {})}>
+      <Label>Rest of {month}</Label>
+      <p className="text-heading font-semibold leading-relaxed">
+        On course to end {month} at{" "}
+        <span className="num">{gbp(forecast.projectedEnd)}</span>
+      </p>
+      <ForecastChart forecast={forecast} />
+      <div className="mt-3 space-y-1.5 text-body leading-relaxed">
+        {forecast.regularsOutTotal > 0 || forecast.regularsInTotal > 0 ? (
+          <p className="num">
+            {forecast.regularsOutTotal > 0 && (
+              <>{gbp(forecast.regularsOutTotal, false)} of regulars still to go out</>
+            )}
+            {forecast.regularsOutTotal > 0 && forecast.regularsInTotal > 0 && " · "}
+            {forecast.regularsInTotal > 0 && (
+              <>{gbp(forecast.regularsInTotal, false)} of regular income still to come in</>
+            )}
+          </p>
+        ) : (
+          <p>No regulars left this month — the rest is day-to-day spending.</p>
+        )}
+        {breach && floor !== null && (
+          <p className="font-medium text-destructive">
+            Dips <span className="num">{gbp(breach.shortfall, false)}</span> below your{" "}
+            {gbpTrim(floor)} floor on {dateLabel(breach.date)}
+            {breach.culprit
+              ? `, the day ${breach.culprit.name} ${gbp(breach.culprit.amount)} lands`
+              : ""}
+            .
+          </p>
+        )}
+        {!breach && headroom !== null && perWeek !== null && floor !== null && (
+          <p>
+            <span className="num">{gbp(headroom)}</span> of headroom above your{" "}
+            {gbpTrim(floor)} floor at the tightest point — about{" "}
+            <span className="num">{gbp(perWeek, false)}</span> a week safe to spend for
+            the rest of the month.
+          </p>
+        )}
+        {!forecast.hasIncome && (
+          <p className="text-muted-foreground">
+            No regular income detected — outgoings and pace only.
+          </p>
+        )}
+      </div>
+      <p className="mt-3 text-caption text-muted-foreground">
+        Regulars land on their usual dates; other spending runs at{" "}
+        <span className="num">{gbp(forecast.paceDaily)}</span> a day, this month&rsquo;s
+        pace so far{forecast.paceBlended ? ", steadied against last month" : ""}.
+      </p>
+      {stamp}
+    </Panel>
+  );
+}
+
 /**
  * Jev's second opinion on the Coach card: a separated, labelled block
  * under the deterministic Coach note, showing the two choices Jev
@@ -254,7 +478,8 @@ export function Index() {
     <>
     {/* Home is a defined grid ordered by value, highest first (source
         order = the mobile single-column order):
-        row 1 hero + Available, row 2 the trend chart full width,
+        row 1 hero + Available, row 2 the trend chart and the
+        month-end forecast side by side,
         row 3 Coming up + Biggest changes with Coach in that column,
         row 4 Money in + Small spends, row 5 Moved aside as a slim
         strip. Paired cells share their row's height; nothing is left
@@ -310,8 +535,10 @@ export function Index() {
         monthly={monthly}
         dailyPerson={person}
         compact
-        className="lg:col-span-2 lg:row-start-2"
+        className="lg:col-start-1 lg:row-start-2"
       />
+
+      <ForecastCard person={person} className="lg:col-start-2 lg:row-start-2" />
 
       <Panel className="lg:col-start-1 lg:row-start-3">
         <Label>Coming up · {nextMonthName()}</Label>

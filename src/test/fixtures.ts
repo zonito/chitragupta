@@ -157,6 +157,10 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
     { day: 25, amount: 7240, owner: "zonito", type: "Salary" },
     { day: 28, amount: 4860, owner: "nikhila", type: "Salary" },
   ],
+  incomeRegulars: [
+    { name: "Northwind Traders", amount: 7240, owner: "zonito", nextExpected: "2026-11-25", periodDays: 30 },
+    { name: "Contoso Health", amount: 4860, owner: "nikhila", nextExpected: "2026-11-28", periodDays: 30 },
+  ],
   upcoming: [
     { name: "Enfield Council Tax", day: 1, date: "2026-11-01", amount: 186, owner: "joint" },
     { name: "Octopus Energy", day: 1, date: "2026-11-01", amount: 138, owner: "joint" },

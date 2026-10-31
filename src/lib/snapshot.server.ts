@@ -9,6 +9,7 @@ import {
   type AccountInfo,
   type DataSnapshot,
   type IncomeEntry,
+  type IncomeRegular,
   type NewMerchant,
   type Owner,
   type Person,
@@ -21,6 +22,7 @@ import { accountTxnLabel, timeOfDay } from "./txn-map";
 import { listCategories } from "./ingest/categories";
 import { getSettings } from "./ingest/settings";
 import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
+import { detectIncomeRegulars } from "./forecast";
 import {
   documentRowToDoc,
   type DocumentRow,
@@ -427,6 +429,36 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     subFormat,
   );
 
+  // Recurring income: the spend detector's mirror over the store's
+  // income rows (GBP, positive) across all history — a near-identical
+  // amount on a monthly-ish cadence, salary-like. The Home forecast's
+  // regulars IN; nothing else reads them yet. Moved-aside money is a
+  // different movement and never lands here.
+  const incomeRows = db
+    .prepare(
+      `SELECT person, account, effective_date, merchant, amount_minor
+       FROM transactions
+       WHERE currency = 'GBP' AND movement = 'income' AND amount_minor > 0
+       ORDER BY effective_date`,
+    )
+    .all() as {
+      person: string;
+      account: string;
+      effective_date: string;
+      merchant: string;
+      amount_minor: number;
+    }[];
+  const incomeRegulars: IncomeRegular[] = detectIncomeRegulars(
+    incomeRows.map((r) => ({
+      merchant: r.merchant,
+      date: r.effective_date,
+      amountMinor: r.amount_minor,
+      account: r.account,
+      person: r.person,
+    })),
+    latestDate,
+  );
+
   // Per-month charge totals for the Subscriptions trend, summed from
   // the very rows the detector clustered (chargeIds are their
   // fingerprints), so the trend can never disagree with the charges
@@ -579,6 +611,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     months: monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),
     txns,
     income,
+    incomeRegulars,
     upcoming,
     subs,
     subOverrides,
