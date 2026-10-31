@@ -16,7 +16,8 @@ import {
   type Txn,
   type UpcomingPayment,
 } from "./data";
-import { accountTxnLabel, uiCategory } from "./txn-map";
+import { accountTxnLabel } from "./txn-map";
+import { listCategories } from "./ingest/categories";
 import { detectSubscriptions } from "./subscriptions";
 import {
   documentRowToDoc,
@@ -144,6 +145,14 @@ export function buildSnapshot(): DataSnapshot {
 }
 
 function buildFromDb(db: Database.Database): DataSnapshot {
+  // The category fold for snapshot transactions uses the store's own
+  // category list (built-ins + customs): the client-side uiCategory
+  // reads hydrated module state, which the server never has.
+  const knownCategories = new Set(listCategories(db).map((c) => c.name));
+  const uiCategoryDb = (name: string): Txn["category"] =>
+    (name === "Transfer" || name === "Moved aside" || knownCategories.has(name)
+      ? name
+      : "One-off") as Txn["category"];
   const memory = new Map<string, string>(
     (db.prepare("SELECT merchant, category FROM merchant_memory").all() as { merchant: string; category: string }[])
       .map((r) => [r.merchant, r.category]),
@@ -211,7 +220,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       day,
       monthKey: row.year_month,
       merchant: row.merchant,
-      category: uiCategory(resolveCategory(row, memory)),
+      category: uiCategoryDb(resolveCategory(row, memory)),
       amount,
       owner,
       account: accountTxnLabel(row.person, row.account),
@@ -427,6 +436,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     migration: { moved: [], waiting: [] },
     reviewTotal,
     accounts,
+    categories: listCategories(db),
     docs,
     typical,
     sparks,

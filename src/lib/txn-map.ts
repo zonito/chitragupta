@@ -1,4 +1,5 @@
 import type { Category, Owner, Txn } from "./data";
+import { categoryNames } from "./data";
 
 /**
  * Browser-safe mapping from GET /api/transactions rows to the UI Txn
@@ -46,14 +47,15 @@ export function accountTxnLabel(person: string, account: string): string {
   return ACCOUNT_TXN_LABEL[account] ?? account;
 }
 
-const UI_CATEGORIES = new Set([
-  "Groceries", "Eating out", "Transport", "School", "Home",
-  "Subscriptions", "Holidays", "Shopping", "One-off",
-]);
-
+/**
+ * Fold a stored category name to the UI shape: system movement labels
+ * pass through, live categories (built-ins + customs, from the
+ * hydrated snapshot list with the built-ins as fallback) pass through,
+ * anything else is an unknown label and shows as One-off.
+ */
 export function uiCategory(name: string): Category {
   if (name === "Transfer" || name === "Moved aside") return name;
-  return (UI_CATEGORIES.has(name) ? name : "One-off") as Category;
+  return (categoryNames().includes(name) ? name : "One-off") as Category;
 }
 
 export function apiTxnToTxn(row: ApiTxnRow): Txn | null {

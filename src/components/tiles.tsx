@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
-import { Cloud, CreditCard, Landmark, PiggyBank, Smartphone, Users } from "lucide-react";
-import { CATEGORY_COLOR, type Category } from "@/lib/data";
-import { CATEGORY_ICON } from "@/components/item-icons";
+import { ArrowLeftRight, Cloud, CreditCard, Landmark, PiggyBank, Smartphone, Tag, Users } from "lucide-react";
+import { categoryColor, categoryIcon, type Category } from "@/lib/data";
+import { ICON_BY_NAME } from "@/components/item-icons";
 
 type Brand = { token: string; letter?: string; cloud?: boolean; ink?: string };
 export const BRAND_TILES: Record<string, Brand> = {
@@ -39,8 +39,14 @@ export function merchantBrand(merchant: string) {
 type TileStyle = CSSProperties & { "--tile-background"?: string; "--tile-ink"?: string };
 export function MerchantTile({ merchant, category }: { merchant: string; category: Category }) {
   const brand = merchantBrand(merchant);
-  const Icon = brand?.cloud ? Cloud : CATEGORY_ICON[category];
-  const colour = category === "Transfer" ? "var(--muted-foreground)" : category === "Moved aside" ? "var(--aside)" : CATEGORY_COLOR[category];
+  const Icon = brand?.cloud
+    ? Cloud
+    : category === "Transfer"
+      ? ArrowLeftRight
+      : category === "Moved aside"
+        ? Landmark
+        : (ICON_BY_NAME[categoryIcon(category)] ?? Tag);
+  const colour = category === "Transfer" ? "var(--muted-foreground)" : category === "Moved aside" ? "var(--aside)" : categoryColor(category);
   const style: TileStyle = { "--tile-background": brand ? `var(--brand-${brand.token})` : colour, "--tile-ink": brand?.ink ?? "var(--tile-foreground)" };
   return <span aria-hidden="true" className="recognition-tile" style={style}>{brand?.letter ?? <Icon size={19} strokeWidth={1.8} />}</span>;
 }

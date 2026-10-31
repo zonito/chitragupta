@@ -1,4 +1,5 @@
 import {
+  BUILTIN_CATEGORY_DEFS,
   CATEGORIES,
   type DataSnapshot,
   type Txn,
@@ -182,6 +183,7 @@ export const SAMPLE_SNAPSHOT: DataSnapshot = {
     ],
   },
   reviewTotal: 3,
+  categories: BUILTIN_CATEGORY_DEFS,
   accounts: [
     { name: "Revolut Main", owner: "zonito", last: "28 Oct", added: 31, stale: false },
     { name: "Revolut Pro", owner: "zonito", last: "28 Oct", added: 4, stale: false },

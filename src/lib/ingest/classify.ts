@@ -2,6 +2,11 @@ import type Database from "better-sqlite3";
 import { recomputeAggregates } from "./ingest";
 import { reviewQueue, reviewQueueCount, setMerchant } from "./merchants";
 import {
+  BUILTIN_CATEGORY_NAMES,
+  customCategoryExamples,
+  listCategories,
+} from "./categories";
+import {
   gatewayCallCount,
   gatewayConfig,
   lastGatewayStatus,
@@ -26,17 +31,10 @@ import {
  * for the next run.
  */
 
-export const CLASSIFIABLE_CATEGORIES = [
-  "Groceries",
-  "Eating out",
-  "Transport",
-  "School",
-  "Home",
-  "Subscriptions",
-  "Holidays",
-  "Shopping",
-  "One-off",
-] as const;
+/** The built-in categories. The classifier's live allowed list is
+ * these plus the household's custom categories, read from the
+ * categories table on every run (see classifyUnknownMerchants). */
+export const CLASSIFIABLE_CATEGORIES = BUILTIN_CATEGORY_NAMES;
 
 export type ClaudeConfig = GatewayConfig;
 
@@ -76,7 +74,10 @@ function dominantMovement(
   return row?.movement ?? "spend";
 }
 
-function parseClassification(text: string): Classification | null {
+function parseClassification(
+  text: string,
+  allowed: readonly string[],
+): Classification | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) return null;
@@ -89,7 +90,7 @@ function parseClassification(text: string): Classification | null {
   if (!parsed || typeof parsed !== "object") return null;
   const { category, icon, colour } = parsed as Record<string, unknown>;
   if (typeof category !== "string") return null;
-  const match = CLASSIFIABLE_CATEGORIES.find(
+  const match = allowed.find(
     (c) => c.toLowerCase() === category.trim().toLowerCase(),
   );
   if (!match) return null;
@@ -106,14 +107,31 @@ async function classifyOne(
   count: number,
   env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch,
+  allowed: readonly string[],
+  customs: { name: string; examples: string[] }[],
 ): Promise<Classification | null> {
-  const prompt = [
+  const lines = [
     `Classify this UK household merchant for an expense tracker.`,
     `Merchant: ${merchant}`,
     `Transaction type: ${movement}`,
     `Seen ${count} time(s).`,
-    `Reply with ONLY a JSON object: {"category": one of ${JSON.stringify(CLASSIFIABLE_CATEGORIES)}, "icon": a short lowercase icon name (e.g. "shopping-bag", "coffee", "train"), "colour": a hex colour like "#3b82f6"}.`,
-  ].join("\n");
+  ];
+  if (customs.length > 0) {
+    // The household's own categories, with the merchants that already
+    // carry each one (user corrections first) — this is how the model
+    // learns what a custom label means here.
+    lines.push(
+      `Custom categories in this household (use one when it fits better than a built-in):`,
+      ...customs.map(
+        (c) =>
+          `- ${c.name}${c.examples.length > 0 ? ` — e.g. ${c.examples.join(", ")}` : ""}`,
+      ),
+    );
+  }
+  lines.push(
+    `Reply with ONLY a JSON object: {"category": one of ${JSON.stringify(allowed)}, "icon": a short lowercase icon name (e.g. "shopping-bag", "coffee", "train"), "colour": a hex colour like "#3b82f6"}.`,
+  );
+  const prompt = lines.join("\n");
   let text = await museComplete({
     prompt,
     maxTokens: 200,
@@ -137,7 +155,7 @@ async function classifyOne(
       });
     }
   }
-  return text ? parseClassification(text) : null;
+  return text ? parseClassification(text, allowed) : null;
 }
 
 export async function classifyUnknownMerchants(
@@ -162,6 +180,11 @@ export async function classifyUnknownMerchants(
     };
   }
   const fetchImpl = opts.fetchImpl ?? fetch;
+  // The allowed list is the categories table: built-ins plus the
+  // household's customs, with example merchants for each custom so the
+  // model can place similar merchants under the custom label.
+  const allowed = listCategories(db).map((c) => c.name);
+  const customs = customCategoryExamples(db);
   let classified = 0;
   let failed = 0;
   // Gateway diagnostics for this run: poll the shared client's call
@@ -193,6 +216,8 @@ export async function classifyUnknownMerchants(
         item.count,
         env,
         fetchImpl,
+        allowed,
+        customs,
       );
       pollGateway();
       if (!result) {
@@ -214,6 +239,7 @@ export async function classifyUnknownMerchants(
       .prepare("SELECT DISTINCT person FROM transactions")
       .all() as { person: string }[];
     for (const { person } of persons) recomputeAggregates(db, person);
+    recomputeAggregates(db, "household");
   }
   return {
     ran: true,

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { usePerson, PageTitle, Panel, Label, Chip, meta } from "@/components/shell";
 import { MerchantTile } from "@/components/tiles";
-import { biggestChanges, biggestOneOff, newMerchants, weeklySpend, gbp, dateLabel, MONTHS6, sparkFor, weekdayLunchFact, SUBS, CATEGORY_COLOR, type Category } from "@/lib/data";
+import { biggestChanges, biggestOneOff, newMerchants, weeklySpend, gbp, dateLabel, MONTHS6, sparkFor, weekdayLunchFact, SUBS, categoryColor, type Category } from "@/lib/data";
 
 export const Route = createFileRoute("/coach")({
   head: () => meta("Coach", "A weekly digest and a few plain-words insights about your household spending."),
@@ -95,7 +95,7 @@ export function Coach() {
                 <div className="flex h-20 items-end gap-2">
                   {series.map((v, k) => (
                     <div key={k} className="flex flex-1 flex-col items-center gap-1">
-                      <div className={`chart-grow w-full rounded-t ${k === series.length - 1 ? "" : "opacity-40"}`} style={{ height: `${(v / max) * 64}px`, backgroundColor: CATEGORY_COLOR[chartCategory], animationDelay: `${k * 35}ms` }} />
+                      <div className={`chart-grow w-full rounded-t ${k === series.length - 1 ? "" : "opacity-40"}`} style={{ height: `${(v / max) * 64}px`, backgroundColor: categoryColor(chartCategory), animationDelay: `${k * 35}ms` }} />
                     </div>
                   ))}
                 </div>

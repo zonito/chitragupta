@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { usePerson, PageTitle, Sheet, Sparkline, Label, meta } from "@/components/shell";
-import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, CATEGORY_COLOR, CATEGORIES, type Category } from "@/lib/data";
+import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, categoryColor, type Category } from "@/lib/data";
 import { fetchCategoryMerchants, fetchCategoryScope, scopeLabel, scopeOptions, type CategoryScopeData } from "@/lib/category-scope";
 import { AnimatedBar } from "@/components/motion";
 import { Button } from "@/components/ui/button";
@@ -169,7 +169,7 @@ export function Categories() {
                 <span className="num amount">{gbp(c.amount, false)}</span>
               </div>
               <div className="h-2 rounded-lg bg-muted">
-                <AnimatedBar percent={(c.amount / max) * 100} className="" colour={CATEGORY_COLOR[c.category as (typeof CATEGORIES)[number]]} />
+                <AnimatedBar percent={(c.amount / max) * 100} className="" colour={categoryColor(c.category)} />
               </div>
             </Button>
           ))}
@@ -192,7 +192,7 @@ export function Categories() {
                 )}
               </div>
               {(isDefault || sheetSeries.length >= 2) && (
-                <div className="text-right" style={{ color: CATEGORY_COLOR[open as (typeof CATEGORIES)[number]] }}>
+                <div className="text-right" style={{ color: categoryColor(open) }}>
                   <Sparkline data={sheetSeries} className="" />
                   <div className="text-micro text-muted-foreground">{sheetCaption}</div>
                 </div>

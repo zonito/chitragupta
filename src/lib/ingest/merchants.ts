@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { CATEGORIES, gbp } from "../data";
+import { gbp } from "../data";
+import { listCategories } from "./categories";
 
 export type MerchantSource = "rules" | "claude-api" | "molang" | "user";
 
@@ -241,8 +242,9 @@ export type ReviewQueueItem = {
    * screen would show; a merchant whose rows carry neither resolves
    * per movement ('One-off' for spend, etc.), which is a fallback,
    * not a suggestion, so it surfaces as null rather than a forced
-   * label. Only spend categories (CATEGORIES) can be suggested:
-   * anything else cannot be picked in the review sheet anyway.
+   * label. Only live categories (built-in or custom, from the
+   * categories table) can be suggested: anything else cannot be
+   * picked in the review sheet anyway.
    */
   suggestion: string | null;
 };
@@ -272,6 +274,7 @@ function reviewDetail(db: Database.Database, merchant: string): string {
 function reviewSuggestion(
   db: Database.Database,
   merchant: string,
+  allowed: ReadonlySet<string>,
 ): string | null {
   const rows = db
     .prepare(
@@ -283,7 +286,7 @@ function reviewSuggestion(
     )
     .all(merchant) as { explicit: string | null }[];
   for (const row of rows) {
-    if (row.explicit && (CATEGORIES as readonly string[]).includes(row.explicit)) {
+    if (row.explicit && allowed.has(row.explicit)) {
       return row.explicit;
     }
   }
@@ -292,6 +295,8 @@ function reviewSuggestion(
 
 export function reviewQueue(db: Database.Database): ReviewQueueItem[] {
   const rows = qualifiedUnknownMerchantRows(db).slice(0, 200);
+  // Suggestions may name any live category, built-in or custom.
+  const allowed = new Set(listCategories(db).map((c) => c.name));
   return rows.map((r) => {
     const examples = db
       .prepare(
@@ -303,7 +308,7 @@ export function reviewQueue(db: Database.Database): ReviewQueueItem[] {
       count: r.n,
       examples: examples.map((e) => e.description),
       detail: reviewDetail(db, r.merchant),
-      suggestion: reviewSuggestion(db, r.merchant),
+      suggestion: reviewSuggestion(db, r.merchant, allowed),
     };
   });
 }

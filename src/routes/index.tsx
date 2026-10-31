@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePerson, Panel, Label, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR, type IncomeEntry } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, categoryColor, type IncomeEntry } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 
@@ -74,7 +74,7 @@ export function Index() {
         <Label>Biggest changes</Label>
         {biggestChanges(person).map((c) => (
           <div key={c.category} className="ledger-row flex items-center justify-between py-3">
-            <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: CATEGORY_COLOR[c.category] }} />{c.category}</span>
+            <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(c.category) }} />{c.category}</span>
             <span className="num text-body text-foreground">
               {c.diff > 0 ? "+" : "−"}{gbp(Math.abs(c.diff), false)}
             </span>

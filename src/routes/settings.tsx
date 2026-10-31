@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { PageTitle, Panel, Label, Chip, Row, Sheet, meta, useTheme, type ThemeChoice } from "@/components/shell";
-import { ACCOUNTS, CATEGORIES, reviewTotal, type Category, type ReviewQueueItem } from "@/lib/data";
+import { ACCOUNTS, categoryColor, categoryDefs, reviewTotal, type Category, type CategoryDef, type ReviewQueueItem } from "@/lib/data";
 import { AccountTile, MerchantTile } from "@/components/tiles";
+import { CategoryIcon } from "@/components/item-icons";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/settings")({
@@ -127,6 +128,7 @@ export function Settings() {
           right={<Chip tone="neutral">{waiting === 0 ? "Review queue is clear" : `${waiting} ${waiting === 1 ? "merchant" : "merchants"} waiting for review`}</Chip>}
         />
       </Panel>
+      <CategoriesManager />
       <p className="px-1 text-body leading-relaxed text-muted-foreground">
         Your data stays with you. Transfers between Zonito and Nikhila are never counted as spending, and money moved to savings or investments shows separately as "Moved aside".
       </p>
@@ -159,7 +161,7 @@ export function Settings() {
                   onChange={(e) => setChoices((prev) => ({ ...prev, [m.merchant]: e.target.value }))}
                 >
                   <option value="" disabled>Choose a category</option>
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {categoryDefs().map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
                 </select>
                 <Button variant="outline" size="sm" disabled={!choices[m.merchant]} onClick={() => keep(m)}>Keep</Button>
                 <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => dismiss(m)}>Dismiss</Button>
@@ -195,5 +197,125 @@ export function Settings() {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+/**
+ * Categories manager: the live category list (built-ins + customs from
+ * the snapshot), add a custom category, remove an unused custom one.
+ * The server refuses deletes for built-ins and for categories still in
+ * use; its error is shown inline. Every change invalidates the route
+ * data, so the refreshed snapshot carries the new list everywhere.
+ */
+function CategoriesManager() {
+  const router = useRouter();
+  const defs = categoryDefs();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const add = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error ?? "could not add that category");
+      }
+      setName("");
+      await router.invalidate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not add that category");
+    }
+    setBusy(false);
+  };
+
+  const remove = async (def: CategoryDef) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: def.name }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error ?? "could not remove that category");
+      }
+      await router.invalidate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not remove that category");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Panel className="py-2">
+      <Label>Categories</Label>
+      {defs.map((def) => (
+        <div key={def.name} className="ledger-row flex items-center justify-between gap-3 py-2.5">
+          <span className="flex min-w-0 items-center gap-2">
+            <CategoryIcon category={def.name as Category} />
+            <span className="truncate">{def.name}</span>
+            <span
+              aria-hidden="true"
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: categoryColor(def.name) }}
+            />
+          </span>
+          {def.builtin ? (
+            <Chip tone="neutral">Built-in</Chip>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              disabled={busy}
+              onClick={() => void remove(def)}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+      ))}
+      <div className="flex items-center gap-2 py-3">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void add();
+          }}
+          placeholder="New category name"
+          aria-label="New category name"
+          className="min-w-0 flex-1 rounded-lg border bg-card px-3 py-1.5 text-body outline-none focus:ring-2 focus:ring-ring"
+        />
+        <Button variant="outline" size="sm" disabled={busy || !name.trim()} onClick={() => void add()}>
+          Add
+        </Button>
+      </div>
+      {error && (
+        <p className="pb-2 text-caption text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      <p className="pb-2 text-caption text-muted-foreground">
+        Custom categories join the classifier's list too — merchants similar to ones you file under a custom category will be suggested for it.
+      </p>
+    </Panel>
   );
 }

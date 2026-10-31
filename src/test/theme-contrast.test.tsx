@@ -105,7 +105,10 @@ describe("CategoryChip rendering", () => {
     expect(CATEGORY_COLOR.Holidays).toBe("var(--cat-holidays)");
     const shell = readFileSync(resolve(__dirname, "../components/shell.tsx"), "utf8");
     const chipFn = shell.slice(shell.indexOf("export function CategoryChip"));
-    expect(chipFn.slice(0, 800)).toContain("CATEGORY_INK[");
+    // The chip text colour resolves through categoryInk() — the
+    // snapshot-aware helper over CATEGORY_INK (customs fall back to
+    // their own colour) — never the raw category colour.
+    expect(chipFn.slice(0, 800)).toContain("categoryInk(category)");
     expect(chipFn.slice(0, 800)).toContain("color-mix(in oklab, ${colour} 12%, transparent)");
   });
 });

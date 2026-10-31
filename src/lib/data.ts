@@ -54,6 +54,33 @@ export const CATEGORY_INK: Record<(typeof CATEGORIES)[number], string> = {
   "One-off": "var(--cat-one-off-ink)",
 };
 
+/**
+ * The live category list: the snapshot's categories (built-ins +
+ * user-created, from the store) once hydrated, the built-in defs
+ * before that. Every surface that enumerates categories — chips,
+ * dropdowns, the Categories screen — goes through these helpers, so a
+ * custom category gets its colour and icon everywhere automatically.
+ */
+export function categoryDefs(): CategoryDef[] {
+  return CATEGORY_DEFS.length > 0 ? [...CATEGORY_DEFS] : BUILTIN_CATEGORY_DEFS;
+}
+export function categoryNames(): string[] {
+  return categoryDefs().map((d) => d.name);
+}
+export function categoryColor(name: string): string {
+  return (
+    categoryDefs().find((d) => d.name === name)?.colour ??
+    CATEGORY_COLOR[name as (typeof CATEGORIES)[number]] ??
+    "var(--cat-one-off)"
+  );
+}
+export function categoryInk(name: string): string {
+  return CATEGORY_INK[name as (typeof CATEGORIES)[number]] ?? categoryColor(name);
+}
+export function categoryIcon(name: string): string {
+  return categoryDefs().find((d) => d.name === name)?.icon ?? "tag";
+}
+
 export interface Txn {
   id: string;
   date: string; // ISO YYYY-MM-DD
@@ -112,6 +139,25 @@ export interface ReviewQueueItem {
   suggestion: string | null;
 }
 export interface AccountInfo { name: string; owner: Owner; last: string; added: number; stale: boolean }
+/** One spending category, built-in or user-created. Colour and icon are
+ * the values every surface renders (theme token, hex or oklch colour;
+ * an icon name from the shared set). System movement labels (Moved
+ * aside, Fees, Interest, Transfer) are never categories. */
+export interface CategoryDef { name: string; colour: string; icon: string; builtin: boolean }
+/** The 9 built-in categories with the colour token and icon each has
+ * always had. The server seeds its categories table from this list;
+ * the client uses it as the fallback when a snapshot carries none. */
+export const BUILTIN_CATEGORY_DEFS: CategoryDef[] = [
+  { name: "Groceries", colour: "var(--cat-groceries)", icon: "shopping-basket", builtin: true },
+  { name: "Eating out", colour: "var(--cat-eating-out)", icon: "utensils-crossed", builtin: true },
+  { name: "Transport", colour: "var(--cat-transport)", icon: "bus", builtin: true },
+  { name: "School", colour: "var(--cat-school)", icon: "graduation-cap", builtin: true },
+  { name: "Home", colour: "var(--cat-home)", icon: "home", builtin: true },
+  { name: "Subscriptions", colour: "var(--cat-subscriptions)", icon: "repeat", builtin: true },
+  { name: "Holidays", colour: "var(--cat-holidays)", icon: "plane", builtin: true },
+  { name: "Shopping", colour: "var(--cat-shopping)", icon: "shopping-bag", builtin: true },
+  { name: "One-off", colour: "var(--cat-one-off)", icon: "receipt", builtin: true },
+];
 export type DocType = "Receipt" | "Bill" | "Invoice" | "Warranty";
 export interface Doc {
   id: string; merchant: string; date: string; amount: number; type: DocType;
@@ -133,6 +179,7 @@ export interface DataSnapshot {
   migration: { moved: { name: string; seen: string }[]; waiting: { name: string; seen: string }[] };
   reviewTotal: number; // TRUE review-queue size; the sheet fetches the items itself from /api/review-queue
   accounts: AccountInfo[];
+  categories: CategoryDef[]; // built-ins + user-created, from the store's categories table
   docs: Doc[];
   typical: Record<string, Partial<Record<Person, number>>>;
   sparks: Record<string, Partial<Record<Person, number[]>>>;
@@ -153,6 +200,7 @@ export const EMPTY_SNAPSHOT: DataSnapshot = {
   migration: { moved: [], waiting: [] },
   reviewTotal: 0,
   accounts: [],
+  categories: [],
   docs: [],
   typical: {},
   sparks: {},
@@ -172,6 +220,7 @@ export const UPCOMING: UpcomingPayment[] = [];
 export const SUBS: Sub[] = [];
 export const CARDS: CardItem[] = [];
 export const ACCOUNTS: AccountInfo[] = [];
+export const CATEGORY_DEFS: CategoryDef[] = [];
 export const DOCS: Doc[] = [];
 export const MONTHS6: string[] = [];
 export let MIGRATION: DataSnapshot["migration"] = { moved: [], waiting: [] };
@@ -190,6 +239,7 @@ export function hydrateData(next: DataSnapshot): void {
   replace(SUBS, next.subs);
   replace(CARDS, next.cards);
   replace(ACCOUNTS, next.accounts);
+  replace(CATEGORY_DEFS, next.categories ?? []);
   replace(DOCS, next.docs);
   replace(MONTHS6, next.months6);
   MIGRATION = next.migration;
@@ -318,18 +368,18 @@ export function incomeTotal(person: Person): number {
 export function byCategory(p: Person) {
   const m: Record<string, number> = {};
   for (const x of TXNS) if (x.kind === "spend") m[x.category] = (m[x.category] ?? 0) + shareOf(x, p);
-  return CATEGORIES.map((c) => ({ category: c, amount: m[c] ?? 0 })).filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount);
+  return categoryNames().map((c) => ({ category: c as Category, amount: m[c] ?? 0 })).filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount);
 }
 
 export function typicalFor(c: string, p: Person) {
   return snapshot.typical[c]?.[p] ?? 0;
 }
 export function typicalTotal(p: Person) {
-  return CATEGORIES.reduce((s, c) => s + typicalFor(c, p), 0);
+  return categoryNames().reduce((s, c) => s + typicalFor(c, p), 0);
 }
 export function biggestChanges(p: Person) {
   const cur = Object.fromEntries(byCategory(p).map((c) => [c.category, c.amount]));
-  return CATEGORIES.map((c) => ({ category: c, now: cur[c] ?? 0, usual: typicalFor(c, p), diff: (cur[c] ?? 0) - typicalFor(c, p) }))
+  return categoryNames().map((c) => ({ category: c as Category, now: cur[c] ?? 0, usual: typicalFor(c, p), diff: (cur[c] ?? 0) - typicalFor(c, p) }))
     .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
     .slice(0, 3);
 }

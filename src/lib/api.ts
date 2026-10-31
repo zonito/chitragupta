@@ -13,8 +13,12 @@ import {
   documentRowToDoc,
   type DocumentRow,
 } from "./documents.server";
-import { CATEGORIES, type DocType } from "./data";
-import { uiCategory } from "./txn-map";
+import { type DocType } from "./data";
+import {
+  createCategory,
+  deleteCategory,
+  listCategories,
+} from "./ingest/categories";
 import {
   ingestAll,
   recomputeAggregates,
@@ -158,6 +162,7 @@ export async function handleChitraguptaApi(
     path === "/api/review-queue" ||
     path === "/api/review-queue/dismiss" ||
     path === "/api/merchants" ||
+    path === "/api/categories" ||
     path === "/api/digest" ||
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
@@ -218,15 +223,16 @@ const SCOPE_PERSONS: ReadonlySet<string> = new Set([
  * at 100% and the other person's at 0 (month_aggregates does not encode
  * that split, so it cannot serve these scopes). Categories resolve with
  * the same COALESCE expression as everywhere else, then fold through
- * uiCategory and the CATEGORIES list, exactly as the snapshot's
- * byCategory does, so a scoped month agrees with the snapshot to the
- * penny. Amounts are minor units and can carry a half (a halved odd
- * Joint row), again mirroring the client.
+ * the store's category list (built-ins + customs), exactly as the
+ * snapshot's byCategory does, so a scoped month agrees with the
+ * snapshot to the penny. Amounts are minor units and can carry a half
+ * (a halved odd Joint row), again mirroring the client.
  *
  * Response: { ok, person, scope, month? | year?, total_minor,
  * seriesPeriods, seriesLabels, rows } where total_minor is the scope's
  * whole weighted GBP spend (the spendTotal analogue: it includes any
- * spend whose category folds outside CATEGORIES, which rows omit), and
+ * spend whose category folds outside the category list, which rows
+ * omit), and
  * each row is { category, spend_minor, typical_minor, series }:
  * - typical_minor ("usually"): month scope → median of the prior 6
  *   calendar months' weighted spend; year scope → median of the other
@@ -288,10 +294,22 @@ function aggregatesScope(db: Database.Database, url: URL): Response {
     raw_category: string;
     spend: number;
   }[];
-  const uiCategories: ReadonlySet<string> = new Set(CATEGORIES);
+  // Categories resolve with the same COALESCE expression as everywhere
+  // else, then fold through the store's category list (built-ins +
+  // customs), exactly as the snapshot's byCategory does with the
+  // hydrated list, so a scoped month agrees with the snapshot to the
+  // penny. (uiCategory itself reads client-hydrated state, so the fold
+  // is replicated here against the DB list.)
+  const uiCategories: ReadonlySet<string> = new Set(
+    listCategories(db).map((c) => c.name),
+  );
+  const foldCategory = (name: string): string =>
+    name === "Transfer" || name === "Moved aside" || uiCategories.has(name)
+      ? name
+      : "One-off";
   const byMonth = new Map<string, Map<string, number>>();
   for (const r of monthlyRows) {
-    const category = uiCategory(r.raw_category);
+    const category = foldCategory(r.raw_category);
     if (!uiCategories.has(category)) continue;
     let monthMap = byMonth.get(r.ym);
     if (!monthMap) byMonth.set(r.ym, (monthMap = new Map()));
@@ -358,8 +376,8 @@ function aggregatesScope(db: Database.Database, url: URL): Response {
           : seriesPeriods.map((ym) => monthSpend(ym, category)),
     }));
   // The scope total counts every weighted spend row in scope, including
-  // any whose category folds outside CATEGORIES (the rows omit those,
-  // exactly as spendTotal and byCategory relate on the client).
+  // any whose category folds outside the category list (the rows omit
+  // those, exactly as spendTotal and byCategory relate on the client).
   const total_minor = monthlyRows
     .filter((r) => inScope(r.ym))
     .reduce((s, r) => s + r.spend, 0);
@@ -401,7 +419,7 @@ function aggregatesScope(db: Database.Database, url: URL): Response {
     }[];
     const merchants = new Map<string, number>();
     for (const r of merchantRows) {
-      if (uiCategory(r.raw_category) !== categoryParam) continue;
+      if (foldCategory(r.raw_category) !== categoryParam) continue;
       merchants.set(r.merchant, (merchants.get(r.merchant) ?? 0) + r.spend);
     }
     body["category"] = categoryParam;
@@ -578,6 +596,34 @@ async function routeWithDb(
       }
     }
     return json({ ok: true, merchant: body.merchant, category: body.category });
+  }
+
+  if (path === "/api/categories" && request.method === "GET") {
+    return json({ ok: true, categories: listCategories(db) });
+  }
+
+  if (path === "/api/categories" && request.method === "POST") {
+    let body: { name?: unknown; colour?: unknown; icon?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const result = createCategory(db, body);
+    if (!result.ok) return json({ ok: false, error: result.error }, 400);
+    return json({ ok: true, category: result.category });
+  }
+
+  if (path === "/api/categories" && request.method === "DELETE") {
+    let body: { name?: unknown };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    const result = deleteCategory(db, body.name);
+    if (!result.ok) return json({ ok: false, error: result.error }, 400);
+    return json({ ok: true });
   }
 
   if (path === "/api/ask" && request.method === "POST") {

@@ -5,7 +5,7 @@ import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/compon
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { ALL_TXNS, CATEGORIES, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
 
 export const Route = createFileRoute("/activity")({
@@ -121,6 +121,41 @@ export function Activity() {
     setCatBusy(false);
   };
 
+  // "New category…" in the sheet's dropdown: create the category
+  // first (POST /api/categories), then apply it through the usual
+  // correction flow, so re-filing, aside promotion and ingest learning
+  // work for customs exactly as for built-ins. The refreshed snapshot
+  // brings the new category (and its colour) to every surface.
+  const createAndApplyCategory = async (txn: Txn) => {
+    const name = window.prompt("New category name")?.trim();
+    if (!name) return;
+    setCatError(null);
+    setCatBusy(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        category?: { name: string };
+      } | null;
+      if (!res.ok || !body?.ok || !body.category) {
+        throw new Error(body?.error ?? "create failed");
+      }
+      await saveCategory(txn, body.category.name as Category);
+    } catch (error) {
+      setCatError(
+        error instanceof Error && error.message !== "create failed"
+          ? `Could not create that category — ${error.message}.`
+          : "Could not create that category — it has been put back.",
+      );
+      setCatBusy(false);
+    }
+  };
+
   return (
     <div className="lg:max-w-3xl">
       <PageTitle sub={`${gbp(monthSpend)} spent · transfers and savings not counted`}>Activity</PageTitle>
@@ -134,7 +169,7 @@ export function Activity() {
         </select>
         <select className={sel} value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="all">All categories</option>
-          {[...CATEGORIES, "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
+          {[...categoryNames(), "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
         </select>
         <select className={sel} value={month} onChange={(e) => setMonth(e.target.value)}>
           {monthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
@@ -199,9 +234,16 @@ export function Activity() {
                   className={sel}
                   value={catPick ?? openTxn.category}
                   disabled={catBusy}
-                  onChange={(e) => void saveCategory(openTxn, e.target.value as Category)}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      void createAndApplyCategory(openTxn);
+                    } else {
+                      void saveCategory(openTxn, e.target.value as Category);
+                    }
+                  }}
                 >
-                  {[...CATEGORIES, "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
+                  {[...categoryNames(), "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
+                  <option value="__new__">New category…</option>
                 </select>
               </div>
             </dl>
