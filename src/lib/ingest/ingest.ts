@@ -10,6 +10,7 @@ import {
   savingsFingerprint,
   statementFingerprint,
   type IngestAccount,
+  type MoneyMovement,
   type SavingsRow,
   type StatementRow,
 } from "./parse";
@@ -152,6 +153,26 @@ export function ingestAccount(
   dataDir: string,
 ): IngestResult {
   const { rows, file } = readOriginals(dataDir, account);
+  // Merchants the user has personally corrected: an outgoing transfer to
+  // one of them is real spending, not money moved aside, so it ingests as
+  // spend from the start. Read once per account ingest; a store rebuild
+  // carries merchant memory into its temp store before ingesting, so the
+  // rule applies there too with no extra plumbing.
+  const userCorrected = new Set(
+    (
+      db
+        .prepare("SELECT merchant FROM merchant_memory WHERE source = 'user'")
+        .all() as { merchant: string }[]
+    ).map((r) => r.merchant),
+  );
+  const learnedMovement = (
+    movement: MoneyMovement,
+    amountMinor: number,
+    merchant: string,
+  ): MoneyMovement =>
+    movement === "aside" && amountMinor < 0 && userCorrected.has(merchant)
+      ? "spend"
+      : movement;
   const startedAt = new Date().toISOString();
   let rowsAdded = 0;
   let balanceMinor: number | null = null;
@@ -196,13 +217,18 @@ export function ingestAccount(
         mismatch++;
       running = balMinor;
       const amountMinor = inMinor - outMinor;
-      const movement = classifyMovement(
-        r.description.toLowerCase().includes("interest")
-          ? "interest"
-          : "deposit",
-        r.description,
+      const merchant = merchantOf(r.description);
+      const movement = learnedMovement(
+        classifyMovement(
+          r.description.toLowerCase().includes("interest")
+            ? "interest"
+            : "deposit",
+          r.description,
+          amountMinor,
+          "GBP",
+        ),
         amountMinor,
-        "GBP",
+        merchant,
       );
       items.push([
         savingsFingerprint(account, r),
@@ -211,7 +237,7 @@ export function ingestAccount(
         savingsIsoDate(r.date),
         monthOf(savingsIsoDate(r.date)),
         r.description,
-        merchantOf(r.description),
+        merchant,
         amountMinor,
         0,
         "GBP",
@@ -239,12 +265,17 @@ export function ingestAccount(
       const amountMinor = gbpPence(r.amount);
       const feeMinor = gbpPence(r.fee);
       const balMinor = gbpPence(r.balance);
-      const movement = classifyMovement(
-        r.type,
-        r.description,
+      const merchant = merchantOf(r.description);
+      const movement = learnedMovement(
+        classifyMovement(
+          r.type,
+          r.description,
+          amountMinor,
+          r.currency,
+          r.state,
+        ),
         amountMinor,
-        r.currency,
-        r.state,
+        merchant,
       );
       items.push([
         statementFingerprint(account, r),
@@ -253,7 +284,7 @@ export function ingestAccount(
         effective,
         monthOf(effective),
         r.description,
-        merchantOf(r.description),
+        merchant,
         amountMinor,
         feeMinor,
         r.currency,

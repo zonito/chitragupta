@@ -9,6 +9,7 @@ import {
   reviewQueue,
   setMerchant,
   seedMerchantMemory,
+  type MerchantSource,
 } from "./ingest/merchants";
 import {
   classifyUnknownMerchants,
@@ -210,6 +211,7 @@ async function routeWithDb(
       category?: string;
       colour?: string | null;
       icon?: string | null;
+      source?: string;
     };
     try {
       body = (await request.json()) as typeof body;
@@ -222,14 +224,37 @@ async function routeWithDb(
         400,
       );
     }
+    // The caller may name its source (the Activity sheet sends "user");
+    // anything absent or unrecognised keeps the historical "molang"
+    // default, so existing callers behave exactly as before.
+    const MERCHANT_SOURCES: ReadonlySet<string> = new Set([
+      "rules",
+      "claude-api",
+      "molang",
+      "user",
+    ]);
+    const source: MerchantSource =
+      body.source && MERCHANT_SOURCES.has(body.source)
+        ? (body.source as MerchantSource)
+        : "molang";
     db.prepare(`UPDATE transactions SET category = ? WHERE merchant = ?`).run(
       body.category,
       body.merchant,
     );
+    if (source === "user") {
+      // A user correction is a statement that this merchant is real
+      // spending: payments filed as "moved aside" (transfers out) join
+      // spend under the corrected category. Incoming rows and internal
+      // moves are never touched.
+      db.prepare(
+        `UPDATE transactions SET movement = 'spend', category = ?
+         WHERE merchant = ? AND movement = 'aside' AND amount_minor < 0`,
+      ).run(body.category, body.merchant);
+    }
     setMerchant(db, body.merchant, body.category, {
       colour: body.colour ?? null,
       icon: body.icon ?? null,
-      source: "molang",
+      source,
     });
     for (const person of ["zonito", "nikhila", "household"]) {
       try {

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Paperclip, Upload, FileText } from "lucide-react";
 import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/components/shell";
@@ -18,12 +18,18 @@ const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
 export function Activity() {
   const { person } = usePerson();
   const { documents } = useDocuments();
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [who, setWho] = useState("all");
   const [cat, setCat] = useState("all");
   const [month, setMonth] = useState(() => currentMonthKey());
   const [open, setOpen] = useState<Txn | null>(null);
-  const [overrides, setOverrides] = useState<Record<string, Category>>({});
+  // Category correction in flight from the detail sheet: the value the
+  // user just picked (shown until the refreshed data lands) and the
+  // inline error when the save fails and the select reverts.
+  const [catPick, setCatPick] = useState<Category | null>(null);
+  const [catError, setCatError] = useState<string | null>(null);
+  const [catBusy, setCatBusy] = useState(false);
   // The snapshot carries two months of rows; older months are fetched
   // from /api/transactions on first use and cached for the session.
   const [fetchedMonths, setFetchedMonths] = useState<Record<string, Txn[]>>({});
@@ -57,15 +63,59 @@ export function Activity() {
   const list = useMemo(
     () =>
       monthTxns
-        .map((t) => ({ ...t, category: overrides[t.id] ?? t.category }))
         .filter((t) => shareOf(t, person) > 0)
         .filter((t) => who === "all" || t.owner === who)
         .filter((t) => cat === "all" || t.category === cat)
         .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
         .sort((a, b) => b.day - a.day),
-    [person, q, who, cat, monthTxns, overrides],
+    [person, q, who, cat, monthTxns],
   );
   const days = [...new Set(list.map((t) => t.day))];
+
+  // The sheet renders the freshest copy of the opened transaction, so a
+  // saved correction (which refreshes the snapshot and any fetched month)
+  // shows in place instead of the stale object captured on tap.
+  const openTxn = open
+    ? (monthTxns.find((t) => t.id === open.id) ?? open)
+    : null;
+
+  const saveCategory = async (txn: Txn, category: Category) => {
+    setCatPick(category);
+    setCatError(null);
+    setCatBusy(true);
+    try {
+      // txn.merchant is the store merchant string, the same value every
+      // other screen keys on — never a display-trimmed variant.
+      const res = await fetch("/api/merchants", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          merchant: txn.merchant,
+          category,
+          source: "user",
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+      } | null;
+      if (!res.ok || !body?.ok) throw new Error("save failed");
+      // Refresh the snapshot so every row of this merchant reflects the
+      // correction without a manual reload, and drop this month's
+      // on-demand cache (older months) so it refetches the same way.
+      await router.invalidate();
+      setFetchedMonths((prev) => {
+        if (!(month in prev)) return prev;
+        const next = { ...prev };
+        delete next[month];
+        return next;
+      });
+      setCatPick(null);
+    } catch {
+      setCatError("Could not save that category — it has been put back.");
+      setCatPick(null);
+    }
+    setCatBusy(false);
+  };
 
   return (
     <div className="lg:max-w-3xl">
@@ -114,37 +164,46 @@ export function Activity() {
         </div>
       ))}
 
-      <Sheet open={!!open} onClose={() => setOpen(null)}>
-        {open && (
+      <Sheet
+        open={!!open}
+        onClose={() => {
+          setOpen(null);
+          setCatPick(null);
+          setCatError(null);
+        }}
+      >
+        {openTxn && (
           <div className="max-h-[75vh] overflow-y-auto">
-            <div className="text-body text-muted-foreground">{open.merchant}</div>
+            <div className="text-body text-muted-foreground">{openTxn.merchant}</div>
             <div className="mb-5">
-              <div className="num text-title font-semibold">{gbp(shareOf(open, person))}</div>
-              {open.owner === "joint" && person !== "household" && <p className="num mt-1 text-caption text-muted-foreground">Full bill {gbp(open.amount)}</p>}
+              <div className="num text-title font-semibold">{gbp(shareOf(openTxn, person))}</div>
+              {openTxn.owner === "joint" && person !== "household" && <p className="num mt-1 text-caption text-muted-foreground">Full bill {gbp(openTxn.amount)}</p>}
             </div>
             <dl className="text-body">
               {[
-                ["Date", dayLabel(open.day, true, open.monthKey)],
-                ["Account", open.account],
-                ["Who", ownerName(open.owner)],
-                ...(open.fx ? [["Original", open.fx]] : []),
-                ...(open.note ? [["Note", open.note]] : []),
+                ["Date", dayLabel(openTxn.day, true, openTxn.monthKey)],
+                ["Account", openTxn.account],
+                ["Who", ownerName(openTxn.owner)],
+                ...(openTxn.fx ? [["Original", openTxn.fx]] : []),
+                ...(openTxn.note ? [["Note", openTxn.note]] : []),
               ].map(([k, v]) => (
-                <div key={k} className="ledger-row flex items-center justify-between gap-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="flex min-w-0 items-center gap-2 break-all text-right">{k === "Account" && <AccountTile account={open.account} />}{v}</dd></div>
+                <div key={k} className="ledger-row flex items-center justify-between gap-4 py-2.5"><dt className="text-muted-foreground">{k}</dt><dd className="flex min-w-0 items-center gap-2 break-all text-right">{k === "Account" && <AccountTile account={openTxn.account} />}{v}</dd></div>
               ))}
               <div className="flex items-center justify-between py-2.5">
                 <dt className="text-muted-foreground">Category</dt>
                 <select
                   className={sel}
-                  value={overrides[open.id] ?? open.category}
-                  onChange={(e) => setOverrides({ ...overrides, [open.id]: e.target.value as Category })}
+                  value={catPick ?? openTxn.category}
+                  disabled={catBusy}
+                  onChange={(e) => void saveCategory(openTxn, e.target.value as Category)}
                 >
                   {[...CATEGORIES, "Transfer", "Moved aside"].map((c) => <option key={c}>{c}</option>)}
                 </select>
               </div>
             </dl>
-            {open.kind === "transfer" && <p className="mt-3 text-caption text-muted-foreground">Between Zonito and Nikhila — never counted as spending.</p>}
-            <TransactionReceipt key={open.id} transaction={open} />
+            {catError && <p className="mt-2 text-caption text-destructive" role="alert">{catError}</p>}
+            {openTxn.kind === "transfer" && <p className="mt-3 text-caption text-muted-foreground">Between Zonito and Nikhila — never counted as spending.</p>}
+            <TransactionReceipt key={openTxn.id} transaction={openTxn} />
           </div>
         )}
       </Sheet>
