@@ -435,7 +435,11 @@ export function Activity() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
       </div>
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+      {/* The controls wrap to a second line rather than scrolling:
+          the row never shows a horizontal scrollbar (no-scrollbar
+          hides one even if a single control overflows a very
+          narrow screen). */}
+      <div className="no-scrollbar mb-3 flex flex-wrap gap-2 overflow-x-auto">
         {/* The account scope (from a Cards account card) is a real
             filter, so — unlike the person dropdown below — it stays
             visible in every view while active, with its own clear

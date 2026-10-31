@@ -199,6 +199,13 @@
   font-feature-settings: "tnum";
 }
 
+/* Belt-and-braces for rows that may transiently overflow: no
+   scrollbar is ever rendered, whatever the engine. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
 @layer base {
   * { border-color: var(--color-border); }
   body {
