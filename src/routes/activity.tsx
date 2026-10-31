@@ -497,7 +497,20 @@ function TransactionNote({
         className="mt-2 w-full rounded-lg border bg-card px-3 py-2 text-body"
       />
       <div className="mt-2 flex items-center gap-2">
-        <Button size="sm" disabled={busy || !dirty} onClick={() => void save()}>
+        {/* Two honest states: with nothing to save the button is a
+            flat muted pill (a faded 50%-opacity primary read as
+            broken); the moment there is something to save it is the
+            app's full-strength primary, like the Ask send button. */}
+        <Button
+          size="sm"
+          disabled={busy || !dirty}
+          onClick={() => void save()}
+          className={
+            dirty || busy
+              ? undefined
+              : "bg-muted text-muted-foreground shadow-none hover:bg-muted disabled:opacity-100"
+          }
+        >
           {busy ? "Saving…" : "Save note"}
         </Button>
         {saved && <span className="text-caption text-muted-foreground">Saved</span>}

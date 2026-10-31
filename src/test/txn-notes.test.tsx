@@ -115,8 +115,19 @@ describe("Activity notes", () => {
     renderActivity();
     fireEvent.click(screen.getByText("Tesco"));
     const area = await screen.findByLabelText("Your note");
+    // Nothing to save yet: a flat muted pill (disabled, full opacity)
+    // — never the faded half-strength primary that read as broken.
+    const saveButton = screen.getByRole("button", { name: "Save note" });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+    expect(saveButton.className).toContain("bg-muted");
+    expect(saveButton.className).toContain("disabled:opacity-100");
+    expect(saveButton.className).not.toContain("bg-primary");
     fireEvent.change(area, { target: { value: "gift for mum" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+    // Something to save: the full-strength primary, enabled.
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+    expect(saveButton.className).toContain("bg-primary");
+    expect(saveButton.className).not.toContain("bg-muted");
+    fireEvent.click(saveButton);
     await waitFor(() =>
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/transactions/note",
