@@ -21,7 +21,10 @@ export function PersonProvider({ children }: { children: ReactNode }) {
 }
 
 const OPTS: { v: Person; l: string }[] = [
-  { v: "household", l: "Household" },
+  // "All", not "Household": the switch's segments are equal thirds,
+  // and the long label made the selected pill look stretched against
+  // the two names. Prose elsewhere keeps saying Household.
+  { v: "household", l: "All" },
   { v: "zonito", l: "Zonito" },
   { v: "nikhila", l: "Nikhila" },
 ];
@@ -73,12 +76,12 @@ export function ThemeToggle() {
 function PersonSwitch() {
   const { person, setPerson } = usePerson();
   return (
-    <div className="grid grid-cols-3 rounded-full bg-muted p-1 text-body">
+    <div className="flex rounded-full bg-muted p-1 text-body">
       {OPTS.map((o) => (
         <button
           key={o.v}
           onClick={() => setPerson(o.v)}
-          className={`rounded-full py-1.5 transition ${person === o.v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+          className={`flex-1 rounded-full py-1.5 text-center transition ${person === o.v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
         >
           {o.l}
         </button>

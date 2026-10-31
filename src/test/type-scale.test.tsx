@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("shell type scale (class pins)", () => {
   it("PersonSwitch and sidebar nav labels are text-body, not text-sm", () => {
-    expect(shell).toContain("grid grid-cols-3 rounded-full bg-muted p-1 text-body");
+    expect(shell).toContain("flex rounded-full bg-muted p-1 text-body");
     expect(shell).toContain("rounded-xl px-3 py-2 text-body transition");
     expect(shell).not.toContain("rounded-xl px-3 py-2 text-sm");
   });
