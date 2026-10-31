@@ -63,6 +63,84 @@ describe("parseAskQuery", () => {
   });
 });
 
+describe("parseAskQuery stated years", () => {
+  const TODAY = "2026-10-30";
+
+  it("pins a month to a stated year after the month name", () => {
+    const plan = parseAskQuery("How much did we spend in September 2026?", "2026-10", TODAY);
+    expect(plan.month).toBe("2026-09");
+    expect(plan.terms).toEqual([]);
+    expect(plan.apiQuery).toBe("");
+  });
+
+  it("pins a month to a stated year with a comma, or before the month name", () => {
+    expect(parseAskQuery("How much did we spend in September, 2026?", "2026-10", TODAY).month).toBe("2026-09");
+    expect(parseAskQuery("How much did we spend in 2026 September?", "2026-10", TODAY).month).toBe("2026-09");
+    expect(parseAskQuery("How much did we spend in 2026, September?", "2026-10", TODAY).month).toBe("2026-09");
+  });
+
+  it("lets a stated year override the most-recent-occurrence inference", () => {
+    // Without the stated year, August in a 2026-10 book would be 2026-08.
+    const plan = parseAskQuery("How much did we spend in August 2024?", "2026-10", TODAY);
+    expect(plan.month).toBe("2024-08");
+    expect(plan.terms).toEqual([]);
+  });
+
+  it("keeps content terms alongside a pinned month, with no year term", () => {
+    const plan = parseAskQuery("What did we spend in India in August 2024?", "2026-10", TODAY);
+    expect(plan.month).toBe("2024-08");
+    expect(plan.terms).toEqual(["india"]);
+    expect(plan.apiQuery).toBe("india");
+  });
+
+  it("routes a standalone stated year to that year's full range", () => {
+    const plan = parseAskQuery("What did we spend in 2025?", "2026-10", TODAY);
+    expect(plan.month).toBeUndefined();
+    expect(plan.from).toBe("2025-01-01");
+    expect(plan.to).toBe("2025-12-31");
+    expect(plan.terms).toEqual([]);
+    expect(plan.apiQuery).toBe("");
+  });
+
+  it("caps a standalone current year at today, like 'this year'", () => {
+    const plan = parseAskQuery("What did we spend in 2026?", "2026-10", TODAY);
+    expect(plan.from).toBe("2026-01-01");
+    expect(plan.to).toBe("2026-10-30");
+    expect(plan.terms).toEqual([]);
+  });
+
+  it("combines a standalone year with a category word", () => {
+    const plan = parseAskQuery("How much on groceries in 2025?", "2026-10", TODAY);
+    expect(plan.from).toBe("2025-01-01");
+    expect(plan.to).toBe("2025-12-31");
+    expect(plan.category).toBe("Groceries");
+    expect(plan.terms).toEqual(["groceries"]);
+  });
+
+  it("does not let a year inside a merchant name lose its content terms or pin a period", () => {
+    const plan = parseAskQuery("When did we last pay Boiler Service 2026 Ltd?", "2026-10", TODAY);
+    expect(plan.month).toBeUndefined();
+    expect(plan.from).toBeUndefined();
+    expect(plan.to).toBeUndefined();
+    // The year token itself is stripped (defence in depth); the
+    // merchant's actual content terms all survive.
+    expect(plan.terms).toEqual(["boiler", "service", "ltd"]);
+    expect(plan.apiQuery).toBe("boiler");
+  });
+
+  it("does not let a non-adjacent year pin a named month", () => {
+    // The 2026 belongs to the merchant name; December keeps its
+    // most-recent-occurrence reading (2025-12 in a 2026-10 book).
+    const plan = parseAskQuery(
+      "When did we pay Boiler Service 2026 Ltd in December?",
+      "2026-10",
+      TODAY,
+    );
+    expect(plan.month).toBe("2025-12");
+    expect(plan.terms).toEqual(["boiler", "service", "ltd"]);
+  });
+});
+
 describe("parseAskQuery relative periods", () => {
   // Friday 30 Oct 2026: its Monday-to-Sunday week is 26 Oct – 1 Nov.
   const TODAY = "2026-10-30";
