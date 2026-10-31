@@ -150,15 +150,6 @@ export function Categories() {
         )}
       </div>
 
-      <SpendTimelineSection
-        title="Spending over time"
-        surface="categories"
-        monthly={monthly}
-        dailyPerson={person}
-        className="mb-6"
-        caption="The chart follows its own period buttons; the list below keeps the period menu at the top."
-      />
-
       {!isDefault && !data && !loadFailed && (
         <p className="py-12 text-center text-body text-muted-foreground">Loading…</p>
       )}
@@ -173,6 +164,13 @@ export function Categories() {
         </p>
       )}
 
+      {/* The monthly list is the screen's lead content (it was, until
+          the timeline chart landed above it). The row markup is the
+          pre-chart structure, unchanged since before the chart work:
+          a ghost Button (panel-enter, transparent hover) carrying the
+          icon + name + amount line and the relative bar under it. The
+          categories-layout test pins these class hooks so the rows
+          cannot silently drift again. */}
       {(isDefault || data) && cats.length > 0 && (
         <div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-x-12 lg:gap-y-6 lg:space-y-0">
           {cats.map((c) => (
@@ -188,6 +186,15 @@ export function Categories() {
           ))}
         </div>
       )}
+
+      <SpendTimelineSection
+        title="Spending over time"
+        surface="categories"
+        monthly={monthly}
+        dailyPerson={person}
+        className="mt-8"
+        caption="The list above keeps the period menu at the top; this chart follows its own period buttons."
+      />
 
       <Sheet open={!!open} onClose={() => setOpen(null)}>
         {open && (
