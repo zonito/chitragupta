@@ -200,7 +200,10 @@ export function SpendChart({
   const activeBucket = buckets[activeIdx]!;
 
   const H = compact ? 176 : 248;
-  const padL = 48;
+  // Wide enough for a full "£20,000" tick label at 11px: at 48 the
+  // leftmost glyphs fell outside the viewBox and rendered clipped
+  // (":20,000").
+  const padL = 58;
   const padR = 6;
   const padT = 10;
   const padB = 22;
@@ -259,14 +262,16 @@ export function SpendChart({
           </g>
         ))}
 
-        {/* Active bucket highlight, behind the data. */}
+        {/* Active bucket highlight, behind the data: a FAINT tint —
+            at 0.4 the saturated band drowned the current month's bar;
+            the current period is carried by its bold axis label. */}
         <rect
           x={padL + slot * activeIdx}
           y={padT}
           width={slot}
           height={plotH}
           fill="var(--accent)"
-          opacity={0.4}
+          opacity={0.12}
         />
 
         {!cumulative &&
@@ -350,7 +355,8 @@ export function SpendChart({
                 y={H - 6}
                 textAnchor="middle"
                 fontSize={11}
-                className="fill-muted-foreground"
+                fontWeight={i === buckets.length - 1 ? 700 : undefined}
+                className={i === buckets.length - 1 ? "fill-foreground" : "fill-muted-foreground"}
               >
                 {b.short}
               </text>

@@ -14,8 +14,10 @@ import {
 } from "@/lib/data";
 import {
   categoryTotals,
+  CHART_EXCLUDED_CATEGORIES,
   comparisonText,
   cumulativeBuckets,
+  dailyBuckets,
   monthlyBuckets,
   presetBuckets,
   presetComparison,
@@ -111,6 +113,51 @@ describe("timeline bucketing", () => {
       { name: "Transport", total: 200 },
       { name: "Home", total: 50 },
     ]);
+  });
+
+  it("chart buckets exclude system categories even when their spend is non-zero", () => {
+    // The Jul-2026 shape from live data: "Moved aside" carries £110
+    // of spend_minor (incoming aside money). It must not stack as
+    // spending in ANY preset's buckets, and totals drop by exactly it.
+    const data = M(["2026-07", "2026-08", "2026-09"], {
+      Groceries: [100, 100, 100],
+      "Moved aside": [110, 0, 0],
+      Transfer: [0, 50, 0],
+      Interest: [0, 0, 5],
+      Fees: [0, 0, 7],
+    });
+    for (const buckets of [
+      monthlyBuckets(data),
+      quarterlyBuckets(data, null),
+      ytdBuckets(data),
+      cumulativeBuckets(monthlyBuckets(data)),
+    ]) {
+      for (const b of buckets) {
+        for (const name of Object.keys(b.values)) {
+          expect(CHART_EXCLUDED_CATEGORIES.has(name)).toBe(false);
+        }
+      }
+    }
+    expect(monthlyBuckets(data).map((b) => b.total)).toEqual([100, 100, 100]);
+    expect(quarterlyBuckets(data, null)[0]!.total).toBe(300);
+    expect(categoryTotals(monthlyBuckets(data))).toEqual([
+      { name: "Groceries", total: 300 },
+    ]);
+  });
+
+  it("daily buckets drop system categories and recompute the day total", () => {
+    const daily: DailyData = {
+      start: "2026-10-30",
+      end: "2026-10-31",
+      dataStart: "2026-10-30",
+      buckets: [
+        { date: "2026-10-30", total: 25, categories: { Groceries: 20, Fees: 5 } },
+        { date: "2026-10-31", total: 40, categories: { Groceries: 40 } },
+      ],
+    };
+    const buckets = dailyBuckets(daily, 30);
+    expect(buckets[0]).toMatchObject({ total: 20, values: { Groceries: 20 } });
+    expect(buckets[1]).toMatchObject({ total: 40, values: { Groceries: 40 } });
   });
 });
 
@@ -378,19 +425,36 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
     expect(Math.round(chartTotal * 100)).toBe(apiTotal);
   });
 
-  it("a quarter bucket equals the sum of its three months' aggregates", async () => {
+  it("a quarter bucket equals the sum of its three months' aggregates, chart exclusions aside", async () => {
+    // The aggregates themselves are untouched (the monthly test above
+    // pins series == aggregates exactly); the CHART model excludes
+    // the system categories, so the bucket equals the aggregates sum
+    // minus those rows (Q3 2026 carries a positive "Moved aside"
+    // spend_minor in this fixture's lineage).
+    const known = new Set(built.categories.map((c) => c.name));
     let q3Minor = 0;
     for (const month of ["2026-07", "2026-08", "2026-09"]) {
       const body = (await apiJson(`/api/aggregates?person=household&month=${month}`)) as {
-        rows: { spend_minor: number }[];
+        rows: { category: string; spend_minor: number }[];
       };
-      q3Minor += body.rows.reduce((s, r) => s + r.spend_minor, 0);
+      for (const r of body.rows) {
+        const name = known.has(r.category) ? r.category : "One-off";
+        if (!CHART_EXCLUDED_CATEGORIES.has(name)) q3Minor += r.spend_minor;
+      }
     }
     hydrateData(built);
     const monthly = monthlyHistoryFor("household");
     const q3 = quarterlyBuckets(monthly, null).find((b) => b.key === "2026-Q3")!;
     expect(Math.round(q3.total * 100)).toBe(q3Minor);
     expect(q3Minor).toBeGreaterThan(0);
+    // And no bucket on any preset carries a system category.
+    for (const preset of ["monthly", "quarterly", "ytd", "oneyear", "all"] as const) {
+      for (const b of presetBuckets(preset, monthly, null)) {
+        for (const name of Object.keys(b.values)) {
+          expect(CHART_EXCLUDED_CATEGORIES.has(name)).toBe(false);
+        }
+      }
+    }
   });
 
   it("household monthly series is exactly zonito + nikhila", () => {

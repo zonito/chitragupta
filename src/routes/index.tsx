@@ -31,11 +31,11 @@ export const incomeEntryKey = (entry: IncomeEntry): string =>
  * With no recorded balance at all the card says so honestly instead
  * of showing a fabricated £0.
  */
-export function AvailableCard({ person, onOpen }: { person: Person; onOpen: () => void }) {
+export function AvailableCard({ person, onOpen, className }: { person: Person; onOpen: () => void; className?: string }) {
   const avail = availableFor(person);
   if (avail.gbpTotal === null) {
     return (
-      <Panel>
+      <Panel {...(className ? { className } : {})}>
         <Label>Available</Label>
         <p className="text-body leading-relaxed text-muted-foreground">
           No balances recorded yet — they appear here once a statement import records them.
@@ -45,7 +45,7 @@ export function AvailableCard({ person, onOpen }: { person: Person; onOpen: () =
   }
   const known = avail.accounts.filter((a) => a.balanceMinor !== null).length;
   return (
-    <Panel>
+    <Panel {...(className ? { className } : {})}>
       <button
         type="button"
         onClick={onOpen}
@@ -155,9 +155,15 @@ export function Index() {
   const small = smallSpendFact(TXNS, person);
   return (
     <>
-    <div className="space-y-5 lg:grid lg:grid-cols-2 lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-6 lg:space-y-0">
-      <div className="space-y-5 lg:space-y-6">
-      <div className="hero-panel rounded-xl p-5">
+    {/* Home is a defined grid ordered by value, highest first (source
+        order = the mobile single-column order):
+        row 1 hero + Available, row 2 the trend chart full width,
+        row 3 Coming up + Biggest changes with Coach in that column,
+        row 4 Money in + Small spends, row 5 Moved aside as a slim
+        strip. Paired cells share their row's height; nothing is left
+        as an orphan column with vertical voids. */}
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+      <div className="hero-panel rounded-xl p-5 lg:col-start-1 lg:row-start-1">
         <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">Spent in {currentMonthName()}</div>
         <div className="hero-number font-display num text-hero"><CountUpMoney value={total} /></div>
         <p className="hero-comparison num mt-2 text-caption">
@@ -173,52 +179,15 @@ export function Index() {
         </div>
       </div>
 
-      <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} />
+      <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} className="lg:col-start-2 lg:row-start-1" />
 
-      <Link to="/coach" className="block">
-        <Panel className="bg-accent/8!">
-          <Label>Coach</Label>
-          <p className="num text-body leading-relaxed">{coachNote(person)}</p>
-        </Panel>
-      </Link>
-
-      </div>
-
-      <div className="space-y-5 lg:col-start-2 lg:row-start-1 lg:row-span-3 lg:space-y-6">
-      <Panel>
-        <Label>Biggest changes</Label>
-        {biggestChanges(person).map((c) => (
-          <div key={c.category} className="ledger-row flex items-center justify-between py-3">
-            <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(c.category) }} />{c.category}</span>
-            <span className="num text-body text-foreground">
-              {c.diff > 0 ? "+" : "−"}{gbp(Math.abs(c.diff), false)}
-            </span>
-          </div>
-        ))}
-      </Panel>
-
-      <Panel>
-        <Label>Money in · {currentMonthName()}</Label>
-        <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
-        <div className="mt-3">
-          {incomeFor(person).map((entry) => (
-            <div key={incomeEntryKey(entry)} className="ledger-row flex items-center justify-between gap-3 py-2 text-body">
-              <span>{entry.type} · {personLabel(entry.owner)}</span>
-              <span className="num shrink-0">{gbp(entry.amount, false)}</span>
-            </div>
-          ))}
-        </div>
-        {asideTotal(person) > 0 && <p className="num mt-3 text-caption text-muted-foreground">Of this, {gbp(asideTotal(person), false)} was moved aside.</p>}
-      </Panel>
-
-      <Panel className="flex items-center justify-between">
-        <div>
-          <Label>Moved aside</Label>
-          <p className="text-caption text-muted-foreground">Savings & investments, not spending</p>
-        </div>
-        <span className="num text-heading font-semibold text-aside">{gbp(asideTotal(person), false)}</span>
-      </Panel>
-      </div>
+      <SpendTimelineSection
+        title="Spending trend"
+        monthly={monthly}
+        dailyPerson={person}
+        compact
+        className="lg:col-span-2 lg:row-start-2"
+      />
 
       <Panel className="lg:col-start-1 lg:row-start-3">
         <Label>Coming up · {nextMonthName()}</Label>
@@ -241,7 +210,43 @@ export function Index() {
         </div>
         <p className="mt-3 text-caption leading-relaxed text-muted-foreground">The regulars we already know about. One-offs and day-to-day spending are on top.</p>
       </Panel>
-      <Panel className="lg:col-start-1 lg:row-start-2">
+
+      <div className="space-y-5 lg:col-start-2 lg:row-start-3 lg:space-y-6">
+        <Panel>
+          <Label>Biggest changes</Label>
+          {biggestChanges(person).map((c) => (
+            <div key={c.category} className="ledger-row flex items-center justify-between py-3">
+              <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(c.category) }} />{c.category}</span>
+              <span className="num text-body text-foreground">
+                {c.diff > 0 ? "+" : "−"}{gbp(Math.abs(c.diff), false)}
+              </span>
+            </div>
+          ))}
+        </Panel>
+
+        <Link to="/coach" className="block">
+          <Panel className="bg-accent/8!">
+            <Label>Coach</Label>
+            <p className="num text-body leading-relaxed">{coachNote(person)}</p>
+          </Panel>
+        </Link>
+      </div>
+
+      <Panel className="lg:col-start-1 lg:row-start-4">
+        <Label>Money in · {currentMonthName()}</Label>
+        <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
+        <div className="mt-3">
+          {incomeFor(person).map((entry) => (
+            <div key={incomeEntryKey(entry)} className="ledger-row flex items-center justify-between gap-3 py-2 text-body">
+              <span>{entry.type} · {personLabel(entry.owner)}</span>
+              <span className="num shrink-0">{gbp(entry.amount, false)}</span>
+            </div>
+          ))}
+        </div>
+        {asideTotal(person) > 0 && <p className="num mt-3 text-caption text-muted-foreground">Of this, {gbp(asideTotal(person), false)} was moved aside.</p>}
+      </Panel>
+
+      <Panel className="lg:col-start-2 lg:row-start-4">
         <Label>Small spends</Label>
         <p className="num text-body leading-relaxed">
           Spends under £10 added up to {gbp(small.total)} this month across {small.count} spends.{small.total >= 40 && " That is roughly a family day out."}
@@ -253,14 +258,16 @@ export function Index() {
           <AnimatedBar percent={total > 0 ? small.total / total * 100 : 0} className="bg-primary/60" />
         </div>
       </Panel>
-    </div>
-    <div className="mt-5 lg:mt-6">
-      <SpendTimelineSection
-        title="Spending trend"
-        monthly={monthly}
-        dailyPerson={person}
-        compact
-      />
+
+      {/* Moved aside is context, not a headline: a slim one-line strip
+          (label, amount, what it is), not a full card. The label is a
+          span here, not <Label>: the strip is a single flex line and
+          Label's block margin would misalign it. */}
+      <Panel className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3! lg:col-span-2 lg:row-start-5">
+        <span className="text-micro font-medium uppercase tracking-[0.08em] text-muted-foreground">Moved aside</span>
+        <span className="num text-heading font-semibold text-aside">{gbp(asideTotal(person), false)}</span>
+        <span className="text-caption text-muted-foreground">Savings & investments, not spending</span>
+      </Panel>
     </div>
     <Sheet open={availableOpen} onClose={() => setAvailableOpen(false)}>
       <AvailableBreakdown person={person} />

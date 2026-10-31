@@ -41,6 +41,21 @@ export interface ChartBucket {
   partial?: boolean;
 }
 
+/**
+ * System categories are money plumbing, not spending: capital moves
+ * ("Moved aside"), transfers between own accounts, interest, fees.
+ * They stay in the Categories list and page totals, but the CHART
+ * never stacks them as spend on any surface — live aggregates carry
+ * e.g. a "Moved aside" row with positive spend_minor in some months
+ * (incoming aside money), which stacked as if it were spending.
+ */
+export const CHART_EXCLUDED_CATEGORIES: ReadonlySet<string> = new Set([
+  "Moved aside",
+  "Transfer",
+  "Interest",
+  "Fees",
+]);
+
 const monthName = (key: string, style: "long" | "short") =>
   new Intl.DateTimeFormat("en-GB", {
     month: style,
@@ -62,6 +77,7 @@ function bucketsFromMonths(data: MonthlyRows, keys: string[]): ChartBucket[] {
     let total = 0;
     if (i !== undefined) {
       for (const row of data.rows) {
+        if (CHART_EXCLUDED_CATEGORIES.has(row.category)) continue;
         const v = row.series[i] ?? 0;
         if (v > 0) {
           values[row.category] = v;
@@ -267,15 +283,23 @@ const dayLabelOf = (iso: string) =>
     timeZone: "UTC",
   }).format(new Date(`${iso}T00:00:00Z`));
 
-/** The last `count` days of a fetched daily window as chart buckets. */
+/** The last `count` days of a fetched daily window as chart buckets.
+ * System categories are dropped (see CHART_EXCLUDED_CATEGORIES) and
+ * the bucket total recomputed from what remains, so a day's stacked
+ * total still equals the sum of its segments. */
 export function dailyBuckets(daily: DailyData, count = 30): ChartBucket[] {
-  return daily.buckets.slice(-count).map((b) => ({
-    key: b.date,
-    label: dayLabelOf(b.date),
-    short: String(Number(b.date.slice(8, 10))),
-    total: b.total,
-    values: { ...b.categories },
-  }));
+  return daily.buckets.slice(-count).map((b) => {
+    const values = Object.fromEntries(
+      Object.entries(b.categories).filter(([name]) => !CHART_EXCLUDED_CATEGORIES.has(name)),
+    );
+    return {
+      key: b.date,
+      label: dayLabelOf(b.date),
+      short: String(Number(b.date.slice(8, 10))),
+      total: Object.values(values).reduce((s, v) => s + v, 0),
+      values,
+    };
+  });
 }
 
 /* ---------------- Presets + comparison ---------------- */
