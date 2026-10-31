@@ -57,7 +57,11 @@ export interface Txn {
 
 export interface UpcomingPayment {
   name: string;
-  day: number; // day of next month
+  day: number; // day of month of `date`
+  /** ISO YYYY-MM-DD of the next expected charge (the subscription
+   *  detector's nextExpected). Sorting and labels use this, not `day`:
+   *  the window can span the end of the current month and the next. */
+  date: string;
   amount: number;
   owner: Owner;
 }
@@ -224,17 +228,43 @@ export function upcomingShare(payment: UpcomingPayment, person: Person): number 
   return payment.owner === person ? payment.amount : 0;
 }
 export function upcomingFor(person: Person): UpcomingPayment[] {
-  return UPCOMING.filter((payment) => upcomingShare(payment, person) > 0).sort((a, b) => a.day - b.day);
+  return UPCOMING.filter((payment) => upcomingShare(payment, person) > 0)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.day - b.day);
 }
 export function upcomingTotal(person: Person): number {
   return UPCOMING.reduce((sum, payment) => sum + upcomingShare(payment, person), 0);
 }
-export const upcomingDateLabel = (day: number) => {
-  const { year, month } = monthParts(snapshot.monthKey);
-  const next = new Date(Date.UTC(year, month, day)); // month is 1-based here: Date.UTC month index = next month
+
+/** How many rows the Home "Coming up" panel lists before summarising. */
+export const UPCOMING_PANEL_LIMIT = 5;
+/**
+ * What the Home "Coming up" panel accounts for: the first
+ * UPCOMING_PANEL_LIMIT payments, plus the count and total share of the
+ * rest. Invariant: visible shares + restTotal === total, so the rows
+ * on screen (including the "and N more" summary row) always add up to
+ * the headline total — never a silently sliced subset.
+ */
+export function upcomingPanel(person: Person): {
+  visible: UpcomingPayment[];
+  restCount: number;
+  restTotal: number;
+  total: number;
+} {
+  const all = upcomingFor(person);
+  const visible = all.slice(0, UPCOMING_PANEL_LIMIT);
+  const rest = all.slice(UPCOMING_PANEL_LIMIT);
+  return {
+    visible,
+    restCount: rest.length,
+    restTotal: rest.reduce((sum, payment) => sum + upcomingShare(payment, person), 0),
+    total: upcomingTotal(person),
+  };
+}
+export const upcomingDateLabel = (date: string) => {
+  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
   return new Intl.DateTimeFormat("en-GB", {
     weekday: "short", day: "numeric", month: "short", timeZone: "UTC",
-  }).format(next).replace(",", "");
+  }).format(d).replace(",", "");
 };
 
 export function txnsFor(p: Person) {

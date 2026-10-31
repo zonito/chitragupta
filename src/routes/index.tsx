@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePerson, Panel, Label, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthName, nextMonthName, gbp, TXNS, upcomingFor, upcomingShare, upcomingTotal, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, CATEGORY_COLOR } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const { person } = usePerson();
+  const coming = upcomingPanel(person);
   const total = spendTotal(person);
   const usual = typicalTotal(person);
   const diff = total - usual;
@@ -81,17 +82,22 @@ function Index() {
 
       <Panel className="lg:col-start-1 lg:row-start-3">
         <Label>Coming up · {nextMonthName()}</Label>
-        <p className="text-heading font-semibold leading-relaxed"><span className="num">{gbp(upcomingTotal(person), false)}</span> of regulars already known</p>
+        <p className="text-heading font-semibold leading-relaxed"><span className="num">{gbp(coming.total, false)}</span> of regulars already known</p>
         <div className="mt-3">
-          {upcomingFor(person).slice(0, 4).map((payment) => (
+          {coming.visible.map((payment) => (
             <div key={payment.name} className="ledger-row flex items-center justify-between gap-3 py-2.5 text-body">
               <div className="min-w-0">
                 <div>{payment.name}</div>
-                <div className="mt-0.5 text-caption text-muted-foreground">{upcomingDateLabel(payment.day)}</div>
+                <div className="mt-0.5 text-caption text-muted-foreground">{upcomingDateLabel(payment.date)}</div>
               </div>
               <span className="num shrink-0">{gbp(upcomingShare(payment, person))}</span>
             </div>
           ))}
+          {coming.restCount > 0 && (
+            <div className="ledger-row py-2.5 text-body text-muted-foreground">
+              and {coming.restCount} more · <span className="num">{gbp(coming.restTotal)}</span>
+            </div>
+          )}
         </div>
         <p className="mt-3 text-caption leading-relaxed text-muted-foreground">The regulars we already know about. One-offs and day-to-day spending are on top.</p>
       </Panel>

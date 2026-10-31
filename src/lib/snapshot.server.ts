@@ -213,41 +213,6 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${key}-02T00:00:00Z`)),
   );
 
-  // Upcoming regulars: bills/subscriptions charged this month and in at
-  // least two of the last three months — the regulars already known about.
-  const window4 = [0, 1, 2, 3].map((d) => shiftMonth(current, -d));
-  const recentRows = db
-    .prepare(
-      `SELECT fingerprint, person, account, effective_date, year_month, description,
-              merchant, amount_minor, currency, movement, category
-       FROM transactions
-       WHERE currency = 'GBP' AND movement = 'spend' AND amount_minor < 0
-         AND year_month IN (${window4.map(() => "?").join(",")})
-       ORDER BY effective_date`,
-    )
-    .all(...window4) as Row[];
-  const byMerchant = new Map<string, Row[]>();
-  for (const row of recentRows) {
-    const list = byMerchant.get(row.merchant) ?? [];
-    list.push(row);
-    byMerchant.set(row.merchant, list);
-  }
-  const upcoming: UpcomingPayment[] = [];
-  for (const [merchant, charges] of byMerchant) {
-    const monthsSeen = new Set(charges.map((c) => c.year_month));
-    const latest = charges[charges.length - 1]!;
-    if (latest.year_month !== current || monthsSeen.size < 3) continue;
-    const category = uiCategory(resolveCategory(latest, memory));
-    if (category !== "Subscriptions" && category !== "Home" && category !== "School") continue;
-    upcoming.push({
-      name: merchant,
-      day: Number(latest.effective_date.slice(8, 10)),
-      amount: Math.abs(latest.amount_minor) / 100,
-      owner: latest.account === "Joint" ? "joint" : (latest.person as Owner),
-    });
-  }
-  upcoming.sort((a, b) => a.day - b.day);
-
   // Subscriptions: pattern-only detection (recurring amount cluster on a
   // regular cadence) — see src/lib/subscriptions.ts. Merchant memory's
   // category no longer admits or excludes anything here.
@@ -262,6 +227,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const latestRow = db
     .prepare(`SELECT MAX(substr(effective_date, 1, 10)) AS d FROM transactions`)
     .get() as { d: string | null };
+  const latestDate = latestRow.d ?? current;
   const subs: Sub[] = detectSubscriptions(
     allSpend.map((r) => ({
       id: r.fingerprint,
@@ -271,12 +237,41 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       account: r.account,
       person: r.person,
     })),
-    latestRow.d ?? current,
+    latestDate,
     {
       dateLabel: shortDayLabel,
       accountLabel: (account) => ACCOUNT_TXN_LABEL[account] ?? account,
     },
   );
+
+  // Upcoming regulars on Home are the SAME subscriptions the Subscriptions
+  // screen shows, not a second heuristic: an Active sub whose next
+  // expected charge is still to come (after the store's latest
+  // transaction) and lands by the end of next month. Amount is the sub's
+  // own amount — the per-charge cluster amount its card renders
+  // (Sub.amount, the latest cluster charge) — and owner is the sub's,
+  // which the detector derives from its latest cluster charge (Joint
+  // account → "joint", else that charge's person). A yearly sub due
+  // next month appears here exactly like a monthly one.
+  const nextMonthKey = shiftMonth(current, 1);
+  const [nextYear, nextMonth] = nextMonthKey.split("-").map(Number) as [number, number];
+  const windowEnd = new Date(Date.UTC(nextYear, nextMonth, 0)).toISOString().slice(0, 10);
+  const upcoming: UpcomingPayment[] = subs
+    .filter(
+      (s) =>
+        s.status === "Active" &&
+        s.nextExpected !== null &&
+        s.nextExpected > day10(latestDate) &&
+        s.nextExpected <= windowEnd,
+    )
+    .map((s) => ({
+      name: s.name,
+      day: Number(s.nextExpected!.slice(8, 10)),
+      date: s.nextExpected!,
+      amount: s.amount,
+      owner: s.owner,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   // New merchants: first-ever spend lands in the current month.
   const firstSeen = db
@@ -341,7 +336,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     months: monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),
     txns,
     income,
-    upcoming: upcoming.slice(0, 12),
+    upcoming,
     subs,
     cards: [],
     migration: { moved: [], waiting: [] },
