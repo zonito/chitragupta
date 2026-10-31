@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog, X } from "lucide-react";
+import { Home, List, Sparkles, MoreHorizontal, ArrowUp, Loader2, Sun, Moon, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings as Cog, X } from "lucide-react";
 import { gbp, ocadoAnswer, tripAnswer, shareOf, dayLabel, currentMonthKey, currentMonthLabel, monthOptions, categoryColor, categoryInk, personLabel, type Category, type Txn } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
@@ -276,6 +276,11 @@ const WARRANTY_QUESTION = "When does the washing machine warranty end?";
 const AIR_INDIA_QUESTION = "What did we spend with Air India?";
 const EXAMPLES = [OCADO_QUESTION, AIR_INDIA_QUESTION, BOILER_QUESTION];
 
+/** Client-side budget for /api/ask. The endpoint's model planner
+ * round-trip legitimately takes ~20s, so the client must out-wait
+ * it comfortably; only past this does "took too long" apply. */
+export const ASK_TIMEOUT_MS = 45_000;
+
 export function AskButton() {
   const { person } = usePerson();
   const { documents } = useDocuments();
@@ -296,13 +301,29 @@ export function AskButton() {
   // deterministic panels below simply stay — they are the fallback.
   const [askedText, setAskedText] = useState("");
   const [aiResult, setAiResult] = useState<{ question: string; answer: string; figures: AskFigures; ai: boolean } | null>(null);
+  // The AI round-trip's own state. Until it settles, NO result card
+  // may render for a records question: the deterministic search below
+  // is fast (sub-second) and used to render its verdict — including a
+  // false "No matching transactions…" — while the AI answer (which
+  // legitimately takes ~20s) was still in flight. aiPending holds the
+  // in-flight question; aiTimedOut the question whose wait gave up.
+  const [aiPending, setAiPending] = useState<string | null>(null);
+  const [aiTimedOut, setAiTimedOut] = useState<string | null>(null);
+  // Whether anything has been asked yet in this sheet session: the
+  // suggested-question chips render only in the fresh state.
+  const [hasAsked, setHasAsked] = useState(false);
   useEffect(() => {
     setAiResult(null);
     setAskedText("");
+    setAiPending(null);
+    setAiTimedOut(null);
+    setHasAsked(false);
   }, [person]);
   const isTrip = workedExample === "trip";
   const answer = isTrip ? tripAnswer(person) : ocadoAnswer(person);
   const displayAi = aiResult && askedText !== "" && aiResult.question === askedText ? aiResult : null;
+  const aiInFlight = aiPending !== null && aiPending === askedText;
+  const aiGaveUp = !aiInFlight && aiTimedOut !== null && aiTimedOut === askedText;
 
   const runHistorySearch = async (question: string) => {
     const plan = parseAskQuery(question, currentMonthKey());
@@ -324,18 +345,29 @@ export function AskButton() {
   };
 
   const runAiAsk = async (question: string) => {
+    setAiPending(question);
+    setAiTimedOut(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ASK_TIMEOUT_MS);
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question, person }),
+        signal: controller.signal,
       });
       if (!res.ok) return;
       const body = (await res.json()) as { ok?: unknown; answer?: unknown; figures?: unknown; ai?: unknown };
       if (body.ok !== true || typeof body.answer !== "string" || !body.figures || typeof body.figures !== "object") return;
       setAiResult({ question, answer: body.answer, figures: body.figures as AskFigures, ai: body.ai === true });
-    } catch {
-      // Endpoint unreachable: the deterministic panels already answer.
+    } catch (err) {
+      // A timeout is its own outcome (distinct copy, never the
+      // no-matching verdict); any other failure leaves the
+      // deterministic panels as the fallback, as designed.
+      if ((err as { name?: unknown })?.name === "AbortError") setAiTimedOut(question);
+    } finally {
+      clearTimeout(timer);
+      setAiPending((cur) => (cur === question ? null : cur));
     }
   };
 
@@ -345,6 +377,7 @@ export function AskButton() {
     setExpanded(null);
     setAiResult(null);
     setAskedText(trimmed);
+    setHasAsked(true);
     if (/ocado/i.test(question) && !/last|receipt|document/i.test(question)) setWorkedExample("ocado");
     else if (/holiday/i.test(question) && /cost|spend|spent|total/i.test(question)) setWorkedExample("trip");
     else {
@@ -406,16 +439,21 @@ export function AskButton() {
             <input aria-label="Question about your records" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about your money…" className="w-full rounded-xl border bg-card py-3 pl-4 pr-12 text-body outline-none focus:ring-2 focus:ring-ring" />
             <Button aria-label="Send" size="icon" className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ArrowUp className="h-4 w-4" /></Button>
           </form>
-          <div className="mb-6 flex flex-wrap gap-2">
-            {EXAMPLES.map((e) => <Button key={e} variant="outline" onClick={() => {
-              setQ(e);
-              if (e === TRIP_QUESTION) { setWorkedExample("trip"); setAiResult(null); setAskedText(""); }
-              if (e === OCADO_QUESTION) { setWorkedExample("ocado"); setAiResult(null); setAskedText(""); }
-              if (e === BOILER_QUESTION || e === WARRANTY_QUESTION || e === AIR_INDIA_QUESTION) submitQuestion(e);
-            }} className="h-auto whitespace-normal rounded-lg border bg-card px-3 py-1.5 text-left text-xs font-normal text-muted-foreground shadow-none">{e}</Button>)}
-          </div>
-          <Label>You asked</Label>
-          <p className="mb-3 text-body leading-relaxed">"{displayAi ? askedText : workedExample === "records" ? submittedQuestion : isTrip ? TRIP_QUESTION : OCADO_QUESTION}"</p>
+          {/* Suggested questions belong to the fresh state only: the
+              input empty and nothing asked yet in this session. Once
+              a question is in flight or an answer is showing, the
+              chips go away; the asked question is not echoed back
+              either — the input already shows it. */}
+          {q.trim() === "" && !hasAsked && (
+            <div className="mb-6 flex flex-wrap gap-2">
+              {EXAMPLES.map((e) => <Button key={e} variant="outline" onClick={() => {
+                setQ(e);
+                if (e === TRIP_QUESTION) { setWorkedExample("trip"); setAiResult(null); setAskedText(""); }
+                if (e === OCADO_QUESTION) { setWorkedExample("ocado"); setAiResult(null); setAskedText(""); }
+                if (e === BOILER_QUESTION || e === WARRANTY_QUESTION || e === AIR_INDIA_QUESTION) submitQuestion(e);
+              }} className="h-auto whitespace-normal rounded-lg border bg-card px-3 py-1.5 text-left text-xs font-normal text-muted-foreground shadow-none">{e}</Button>)}
+            </div>
+          )}
           {displayAi ? (
             <Panel>
               <div aria-live="polite" className="num text-body leading-relaxed">{displayAi.answer}</div>
@@ -435,7 +473,19 @@ export function AskButton() {
               {displayAi.figures.truncated && <p className="mt-2 text-caption leading-relaxed text-muted-foreground">Totals are partial: the matching set was too large to total in full.</p>}
             </Panel>
           ) : workedExample === "records" ? (
-            searching ? (
+            aiInFlight ? (
+              <Panel>
+                <p className="flex items-center gap-2 text-body leading-relaxed" aria-live="polite">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+                  Looking through your records…
+                </p>
+              </Panel>
+            ) : aiGaveUp ? (
+              <Panel>
+                <p className="text-body leading-relaxed">That took too long — try again.</p>
+                <p className="mt-1 text-caption leading-relaxed text-muted-foreground">Your records are still here — the answer just did not arrive in time.</p>
+              </Panel>
+            ) : searching ? (
               <Panel>
                 <p className="num text-body leading-relaxed">Searching your records…</p>
               </Panel>
