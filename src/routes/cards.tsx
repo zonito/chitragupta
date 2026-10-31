@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { usePerson, PageTitle, Panel, Chip, Label, meta } from "@/components/shell";
-import { CARDS, MIGRATION, ownerName, type CardItem, type Owner } from "@/lib/data";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { usePerson, PageTitle, Panel, Chip, Label, CategoryChip, meta } from "@/components/shell";
+import { ACCOUNTS, CARDS, MIGRATION, ownerName, gbp, formatMoney, dateLabel, monthOptions, type AccountInfo, type CardItem, type Category, type Owner, type Person } from "@/lib/data";
 import { migrateStoredCards, newCardId, type StoredCard } from "@/lib/cards";
+import { fetchAccountInsights, primaryFigures, type AccountInsight, type AccountsData } from "@/lib/accounts";
 import { AnimatedBar } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,177 @@ export const Route = createFileRoute("/cards")({
 
 const CARDS_KEY = "chitragupta.cards.v1";
 const field = "rounded-lg border bg-card px-3 py-1.5 text-body";
+
+/**
+ * Accounts section: one insight card per ingested (person, account) —
+ * balance from the snapshot's selected ingest runs (the same figures
+ * Home's Available card totals, so the two always agree), this month's
+ * spend / money-in / top categories / biggest payment from
+ * GET /api/accounts (computed server-side from transactions).
+ * Household view groups by owner; a single-person view shows that
+ * person's accounts plus Joint. Tapping a card opens Activity scoped
+ * to that account.
+ */
+export function AccountsSection({ person }: { person: Person }) {
+  const [data, setData] = useState<AccountsData | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchAccountInsights()
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const byKey = useMemo(
+    () => new Map((data?.accounts ?? []).map((a) => [`${a.person}|${a.account}`, a])),
+    [data],
+  );
+  if (ACCOUNTS.length === 0) return null;
+  const visible = ACCOUNTS.filter(
+    (a) => person === "household" || a.owner === person || a.owner === "joint",
+  );
+  const monthLabel = data?.month
+    ? (monthOptions().find((m) => m.key === data.month)?.label ?? data.month)
+    : null;
+  const groups: { owner: Owner; list: AccountInfo[] }[] =
+    person === "household"
+      ? (["zonito", "nikhila", "joint"] as Owner[])
+          .map((owner) => ({ owner, list: visible.filter((a) => a.owner === owner) }))
+          .filter((g) => g.list.length > 0)
+      : [{ owner: person as Owner, list: visible }];
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-heading font-semibold">Accounts</h2>
+      {failed && (
+        <p className="mb-3 text-caption text-muted-foreground">
+          This month's account figures could not be loaded just now — balances are still shown.
+        </p>
+      )}
+      {groups.map((g) => (
+        <div key={g.owner} className="mb-5 last:mb-0">
+          {person === "household" && (
+            <h3 className="mb-2 text-body font-medium">{ownerName(g.owner)}</h3>
+          )}
+          <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+            {g.list.map((a) => (
+              <AccountInsightCard
+                key={`${a.person ?? ""}:${a.accountId ?? ""}:${a.name}`}
+                info={a}
+                insight={
+                  a.person && a.accountId
+                    ? byKey.get(`${a.person}|${a.accountId}`)
+                    : undefined
+                }
+                monthLabel={monthLabel}
+                loading={!data && !failed}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function AccountInsightCard({
+  info,
+  insight,
+  monthLabel,
+  loading,
+}: {
+  info: AccountInfo;
+  insight: AccountInsight | undefined;
+  monthLabel: string | null;
+  loading: boolean;
+}) {
+  const figures = insight ? primaryFigures(insight, info.currency) : null;
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <AccountTile account={info.name} />
+          <div className="min-w-0">
+            <div className="truncate text-body font-medium">{info.name}</div>
+            <div className="text-caption text-muted-foreground">
+              {ownerName(info.owner)} · last statement {dateLabel(info.lastDate)}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {info.stale && <Chip tone="warn">Stale</Chip>}
+          <span className="num text-body font-semibold">
+            {info.balanceMinor !== null
+              ? formatMoney(info.balanceMinor / 100, info.currency)
+              : "Not recorded"}
+          </span>
+        </div>
+      </div>
+      {loading && (
+        <p className="mt-3 text-caption text-muted-foreground">Loading this month's figures…</p>
+      )}
+      {insight && !figures && (
+        <p className="mt-3 text-caption text-muted-foreground">
+          No spending or money in{monthLabel ? ` in ${monthLabel}` : " this month"}.
+        </p>
+      )}
+      {figures && (
+        <p className="num mt-3 text-body">
+          Spent {formatMoney(figures.spend, figures.currency)} · In{" "}
+          {formatMoney(figures.moneyIn, figures.currency)}
+          {monthLabel && <span className="text-muted-foreground"> · {monthLabel}</span>}
+        </p>
+      )}
+      {figures?.others.map((o) => (
+        <p key={o.currency} className="num mt-1 text-caption text-muted-foreground">
+          Also {formatMoney(o.spend, o.currency)} spent · {formatMoney(o.moneyIn, o.currency)} in
+          (in {o.currency})
+        </p>
+      ))}
+      {insight && insight.topCategories.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {insight.topCategories.map((c) => (
+            <span key={c.category} className="flex items-center gap-1.5">
+              <CategoryChip category={c.category as Category} />
+              <span className="num text-caption text-muted-foreground">
+                {gbp(c.spend_minor / 100)}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {insight?.biggest && (
+        <p className="mt-3 text-caption text-muted-foreground">
+          Biggest payment: {insight.biggest.merchant} ·{" "}
+          {formatMoney(insight.biggest.amount_minor / 100, insight.biggest.currency)} ·{" "}
+          {dateLabel(insight.biggest.date)}
+        </p>
+      )}
+    </>
+  );
+  return (
+    <Panel className="p-4">
+      {info.accountId && info.person ? (
+        <Link
+          to="/activity"
+          search={{ account: info.accountId, accountPerson: info.person }}
+          className="block"
+          aria-label={`${info.name} activity`}
+        >
+          {content}
+        </Link>
+      ) : (
+        content
+      )}
+    </Panel>
+  );
+}
 
 export function Cards() {
   const { person } = usePerson();
@@ -89,6 +261,8 @@ export function Cards() {
   return (
     <div>
       <PageTitle sub={frozen ? `${frozen.type} ending ${frozen.last4} is frozen` : "Every card, in one register"}>Cards</PageTitle>
+
+      <AccountsSection person={person} />
 
       {showWatch && (
         <Panel className="mb-6 bg-secondary">

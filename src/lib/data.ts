@@ -91,6 +91,12 @@ export interface Txn {
   amount: number;
   owner: Owner;
   account: string;
+  /** Store account name behind the display label ("Pro", "Joint",
+   * "Savings-9000000002") — the label alone is not unique (two savings
+   * accounts share one) and repeats across people (both hold a Pro),
+   * so account-scoped views key on this plus the owner. Set by both
+   * transaction mappers; absent on hand-built fixture rows. */
+  accountId?: string;
   kind: Kind;
   fx?: string;
   note?: string;
@@ -157,6 +163,12 @@ export interface AccountInfo {
   balanceMinor: number | null;
   /** Currency of balanceMinor; null exactly when balanceMinor is null. */
   currency: string | null;
+  /** Store identity behind the display name: the ingest account name
+   * ("Pro", "Savings-9000000002") and the store person who holds it
+   * ("zonito" | "nikhila"; Joint's rows are stored under "zonito").
+   * Set by the snapshot builder; absent on hand-built fixtures. */
+  accountId?: string;
+  person?: string;
 }
 /** One spending category, built-in or user-created. Colour and icon are
  * the values every surface renders (theme token, hex or oklch colour;

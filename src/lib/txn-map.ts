@@ -76,6 +76,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     amount: Math.abs(row.amountMinor) / 100,
     owner: row.account === "Joint" ? "joint" : (row.person as Owner),
     account: accountTxnLabel(row.person, row.account),
+    accountId: row.account,
     kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer",
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
   };

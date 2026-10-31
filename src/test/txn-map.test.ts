@@ -36,6 +36,7 @@ describe("apiTxnToTxn", () => {
       amount: 27.1,
       owner: "zonito",
       account: "Revolut Main · Zonito",
+      accountId: "Main",
       kind: "spend",
     });
   });

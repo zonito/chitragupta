@@ -166,6 +166,7 @@ export async function handleChitraguptaApi(
     path === "/api/digest" ||
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
+    path === "/api/accounts" ||
     path === "/api/aggregates" ||
     path === "/api/aggregates/daily" ||
     path === "/api/documents" ||
@@ -307,6 +308,134 @@ function aggregatesDaily(db: Database.Database, url: URL): Response {
     buckets.push({ date, total_minor: total, categories });
   }
   return json({ ok: true, person, days, start, end, dataStart: span.first, buckets });
+}
+
+/**
+ * Per-account insights for the Cards screen's Accounts section:
+ * GET /api/accounts.
+ *
+ * One entry per (person, account) identity in the store, with the
+ * store's LATEST month's figures computed from transactions
+ * server-side: spend and money-in summed per currency (never mixed —
+ * a multi-currency account reports each currency separately), the top
+ * 3 GBP categories (recomputeAggregates' resolution order, folded to
+ * the live category list), and the biggest single payment (largest by
+ * its own amount, reported in its own currency). Balances and last
+ * statement dates are NOT here: they ride the snapshot's selected
+ * ingest runs, and the client joins on (person, account), so an
+ * account card's balance always agrees with Home's Available total
+ * and /api/ingest/status by construction.
+ */
+function accountsInsights(db: Database.Database): Response {
+  const monthRow = db
+    .prepare("SELECT MAX(year_month) AS m FROM transactions")
+    .get() as { m: string | null };
+  if (!monthRow.m) return json({ ok: true, month: null, accounts: [] });
+  const month = monthRow.m;
+
+  const identities = db
+    .prepare(
+      "SELECT DISTINCT person, account FROM transactions ORDER BY person, account",
+    )
+    .all() as { person: string; account: string }[];
+
+  const flowRows = db
+    .prepare(
+      `SELECT person, account, currency,
+              SUM(CASE WHEN movement = 'spend' AND amount_minor < 0 THEN -amount_minor ELSE 0 END) AS spend,
+              SUM(CASE WHEN movement IN ('income', 'interest') AND amount_minor > 0 THEN amount_minor ELSE 0 END) AS money_in
+       FROM transactions WHERE year_month = ?
+       GROUP BY person, account, currency`,
+    )
+    .all(month) as {
+    person: string;
+    account: string;
+    currency: string;
+    spend: number;
+    money_in: number;
+  }[];
+
+  const fold = categoryFolder(db);
+  const catRows = db
+    .prepare(
+      `SELECT t.person AS person, t.account AS account, ${CATEGORY_SQL} AS raw_category,
+              SUM(-t.amount_minor) AS spend
+       FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+       WHERE t.year_month = ? AND t.currency = 'GBP' AND t.movement = 'spend' AND t.amount_minor < 0
+       GROUP BY t.person, t.account, raw_category`,
+    )
+    .all(month) as {
+    person: string;
+    account: string;
+    raw_category: string;
+    spend: number;
+  }[];
+
+  const bigRows = db
+    .prepare(
+      `SELECT person, account, merchant, amount_minor, currency,
+              substr(effective_date, 1, 10) AS date
+       FROM transactions
+       WHERE year_month = ? AND movement = 'spend' AND amount_minor < 0
+       ORDER BY ABS(amount_minor) DESC`,
+    )
+    .all(month) as {
+    person: string;
+    account: string;
+    merchant: string;
+    amount_minor: number;
+    currency: string;
+    date: string;
+  }[];
+
+  const keyOf = (person: string, account: string) => `${person}|${account}`;
+  const flows = new Map<string, { spend: Record<string, number>; moneyIn: Record<string, number> }>();
+  for (const r of flowRows) {
+    const entry = flows.get(keyOf(r.person, r.account)) ?? { spend: {}, moneyIn: {} };
+    if (r.spend > 0) entry.spend[r.currency] = r.spend;
+    if (r.money_in > 0) entry.moneyIn[r.currency] = r.money_in;
+    flows.set(keyOf(r.person, r.account), entry);
+  }
+  const cats = new Map<string, Map<string, number>>();
+  for (const r of catRows) {
+    const key = keyOf(r.person, r.account);
+    const byCat = cats.get(key) ?? new Map<string, number>();
+    const category = fold(r.raw_category);
+    byCat.set(category, (byCat.get(category) ?? 0) + r.spend);
+    cats.set(key, byCat);
+  }
+  const biggest = new Map<string, (typeof bigRows)[number]>();
+  for (const r of bigRows) {
+    const key = keyOf(r.person, r.account);
+    if (!biggest.has(key)) biggest.set(key, r);
+  }
+
+  const accounts = identities.map(({ person, account }) => {
+    const key = keyOf(person, account);
+    const flow = flows.get(key) ?? { spend: {}, moneyIn: {} };
+    const topCategories = [...(cats.get(key)?.entries() ?? [])]
+      .map(([category, spend_minor]) => ({ category, spend_minor }))
+      .filter((c) => c.spend_minor > 0)
+      .sort((a, b) => b.spend_minor - a.spend_minor || a.category.localeCompare(b.category))
+      .slice(0, 3);
+    const big = biggest.get(key);
+    return {
+      person,
+      account,
+      spend: flow.spend,
+      moneyIn: flow.moneyIn,
+      topCategories,
+      biggest: big
+        ? {
+            merchant: big.merchant,
+            amount_minor: Math.abs(big.amount_minor),
+            currency: big.currency,
+            date: big.date,
+          }
+        : null,
+    };
+  });
+  return json({ ok: true, month, accounts });
 }
 
 /**
@@ -834,6 +963,7 @@ async function routeWithDb(
 
   if (path === "/api/transactions" && request.method === "GET") {
     const person = url.searchParams.get("person");
+    const account = url.searchParams.get("account");
     const month = url.searchParams.get("month");
     const merchant = url.searchParams.get("merchant")?.trim();
     const q = url.searchParams.get("q")?.trim();
@@ -858,6 +988,13 @@ async function routeWithDb(
     if (person && person !== "household") {
       where.push("t.person = ?");
       params.push(person);
+    }
+    if (account) {
+      // Store account name (person + account is the identity: both
+      // people hold a "Pro"). Filtered in SQL, before LIMIT, like the
+      // category filter — Activity's account scope fetches through it.
+      where.push("t.account = ?");
+      params.push(account);
     }
     if (month) {
       where.push("t.year_month = ?");
@@ -903,6 +1040,10 @@ async function routeWithDb(
       category: string;
     }[];
     return json({ ok: true, count: rows.length, transactions: rows });
+  }
+
+  if (path === "/api/accounts" && request.method === "GET") {
+    return accountsInsights(db);
   }
 
   if (path === "/api/aggregates/daily" && request.method === "GET") {

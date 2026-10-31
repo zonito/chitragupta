@@ -224,6 +224,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       amount,
       owner,
       account: accountTxnLabel(row.person, row.account),
+      accountId: row.account,
       kind,
       // Mirror apiTxnToTxn (txn-map.ts) exactly, so a snapshot month and
       // a fetched month show the same detail for the same row: the
@@ -491,6 +492,8 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       // never a fabricated zero.
       balanceMinor: chosen.balance_minor ?? null,
       currency: chosen.currency ?? null,
+      accountId: r.account,
+      person: r.person,
       stale:
         maxStarted !== "" &&
         Date.parse(chosen.started_at) < Date.parse(maxStarted) - 7 * 86400000,

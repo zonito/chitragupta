@@ -1,17 +1,30 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Paperclip, Upload } from "lucide-react";
+import { Search, Paperclip, Upload, X } from "lucide-react";
 import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
-import { ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
+import { ACCOUNTS, ALL_TXNS, categoryNames, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
 
 export const Route = createFileRoute("/activity")({
   head: () => meta("Activity", "Every transaction this month, grouped by day, with search and filters."),
+  // Account scope, carried from the Cards screen's account cards:
+  // ?account=<store account>&accountPerson=<store person>. It is a
+  // real filter (not a view the global switch already fixes), so it
+  // stays visible as a chip while active.
+  validateSearch: (search: Record<string, unknown>) => ({
+    account: typeof search["account"] === "string" ? search["account"] : undefined,
+    accountPerson:
+      typeof search["accountPerson"] === "string" ? search["accountPerson"] : undefined,
+  }),
   component: Activity,
 });
+
+/** The store person a transaction's rows are filed under: Joint rows
+ * live under Zonito's person in the store. */
+const storePersonOf = (t: Txn): string => (t.owner === "joint" ? "zonito" : t.owner);
 
 const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
 
@@ -24,6 +37,31 @@ export function Activity() {
   const [cat, setCat] = useState("all");
   const [month, setMonth] = useState(() => currentMonthKey());
   const [open, setOpen] = useState<Txn | null>(null);
+  // Account scope from the URL (set by the Cards account cards). Read
+  // once at mount — in-app navigation to /activity remounts the route —
+  // then held in state so the chip can clear it in place.
+  const [accountScope, setAccountScope] = useState<{
+    account: string;
+    person: string;
+  } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const account = params.get("account");
+    const person = params.get("accountPerson");
+    return account && person ? { account, person } : null;
+  });
+  const clearAccountScope = () => {
+    setAccountScope(null);
+    // Strip the query so a reload does not resurrect the scope.
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  };
+  const scopeLabel = accountScope
+    ? (ACCOUNTS.find(
+        (a) => a.person === accountScope.person && a.accountId === accountScope.account,
+      )?.name ?? accountScope.account)
+    : null;
   // Category correction in flight from the detail sheet: the value the
   // user just picked (shown until the refreshed data lands) and the
   // inline error when the save fails and the select reverts.
@@ -36,27 +74,62 @@ export function Activity() {
 
   const snapshotMonthKeys = useMemo(() => new Set(ALL_TXNS.map((t) => t.monthKey)), []);
   const inSnapshot = snapshotMonthKeys.has(month);
-  const monthLoaded = inSnapshot || month in fetchedMonths;
-  const monthTxns = inSnapshot ? txnsInMonth(month) : (fetchedMonths[month] ?? []);
+  // The fetched-month cache is keyed by month AND account scope: a
+  // scoped fetch returns only that account's rows (the server filters
+  // before LIMIT), so it must never stand in for the whole month once
+  // the scope clears.
+  const scopeCacheKey = accountScope
+    ? `${accountScope.person}:${accountScope.account}`
+    : "all";
+  const monthCacheKey = `${month}|${scopeCacheKey}`;
+  const monthLoaded = inSnapshot || monthCacheKey in fetchedMonths;
+  const monthTxns = inSnapshot ? txnsInMonth(month) : (fetchedMonths[monthCacheKey] ?? []);
 
   useEffect(() => {
-    if (inSnapshot || month in fetchedMonths) return;
+    if (inSnapshot || monthCacheKey in fetchedMonths) return;
     let cancelled = false;
-    // No person parameter: fetch the whole month, then the same
-    // shareOf / who filtering below applies, exactly as snapshot months.
-    fetchApiTransactions({ month, limit: "1000" })
+    // Unscoped: no person parameter — fetch the whole month, then the
+    // same shareOf / who filtering below applies, exactly as snapshot
+    // months. Scoped: person + account go to the server so its filter
+    // runs before LIMIT and the account's rows are never truncated
+    // away by the rest of the month.
+    fetchApiTransactions(
+      accountScope
+        ? {
+            month,
+            person: accountScope.person,
+            account: accountScope.account,
+            limit: "1000",
+          }
+        : { month, limit: "1000" },
+    )
       .then((rows) => {
-        if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [month]: rows }));
+        if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [monthCacheKey]: rows }));
       })
       .catch(() => {
-        if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [month]: [] }));
+        if (!cancelled) setFetchedMonths((prev) => ({ ...prev, [monthCacheKey]: [] }));
       });
     return () => {
       cancelled = true;
     };
-  }, [month, inSnapshot, fetchedMonths]);
+  }, [month, inSnapshot, fetchedMonths, monthCacheKey, accountScope]);
 
-  const monthSpend = monthTxns
+  // The account scope as a row predicate: snapshot months filter
+  // client-side; fetched months arrive pre-filtered and pass through
+  // the same predicate, so one rule governs both sources.
+  const scopedMonthTxns = useMemo(
+    () =>
+      accountScope
+        ? monthTxns.filter(
+            (t) =>
+              t.accountId === accountScope.account &&
+              storePersonOf(t) === accountScope.person,
+          )
+        : monthTxns,
+    [monthTxns, accountScope],
+  );
+
+  const monthSpend = scopedMonthTxns
     .filter((t) => t.kind === "spend")
     .reduce((s, t) => s + shareOf(t, person), 0);
 
@@ -68,7 +141,7 @@ export function Activity() {
 
   const list = useMemo(
     () =>
-      monthTxns
+      scopedMonthTxns
         .filter((t) => shareOf(t, person) > 0)
         .filter((t) => whoActive === "all" || t.owner === whoActive)
         .filter((t) => cat === "all" || t.category === cat)
@@ -78,7 +151,7 @@ export function Activity() {
         // (snapshot builder and /api/transactions) produce their rows
         // newest-first within the day, so the two agree.
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [person, q, whoActive, cat, monthTxns],
+    [person, q, whoActive, cat, scopedMonthTxns],
   );
   const days = [...new Set(list.map((t) => t.day))];
 
@@ -86,7 +159,7 @@ export function Activity() {
   // saved correction (which refreshes the snapshot and any fetched month)
   // shows in place instead of the stale object captured on tap.
   const openTxn = open
-    ? (monthTxns.find((t) => t.id === open.id) ?? open)
+    ? (scopedMonthTxns.find((t) => t.id === open.id) ?? open)
     : null;
 
   const saveCategory = async (txn: Txn, category: Category) => {
@@ -114,9 +187,9 @@ export function Activity() {
       // on-demand cache (older months) so it refetches the same way.
       await router.invalidate();
       setFetchedMonths((prev) => {
-        if (!(month in prev)) return prev;
+        if (!(monthCacheKey in prev)) return prev;
         const next = { ...prev };
-        delete next[month];
+        delete next[monthCacheKey];
         return next;
       });
       setCatPick(null);
@@ -170,6 +243,23 @@ export function Activity() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search merchants" className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-4 text-body outline-none focus:ring-2 focus:ring-ring" />
       </div>
       <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+        {/* The account scope (from a Cards account card) is a real
+            filter, so — unlike the person dropdown below — it stays
+            visible in every view while active, with its own clear
+            control. */}
+        {accountScope && (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full border bg-card py-1 pl-3 pr-1.5 text-body">
+            {scopeLabel}
+            <button
+              type="button"
+              aria-label="Clear account filter"
+              onClick={clearAccountScope}
+              className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        )}
         {/* A filter whose value the global view already fixes is not
             shown: the person dropdown exists only in Household view. */}
         {person === "household" && (

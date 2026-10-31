@@ -1,5 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+
+// The Accounts section's cards link to Activity; render the router
+// Link as a plain anchor (same pattern as home-available.test.tsx) so
+// the screen renders without a RouterProvider.
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  return {
+    ...actual,
+    Link: ({
+      to,
+      search,
+      children,
+      ...rest
+    }: {
+      to: string;
+      search?: Record<string, string>;
+      children: React.ReactNode;
+    } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+      <a href={`${to}?${new URLSearchParams(search ?? {}).toString()}`} {...rest}>
+        {children}
+      </a>
+    ),
+  };
+});
+
 import { Cards } from "@/routes/cards";
 import { PersonProvider, usePerson } from "@/components/shell";
 import { hydrateData, type CardItem } from "@/lib/data";
