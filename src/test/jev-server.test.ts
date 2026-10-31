@@ -128,7 +128,7 @@ interface CapturedCall {
   };
 }
 
-type JevMode = "ok" | "down" | "rogue";
+type JevMode = "ok" | "down" | "rogue" | "object" | "mixed" | "object-offlist";
 
 function stubJev(mode: JevMode, captured: CapturedCall[]) {
   const stub = vi.fn(async (url: unknown, init?: { body?: string }) => {
@@ -151,10 +151,27 @@ function stubJev(mode: JevMode, captured: CapturedCall[]) {
         { status: 200 },
       );
     }
-    const answers: Record<string, string> = {};
-    for (const [key, q] of Object.entries(body.questions)) {
-      answers[key] = q.choices[0]!;
-    }
+    // Varuna's fixed route answers with choice OBJECTS
+    // ({type:"choice", choice, confidence, probabilities}); the
+    // "object"/"mixed"/"object-offlist" modes speak that shape.
+    const asObject = (choice: string) => ({
+      type: "choice",
+      choice,
+      confidence: 0.84,
+      probabilities: { [choice]: 0.84 },
+    });
+    const answers: Record<string, unknown> = {};
+    Object.entries(body.questions).forEach(([key, q], i) => {
+      if (mode === "object") {
+        answers[key] = asObject(q.choices[0]!);
+      } else if (mode === "mixed") {
+        answers[key] = i === 0 ? q.choices[0]! : asObject(q.choices[0]!);
+      } else if (mode === "object-offlist") {
+        answers[key] = i === 0 ? asObject("Not offered") : asObject(q.choices[0]!);
+      } else {
+        answers[key] = q.choices[0]!;
+      }
+    });
     return new Response(
       JSON.stringify({ ok: true, data: { answers, usage: {}, latency_ms: 5 } }),
       { status: 200 },
@@ -423,6 +440,83 @@ describe("jev subscription endpoint", () => {
     // Unknown merchant is a plain 404, not a Jev call.
     const missing = await request(api, "POST", "/api/jev/subscription", { merchant: "Nope" });
     expect(missing?.status).toBe(404);
+    rmSync(storeDir, { recursive: true, force: true });
+  });
+});
+
+describe("jev choice-object answers (Varuna's fixed shape)", () => {
+  it("normalises object answers to their choice strings, and records the call as answered", async () => {
+    const storeDir = seedStore();
+    const api = await freshApi();
+    const captured: CapturedCall[] = [];
+    stubJev("object", captured);
+
+    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+      jev: { answers: Record<string, string>; cached: boolean } | null;
+    };
+    expect(res.jev).not.toBeNull();
+    // Both answers are the extracted STRINGS, never the raw objects.
+    expect(res.jev?.answers["posture"]).toBe("Grow the buffer");
+    expect(res.jev?.answers["lever"]).toBe(
+      captured[0]!.body.questions["lever"]!.choices[0],
+    );
+    expect(typeof res.jev?.answers["lever"]).toBe("string");
+    expect(res.jev?.cached).toBe(false);
+
+    // The Settings status line reads "Jev answered …" off this.
+    const settings = (await (await request(api, "GET", "/api/settings"))!.json()) as {
+      settings: { jevLastOutcome: { status: string } | null };
+    };
+    expect(settings.settings.jevLastOutcome?.status).toBe("ok");
+    rmSync(storeDir, { recursive: true, force: true });
+  });
+
+  it("accepts a mix of plain-string and object answers in one reply", async () => {
+    const storeDir = seedStore();
+    const api = await freshApi();
+    const captured: CapturedCall[] = [];
+    stubJev("mixed", captured);
+
+    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+      jev: { answers: Record<string, string> } | null;
+    };
+    // Posture arrived as a bare string, lever as a choice object;
+    // both land, as strings.
+    expect(res.jev?.answers["posture"]).toBe("Grow the buffer");
+    expect(res.jev?.answers["lever"]).toBe(
+      captured[0]!.body.questions["lever"]!.choices[0],
+    );
+    rmSync(storeDir, { recursive: true, force: true });
+  });
+
+  it("drops an object whose choice was never offered, per-answer", async () => {
+    const storeDir = seedStore();
+    const api = await freshApi();
+    const captured: CapturedCall[] = [];
+    stubJev("object-offlist", captured);
+
+    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+      jev: { answers: Record<string, string> } | null;
+    };
+    // Posture's object named "Not offered": dropped. The lever
+    // object was on-list and survives on its own.
+    expect(res.jev).not.toBeNull();
+    expect(res.jev?.answers).toEqual({
+      lever: captured[0]!.body.questions["lever"]!.choices[0],
+    });
+    rmSync(storeDir, { recursive: true, force: true });
+  });
+
+  it("normalises subscription answers the same way", async () => {
+    const storeDir = seedStore();
+    const api = await freshApi();
+    const captured: CapturedCall[] = [];
+    stubJev("object", captured);
+
+    const asked = (await (await request(api, "POST", "/api/jev/subscription", { merchant: "Netflix" }))!.json()) as {
+      jev: { answers: Record<string, string> } | null;
+    };
+    expect(asked.jev?.answers).toEqual({ posture: "Keep", value: "Good value" });
     rmSync(storeDir, { recursive: true, force: true });
   });
 });

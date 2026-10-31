@@ -30,7 +30,12 @@ import { canonicalMerchant } from "./subscriptions";
  *   POST {VARUNA_TUNNEL_URL | http://127.0.0.1:8400}/v1/varuna/jev/ask
  *   { state: {...facts}, questions: { key: { question, choices } },
  *     model: "jev-latest" }
- *   → 200 { ok: true, data: { answers: { key: chosen string }, ... } }
+ *   → 200 { ok: true, data: { answers: { key: answer }, ... } }
+ *   where each answer is the chosen string, OR (since Varuna's
+ *   upstream fix, 31 Oct 2026) a choice object
+ *   { type: "choice", choice: <chosen string>, confidence, ... }.
+ *   callJev normalises both shapes to the plain string at this
+ *   boundary; nothing downstream ever sees the object form.
  *
  * Jev only ever CHOOSES from the choices it is offered; it never sees
  * raw statement rows, per-account balances or account identifiers —
@@ -80,12 +85,31 @@ export interface JevCallOptions {
 }
 
 /**
+ * One answer value, normalised: the plain choice string when the
+ * value IS one of the offered choices, or when it is a choice object
+ * whose `choice` field is one of them (the shape Varuna's fixed
+ * route returns). Anything else is not an answer to this question.
+ */
+function normaliseAnswer(value: unknown, choices: string[]): string | null {
+  if (typeof value === "string") {
+    return choices.includes(value) ? value : null;
+  }
+  if (typeof value === "object" && value !== null) {
+    const choice = (value as { choice?: unknown }).choice;
+    if (typeof choice === "string" && choices.includes(choice)) {
+      return choice;
+    }
+  }
+  return null;
+}
+
+/**
  * One live Jev call. Returns the validated answers (each offered
  * question key mapped to one of its own choices — anything else is
- * dropped, and an answer set with nothing valid left is no answer),
- * or null when Jev is unreachable, errors, or replies off-contract.
- * Every live attempt records its outcome in settings for the status
- * line; cache serves never reach this function.
+ * dropped per-answer, and an answer set with nothing valid left is
+ * no answer), or null when Jev is unreachable, errors, or replies
+ * off-contract. Every live attempt records its outcome in settings
+ * for the status line; cache serves never reach this function.
  */
 export async function callJev(
   db: Database.Database,
@@ -120,10 +144,8 @@ export async function callJev(
           const raw = body.data.answers as Record<string, unknown>;
           const valid: JevAnswers = {};
           for (const [key, question] of Object.entries(payload.questions)) {
-            const value = raw[key];
-            if (typeof value === "string" && question.choices.includes(value)) {
-              valid[key] = value;
-            }
+            const answer = normaliseAnswer(raw[key], question.choices);
+            if (answer !== null) valid[key] = answer;
           }
           if (Object.keys(valid).length > 0) answers = valid;
         }
