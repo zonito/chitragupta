@@ -8,7 +8,7 @@ export const Route = createFileRoute("/coach")({
   component: Coach,
 });
 
-function Coach() {
+export function Coach() {
   const { person } = usePerson();
   // Every insight below is derived from the loaded month's real data —
   // biggest category change, subscription price rises, new merchants, the
@@ -27,13 +27,17 @@ function Coach() {
       chart: true,
     });
   }
-  const risen = SUBS.find((s) => s.note?.includes("→"));
+  // Price rises only matter for subscriptions still being paid, and the
+  // yearly cost of a rise depends on how often it is charged: a monthly
+  // rise repeats twelve times, a yearly rise only once.
+  const PER_YEAR: Record<(typeof SUBS)[number]["freq"], number> = { Weekly: 52, Monthly: 12, Quarterly: 4, Yearly: 1 };
+  const risen = SUBS.find((s) => s.status === "Active" && s.note?.includes("→"));
   if (risen) {
     const prev = risen.note ? Number(risen.note.replace(/,/g, "").match(/£([\d.]+)/)?.[1]) : NaN;
     insights.push({
       t: "A subscription price went up",
       b: Number.isFinite(prev)
-        ? `${risen.name} is now ${gbp(risen.amount)}, up from ${gbp(prev)}. That's ${gbp((risen.amount - prev) * 12, false)} more a year.`
+        ? `${risen.name} is now ${gbp(risen.amount)}, up from ${gbp(prev)}. That's ${gbp((risen.amount - prev) * PER_YEAR[risen.freq])} more a year.`
         : `${risen.name} is now ${gbp(risen.amount)}${risen.note ? ` (${risen.note})` : ""}.`,
     });
   }
