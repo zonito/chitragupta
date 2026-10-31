@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { usePerson, PageTitle, Panel, Chip, Label, meta } from "@/components/shell";
 import { CARDS, MIGRATION, ownerName, type CardItem, type Owner } from "@/lib/data";
+import { migrateStoredCards, newCardId, type StoredCard } from "@/lib/cards";
 import { AnimatedBar } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
 import { Button } from "@/components/ui/button";
@@ -14,17 +15,20 @@ export const Route = createFileRoute("/cards")({
 const CARDS_KEY = "chitragupta.cards.v1";
 const field = "rounded-lg border bg-card px-3 py-1.5 text-body";
 
-function Cards() {
+export function Cards() {
   const { person } = usePerson();
   // Cards added in the app live in local state (restored after mount so SSR
   // matches); the register itself seeds from the snapshot and starts empty
   // until real cards are registered — statements carry no card column.
-  const [added, setAdded] = useState<CardItem[]>([]);
+  const [added, setAdded] = useState<StoredCard[]>([]);
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CARDS_KEY);
-      if (raw) setAdded(JSON.parse(raw) as CardItem[]);
+      // Stored entries migrate from the v1 shape (plain CardItem, no id)
+      // to the id-carrying shape on restore; the save effect below then
+      // persists the migrated shape under the same key.
+      if (raw) setAdded(migrateStoredCards(JSON.parse(raw)));
     } catch { /* unreadable storage: start empty */ }
     setRestored(true);
   }, []);
@@ -35,6 +39,20 @@ function Cards() {
 
   const all = [...CARDS, ...added];
   const list = all.filter((c) => person === "household" || c.owner === person);
+  // List keys: stored cards key by their stored unique id (two cards may
+  // share a last-4); snapshot cards, which carry no stored id, key by a
+  // composite of their identifying fields.
+  const storedIdOf = (c: CardItem): string | null => {
+    const id = (c as Partial<StoredCard>).id;
+    return typeof id === "string" && id ? id : null;
+  };
+  const rowKey = (c: CardItem): string =>
+    storedIdOf(c) ?? `snapshot:${c.owner}:${c.account}:${c.last4}:${c.label}`;
+  const deleteCard = (id: string) => {
+    // Only register (stored) cards can be deleted; the removal persists
+    // through the same save effect and the same localStorage key.
+    setAdded((cards) => cards.filter((c) => c.id !== id));
+  };
   const frozen = all.find((c) => c.status === "Frozen" && c.replacedBy);
   const hasMigration = MIGRATION.moved.length + MIGRATION.waiting.length > 0;
   const showWatch = person !== "nikhila" && hasMigration;
@@ -44,12 +62,18 @@ function Cards() {
   const [last4, setLast4] = useState("");
   const [account, setAccount] = useState("");
   const [owner, setOwner] = useState<Owner>(person === "household" ? "zonito" : person);
+  // The Owner select follows the person switch, not just the person at
+  // mount: switching person re-points the form at the new person.
+  useEffect(() => {
+    setOwner(person === "household" ? "zonito" : person);
+  }, [person]);
   const addCard = () => {
     const cleanLast4 = last4.replace(/\D/g, "").slice(-4);
     if (!cleanLast4 || !account.trim()) return;
     setAdded((cards) => [
       ...cards,
       {
+        id: newCardId(),
         label: label.trim() || "Card",
         type,
         last4: cleanLast4,
@@ -98,12 +122,25 @@ function Cards() {
           <p className="py-6 text-center text-body text-muted-foreground">No cards registered yet. Statements do not say which card was used, so cards are kept here by hand — add your first one below.</p>
         )}
         {list.map((c) => (
-          <div key={c.last4} className="ledger-row flex items-center gap-2 py-3.5">
+          <div key={rowKey(c)} className="ledger-row flex items-center gap-2 py-3.5">
             <AccountTile account={c.type} />
             <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
               <div className="text-body">{c.type} ending <span className="num">{c.last4}</span></div>
-              <Chip tone={c.status === "Active" ? "good" : c.status === "Frozen" ? "warn" : "neutral"}>{c.status}</Chip>
+              <span className="flex shrink-0 items-center gap-2">
+                <Chip tone={c.status === "Active" ? "good" : c.status === "Frozen" ? "warn" : "neutral"}>{c.status}</Chip>
+                {storedIdOf(c) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    aria-label={`Delete ${c.label} ending ${c.last4}`}
+                    onClick={() => deleteCard(storedIdOf(c)!)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </span>
             </div>
             <div className="mt-1 text-caption text-muted-foreground">
               {c.account} · {ownerName(c.owner)} · issued {c.issued}
