@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { recomputeAggregates } from "./ingest";
-import { reviewQueue, setMerchant } from "./merchants";
+import { reviewQueue, reviewQueueCount, setMerchant } from "./merchants";
 import {
   gatewayCallCount,
   gatewayConfig,
@@ -114,12 +114,29 @@ async function classifyOne(
     `Seen ${count} time(s).`,
     `Reply with ONLY a JSON object: {"category": one of ${JSON.stringify(CLASSIFIABLE_CATEGORIES)}, "icon": a short lowercase icon name (e.g. "shopping-bag", "coffee", "train"), "colour": a hex colour like "#3b82f6"}.`,
   ].join("\n");
-  const text = await museComplete({
+  let text = await museComplete({
     prompt,
     maxTokens: 200,
     env,
     fetchImpl,
   });
+  if (!text) {
+    // The hardest merchants burn even the gateway's token floor on
+    // reasoning and return no content at all (Go: "gateway returned
+    // no content (finish_reason: length)"; Meta: "gateway returned
+    // no text"). That one failure mode earns exactly one retry at a
+    // larger budget; every other failure (HTTP 401/402/5xx, network)
+    // stays a single attempt.
+    const error = (lastGatewayStatus().error ?? "").toLowerCase();
+    if (error.includes("no content") || error.includes("no text")) {
+      text = await museComplete({
+        prompt,
+        maxTokens: 8000,
+        env,
+        fetchImpl,
+      });
+    }
+  }
   return text ? parseClassification(text) : null;
 }
 
@@ -140,7 +157,7 @@ export async function classifyUnknownMerchants(
       reason: "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only",
       classified: 0,
       failed: 0,
-      remaining: queue.length,
+      remaining: reviewQueueCount(db),
       gateway: { attempted: false, ok: false, provider: null },
     };
   }
@@ -149,7 +166,13 @@ export async function classifyUnknownMerchants(
   let failed = 0;
   // Gateway diagnostics for this run: poll the shared client's call
   // counter after each merchant so the summary can surface the FIRST
-  // failure's status/error instead of a bare failed count.
+  // failure's status/error instead of a bare failed count. A merchant
+  // whose first call returns no content is retried inside classifyOne,
+  // so the counter can jump by two for one merchant; polling still
+  // reports that merchant sensibly — the final call's outcome (success
+  // after a retry, or the retry's own no-content failure) is what the
+  // shared client last recorded, and a merchant whose retry succeeds
+  // counts below as classified, never failed.
   let gatewaySeen = gatewayCallCount();
   let gatewayLast: GatewayStatus | undefined;
   let gatewayFailure: GatewayStatus | undefined;
@@ -196,7 +219,7 @@ export async function classifyUnknownMerchants(
     ran: true,
     classified,
     failed,
-    remaining: reviewQueue(db).length,
+    remaining: reviewQueueCount(db),
     gateway: gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false, provider: null },
   };
 }

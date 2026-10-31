@@ -132,17 +132,37 @@ export function setMerchant(
   );
 }
 
+type UnknownMerchantRow = { merchant: string; n: number; spend_n: number };
+
+/**
+ * The shared definition of the review queue: every distinct merchant
+ * with spend/income rows that is not in merchant_memory, ordered by
+ * row count. reviewQueue caps this list for display and
+ * reviewQueueCount counts it in full — both derive from this one
+ * query so the two can never drift apart.
+ */
+function unknownMerchantRows(db: Database.Database): UnknownMerchantRow[] {
+  return db
+    .prepare(
+      `SELECT merchant, COUNT(*) AS n,
+              SUM(CASE WHEN movement = 'spend' THEN 1 ELSE 0 END) AS spend_n
+       FROM transactions
+       WHERE movement IN ('spend','income')
+         AND merchant NOT IN (SELECT merchant FROM merchant_memory)
+       GROUP BY merchant ORDER BY n DESC`,
+    )
+    .all() as UnknownMerchantRow[];
+}
+
+/** The TRUE number of distinct unknown merchants (never capped). */
+export function reviewQueueCount(db: Database.Database): number {
+  return unknownMerchantRows(db).length;
+}
+
 export function reviewQueue(
   db: Database.Database,
 ): { merchant: string; count: number; examples: string[] }[] {
-  const rows = db
-    .prepare(
-      `SELECT merchant, COUNT(*) AS n FROM transactions
-       WHERE movement IN ('spend','income')
-         AND merchant NOT IN (SELECT merchant FROM merchant_memory)
-       GROUP BY merchant ORDER BY n DESC LIMIT 200`,
-    )
-    .all() as { merchant: string; n: number }[];
+  const rows = unknownMerchantRows(db).slice(0, 200);
   return rows.map((r) => {
     const examples = db
       .prepare(

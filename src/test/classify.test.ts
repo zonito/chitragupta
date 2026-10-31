@@ -6,7 +6,7 @@ import {
   classifyUnknownMerchants,
   claudeConfig,
 } from "@/lib/ingest/classify";
-import { reviewQueue } from "@/lib/ingest/merchants";
+import { reviewQueue, reviewQueueCount } from "@/lib/ingest/merchants";
 import { openStore } from "@/lib/ingest/store";
 
 function seededDb() {
@@ -190,6 +190,126 @@ describe("Muse classification client (Fix 5)", () => {
     expect(config?.baseUrl).toBe("https://gateway.example.com");
     expect(config?.model).toBe("muse-spark-1.3-contributor");
     expect(claudeConfig({})).toBeNull();
+  });
+
+  it("retries once at a larger budget when reasoning eats the whole budget (finish_reason: length)", async () => {
+    const db = seededDb();
+    let calls = 0;
+    const budgets: number[] = [];
+    const fetchImpl = (async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      calls++;
+      budgets.push(
+        (JSON.parse(String(init?.body)) as { max_tokens: number }).max_tokens,
+      );
+      if (calls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [
+              {
+                message: { role: "assistant", content: null },
+                finish_reason: "length",
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content:
+                  '{"category":"Shopping","icon":"shopping-bag","colour":"#3b82f6"}',
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+    const summary = await classifyUnknownMerchants(db, {
+      env: { OPENCODE_API_KEY: "oc_sk_test_dummy" },
+      fetchImpl,
+    });
+    // Exactly one retry, the second call at the larger 8000 budget
+    // (the first is the Go floor: the ~200 request floored to 4000).
+    expect(calls).toBe(2);
+    expect(budgets).toEqual([4000, 8000]);
+    // A successful retry counts as classified, not failed.
+    expect(summary).toMatchObject({
+      ran: true,
+      classified: 1,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(summary.gateway).toMatchObject({ attempted: true, ok: true });
+    expect(reviewQueue(db)).toHaveLength(0);
+    db.close();
+  });
+
+  it("does not retry a non-length failure (402): exactly one call, merchant counted failed", async () => {
+    const db = seededDb();
+    let calls = 0;
+    const summary = await classifyUnknownMerchants(db, {
+      env: { MUSE_API_KEY: TEST_KEY },
+      fetchImpl: (async () => {
+        calls++;
+        return {
+          ok: false,
+          status: 402,
+          text: async () => "billing verification failed",
+          json: async () => ({}),
+        } as unknown as Response;
+      }) as typeof fetch,
+    });
+    expect(calls).toBe(1);
+    expect(summary).toMatchObject({
+      ran: true,
+      classified: 0,
+      failed: 1,
+      remaining: 1,
+    });
+    expect(summary.gateway).toMatchObject({ ok: false, status: 402 });
+    expect(reviewQueue(db)).toHaveLength(1);
+    db.close();
+  });
+
+  it("reports the TRUE remaining count, never capped at the queue's 200", async () => {
+    const db = openStore(mkdtempSync(join(tmpdir(), "chitra-classify-bulk-")));
+    const insert = db.prepare(
+      `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
+        description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
+       VALUES (?, 'zonito', 'Main', '2026-10-05', '2026-10', ?, ?, -100, 0, 'GBP', 100000, 'spend', NULL)`,
+    );
+    db.transaction(() => {
+      for (let i = 0; i < 250; i++) {
+        insert.run(`bulk-${i}`, `Unknown Merchant ${i}`, `Unknown Merchant ${i}`);
+      }
+    })();
+    expect(reviewQueue(db)).toHaveLength(200);
+    expect(reviewQueueCount(db)).toBe(250);
+    // No-key path: remaining is the true count, not the capped 200.
+    const idle = await classifyUnknownMerchants(db, { env: {} });
+    expect(idle).toMatchObject({ ran: false, classified: 0, remaining: 250 });
+    // A mocked run classifying 10 drops remaining by exactly 10, and
+    // the result (240) is still truthfully above the 200 cap.
+    const seen: { url?: string; init?: RequestInit | undefined } = {};
+    const ran = await classifyUnknownMerchants(db, {
+      env: { MUSE_API_KEY: TEST_KEY },
+      fetchImpl: okFetch(seen) as typeof fetch,
+      limit: 10,
+    });
+    expect(ran).toMatchObject({ ran: true, classified: 10, failed: 0, remaining: 240 });
+    expect(reviewQueueCount(db)).toBe(240);
+    db.close();
   });
 
   it("defaults to the Meta gateway and the contributor model", async () => {

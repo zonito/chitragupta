@@ -7,6 +7,7 @@ import {
 } from "./ingest/ingest";
 import {
   reviewQueue,
+  reviewQueueCount,
   setMerchant,
   seedMerchantMemory,
   type MerchantSource,
@@ -193,7 +194,11 @@ async function routeWithDb(
   }
 
   if (path === "/api/review-queue" && request.method === "GET") {
-    return json({ ok: true, queue: reviewQueue(db) });
+    return json({
+      ok: true,
+      queue: reviewQueue(db),
+      total: reviewQueueCount(db),
+    });
   }
 
   if (path === "/api/classify/run" && request.method === "GET") {
