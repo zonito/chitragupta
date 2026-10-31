@@ -303,7 +303,7 @@ export function ForecastChart({ forecast }: { forecast: MonthForecast }) {
 
 /**
  * "Rest of <Month>": the month-end forecast and safe-to-spend card,
- * the trend chart's companion in row 2. Every figure comes from
+ * stacked directly under Available in row 1. Every figure comes from
  * forecastFor (deterministic: Available's own start, the detector's
  * regulars out, detected income streams in, this month's pace for the
  * rest). With no recorded balance the forecast has no honest start
@@ -478,13 +478,15 @@ export function Index() {
     <>
     {/* Home is a defined grid ordered by value, highest first (source
         order = the mobile single-column order):
-        row 1 hero + Available, row 2 the trend chart and the
-        month-end forecast side by side,
+        row 1 hero + a stack of Available over the month-end forecast
+        (the forecast is about the Available money, so they sit
+        together), row 2 the trend chart at full width,
         row 3 Coming up + Biggest changes with Coach in that column,
         row 4 Money in + Small spends, row 5 Moved aside as a slim
-        strip. Paired cells share their row's height; nothing is left
-        as an orphan column with vertical voids. */}
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+        strip. Cells align to the start of their row (items-start):
+        every card is exactly its content's height, so a short card
+        never carries the dead space of a taller row-mate. */}
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 lg:gap-6">
       <div className="hero-panel rounded-xl p-5 lg:col-start-1 lg:row-start-1">
         <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">Spent in {currentMonthName()}</div>
         <div className="hero-number font-display num text-hero"><CountUpMoney value={total} /></div>
@@ -527,7 +529,13 @@ export function Index() {
         )}
       </div>
 
-      <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} className="lg:col-start-2 lg:row-start-1" />
+      {/* Row 1's right cell: Available with the forecast directly
+          beneath it, one stack, so the pair reads as one subject and
+          neither is stretched by the other's height. */}
+      <div className="space-y-5 lg:col-start-2 lg:row-start-1 lg:space-y-6">
+        <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} />
+        <ForecastCard person={person} />
+      </div>
 
       <SpendTimelineSection
         title="Spending trend"
@@ -535,10 +543,8 @@ export function Index() {
         monthly={monthly}
         dailyPerson={person}
         compact
-        className="lg:col-start-1 lg:row-start-2"
+        className="lg:col-span-2 lg:row-start-2"
       />
-
-      <ForecastCard person={person} className="lg:col-start-2 lg:row-start-2" />
 
       <Panel className="lg:col-start-1 lg:row-start-3">
         <Label>Coming up · {nextMonthName()}</Label>

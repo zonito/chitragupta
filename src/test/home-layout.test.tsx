@@ -23,10 +23,13 @@ vi.mock("@tanstack/react-router", async () => {
 const { Index } = await import("@/routes/index");
 
 /**
- * Home is a defined grid ordered by value (hero + Available, trend,
- * Coming up + Biggest changes/Coach, Money in + Small spends, Moved
- * aside strip), and the shared chart's rendering fixes: full £ axis
- * labels, a faint active-bucket tint, a bold current-period label.
+ * Home is a defined grid ordered by value (hero + Available with the
+ * forecast stacked beneath it, the trend chart at full width, Coming
+ * up + Biggest changes/Coach, Money in + Small spends, Moved aside
+ * strip). Cards take their natural height (the grid aligns items to
+ * the start, so nothing is stretched to a row-mate's height). Plus
+ * the shared chart's rendering fixes: full £ axis labels, a faint
+ * active-bucket tint, a bold current-period label.
  * DOM order in these tests IS the mobile single-column order.
  */
 
@@ -37,6 +40,7 @@ afterEach(() => {
 const ORDER = [
   "Spent in",
   "Available",
+  "Rest of",
   "Spending trend",
   "Coming up",
   "Biggest changes",
@@ -62,7 +66,7 @@ describe("Home value-ordered grid", () => {
     }
   });
 
-  it("places hero and Available in row 1, the changes column in row 3", () => {
+  it("stacks Available over the forecast in row 1, chart full width in row 2, changes column in row 3", () => {
     render(
       <PersonProvider>
         <Index />
@@ -71,11 +75,31 @@ describe("Home value-ordered grid", () => {
     const hero = screen.getByText(/Spent in/);
     expect(hero.closest(".hero-panel")!.className).toContain("lg:row-start-1");
     expect(hero.closest(".hero-panel")!.className).toContain("lg:col-start-1");
+    // Natural heights: the grid aligns items to the start of their
+    // row, so no card is stretched to a taller row-mate's height.
+    expect(hero.closest(".hero-panel")!.parentElement!.className).toContain("items-start");
     const available = screen.getByRole("button", {
       name: "Available balance, show breakdown by account",
     });
-    expect(available.closest("section")!.className).toContain("lg:col-start-2");
-    expect(available.closest("section")!.className).toContain("lg:row-start-1");
+    // Available and the forecast share ONE row-1 right cell (a stack):
+    // walk up to the grid cell that carries the placement classes.
+    let stack: HTMLElement | null = available.closest("section");
+    while (stack && !(stack.className ?? "").includes("lg:row-start-1")) {
+      stack = stack.parentElement;
+    }
+    expect(stack).toBeTruthy();
+    expect(stack!.className).toContain("lg:col-start-2");
+    expect(stack!.className).toContain("space-y-5");
+    // The forecast card is inside the same stack, directly after
+    // Available, and Available's own card is not itself a grid cell.
+    expect(stack!.textContent).toContain("Rest of");
+    expect(stack!.querySelectorAll("section").length).toBe(2);
+    expect(available.closest("section")!.className).not.toContain("lg:row-start-1");
+    expect(available.closest("section")!.className).not.toContain("lg:col-start-2");
+    // The trend chart spans the full width of row 2.
+    const trend = screen.getByText("Spending trend").closest("section")!;
+    expect(trend.className).toContain("lg:col-span-2");
+    expect(trend.className).toContain("lg:row-start-2");
     // Biggest changes and Coach share the row-3 right column; Coming
     // up is not in it.
     let cell: HTMLElement | null = screen.getByText("Biggest changes") as HTMLElement;
