@@ -38,6 +38,16 @@ const quarterLabel = (monthKey: string): string => {
 
 const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
 
+/** Direction-first amounts (Activity only): money in is a green
+ * credit "+£X", money out a red debit "−£X", via the amount-in /
+ * amount-out classes in styles.css — the AA-verified --good /
+ * --destructive token pair in both themes. Direction is the Txn's
+ * incoming flag (the store row's amount was positive), so transfer
+ * legs and moved-aside rows follow their own sign. */
+const amountDirClass = (t: Txn) => (t.incoming ? "amount-in" : "amount-out");
+const signedGbp = (t: Txn, value: number) =>
+  `${t.incoming ? "+" : "−"}${gbp(value)}`;
+
 export function Activity() {
   const { person } = usePerson();
   const { documents } = useDocuments();
@@ -553,7 +563,7 @@ export function Activity() {
                 <div className="flex shrink-0 items-center gap-2">
                   {t.userNote && <StickyNote aria-label="Has a note" className="h-3.5 w-3.5 text-muted-foreground" />}
                   {docFor(t.id, documents) && <Paperclip aria-label="Receipt attached" className="h-3.5 w-3.5 text-muted-foreground" />}
-                  <span className="num text-body font-medium text-foreground">{gbp(shareOf(t, person))}</span>
+                  <span className={`num text-body font-medium ${amountDirClass(t)}`}>{signedGbp(t, shareOf(t, person))}</span>
                 </div>
               </button>
             ))}
@@ -580,8 +590,8 @@ export function Activity() {
           >
             <div className="text-body text-muted-foreground">{openTxn.merchant}</div>
             <div className="mb-5">
-              <div className="num text-title font-semibold">{gbp(shareOf(openTxn, person))}</div>
-              {openTxn.owner === "joint" && person !== "household" && <p className="num mt-1 text-caption text-muted-foreground">Full bill {gbp(openTxn.amount)}</p>}
+              <div className={`num text-title font-semibold ${amountDirClass(openTxn)}`}>{signedGbp(openTxn, shareOf(openTxn, person))}</div>
+              {openTxn.owner === "joint" && person !== "household" && <p className="num mt-1 text-caption text-muted-foreground">Full bill {signedGbp(openTxn, openTxn.amount)}</p>}
             </div>
             <dl className="text-body">
               {[

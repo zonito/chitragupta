@@ -237,6 +237,12 @@
 .font-display:not(.brand-wordmark):not(.hero-number) { font-family: var(--font-sans); }
 .ledger-row .num { font-size: var(--text-body); font-weight: 500; color: var(--foreground); }
 .amount { font-size: var(--text-body); font-weight: 500; color: var(--foreground); }
+/* Activity direction amounts: money in reads as a green credit,
+   money out as a red debit. The .num-qualified selectors outrank
+   .ledger-row .num's foreground default; the colours are the
+   --good / --destructive tokens already AA-verified as card text. */
+.num.amount-in { color: var(--good); }
+.num.amount-out { color: var(--destructive); }
 .font-bold { font-weight: 600; }
 input::placeholder, textarea::placeholder { color: var(--muted-foreground); opacity: 1; }
 .trend-draw { stroke-dasharray: 1; stroke-dashoffset: 0; animation: trend-draw 550ms ease-out both; }

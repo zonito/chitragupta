@@ -86,16 +86,16 @@ describe("Activity amount search (client)", () => {
   it("a prefix query finds £112.40 but not the other Ocado amounts", () => {
     renderActivity();
     search("112.4");
-    expect(screen.getByText("£112.40")).toBeTruthy();
-    expect(screen.queryByText("£98.75")).toBeNull();
-    expect(screen.queryByText("£124.10")).toBeNull();
+    expect(screen.getByText("−£112.40")).toBeTruthy();
+    expect(screen.queryByText("−£98.75")).toBeNull();
+    expect(screen.queryByText("−£124.10")).toBeNull();
   });
 
   it("'128' reaches the £1,284 Jet2 row through the prefix rule", () => {
     renderActivity();
     search("128");
     expect(screen.getByText("Jet2 Holidays · Tenerife Feb")).toBeTruthy();
-    expect(screen.getByText("£1,284.00")).toBeTruthy();
+    expect(screen.getByText("−£1,284.00")).toBeTruthy();
     expect(screen.queryByText("Pret A Manger")).toBeNull();
   });
 
@@ -106,7 +106,7 @@ describe("Activity amount search (client)", () => {
       .closest("select")!;
     fireEvent.change(catSelect, { target: { value: "Groceries" } });
     search("112.4");
-    expect(screen.getByText("£112.40")).toBeTruthy();
+    expect(screen.getByText("−£112.40")).toBeTruthy();
     // The £1,284 Holidays row is out of scope under Groceries.
     search("128");
     expect(screen.queryByText("Jet2 Holidays · Tenerife Feb")).toBeNull();

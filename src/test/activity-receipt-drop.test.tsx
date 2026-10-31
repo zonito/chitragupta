@@ -53,7 +53,7 @@ async function openOcadoSheet() {
     </PersonProvider>,
   );
   // Open the sheet from the £112.40 Ocado row.
-  fireEvent.click(screen.getByText("£112.40").closest("button")!);
+  fireEvent.click(screen.getByText("−£112.40").closest("button")!);
   const dialog = await screen.findByRole("dialog");
   return within(dialog).getByTestId("receipt-dropzone");
 }
