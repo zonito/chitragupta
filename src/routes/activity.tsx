@@ -496,7 +496,15 @@ export function Activity() {
         }}
       >
         {openTxn && (
-          <div>
+          // Sheet-level drop guard: a file dropped anywhere in the
+          // sheet outside the Receipt drop zone is swallowed here, so
+          // the browser never navigates away to open it. The Receipt
+          // section's own handlers run first (they are deeper in the
+          // tree) and take the file.
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => e.preventDefault()}
+          >
             <div className="text-body text-muted-foreground">{openTxn.merchant}</div>
             <div className="mb-5">
               <div className="num text-title font-semibold">{gbp(shareOf(openTxn, person))}</div>
@@ -759,6 +767,7 @@ function TransactionReceipt({ transaction }: { transaction: Txn }) {
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const onFile = async (file: File | undefined) => {
     if (!file) return;
@@ -788,7 +797,29 @@ function TransactionReceipt({ transaction }: { transaction: Txn }) {
     setBusy(false);
   };
   return (
-    <section className="mt-5 border-t pt-4">
+    // The whole Receipt section is a drop zone: dropping a file runs
+    // the same onFile → attach flow as the Add receipt button (and a
+    // drop replaces an existing receipt, like Replace does). The
+    // drag-over state rings the section in the primary tint; leaving
+    // into a child element does not clear it (relatedTarget check).
+    // Drops outside this section are swallowed by the sheet-level
+    // guard so the page never navigates.
+    <section
+      data-testid="receipt-dropzone"
+      className={`mt-5 border-t pt-4 ${dragging ? "rounded-lg bg-primary/10 ring-2 ring-inset ring-primary/60" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        void onFile(e.dataTransfer.files[0]);
+      }}
+    >
       <Label>Receipt</Label>
       {receipt ? (
         <>
@@ -804,7 +835,7 @@ function TransactionReceipt({ transaction }: { transaction: Txn }) {
       ) : (
         <>
           <Button variant="outline" disabled={busy} onClick={() => input.current?.click()}><Upload />{busy ? "Attaching…" : "Add receipt"}</Button>
-          <p className="mt-2 text-caption text-muted-foreground">Files itself in Drive under PersonalFinance/Documents, matched to this transaction.</p>
+          <p className="mt-2 text-caption text-muted-foreground">Drop a file here, or use the button. It files itself in Drive under PersonalFinance/Documents, matched to this transaction.</p>
         </>
       )}
       {error && <p className="mt-2 text-caption text-destructive" role="alert">{error}</p>}
