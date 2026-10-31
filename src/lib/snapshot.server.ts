@@ -56,6 +56,7 @@ type Row = {
   currency: string;
   movement: string;
   category: string | null;
+  user_note: string | null;
 };
 
 const ACCOUNT_LIST_LABEL: Record<string, string> = {
@@ -187,12 +188,13 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   // month and a fetched month list rows in the same order.
   const rawRows = db
     .prepare(
-      `SELECT fingerprint, person, account, effective_date, year_month, description,
-              merchant, amount_minor, currency, movement, category
-       FROM transactions
-       WHERE currency = 'GBP' AND year_month IN (${included.map(() => "?").join(",")})
-         AND movement IN ('spend', 'internal', 'aside', 'income')
-       ORDER BY effective_date DESC`,
+      `SELECT t.fingerprint, t.person, t.account, t.effective_date, t.year_month,
+              t.description, t.merchant, t.amount_minor, t.currency, t.movement,
+              t.category, n.note AS user_note
+       FROM transactions t LEFT JOIN txn_notes n ON n.fingerprint = t.fingerprint
+       WHERE t.currency = 'GBP' AND t.year_month IN (${included.map(() => "?").join(",")})
+         AND t.movement IN ('spend', 'internal', 'aside', 'income')
+       ORDER BY t.effective_date DESC`,
     )
     .all(...included) as Row[];
 
@@ -235,6 +237,9 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       ...(row.description && row.description !== row.merchant
         ? { note: row.description }
         : {}),
+      // The user's own note (txn_notes), distinct from the statement
+      // description above; mirrored in apiTxnToTxn via /api/transactions.
+      ...(row.user_note ? { userNote: row.user_note } : {}),
     });
   }
 
@@ -336,7 +341,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const allSpend = db
     .prepare(
       `SELECT fingerprint, person, account, effective_date, year_month, description,
-              merchant, amount_minor, currency, movement, category
+              merchant, amount_minor, currency, movement, category, NULL AS user_note
        FROM transactions WHERE currency = 'GBP' AND movement = 'spend' AND amount_minor < 0
        ORDER BY effective_date`,
     )

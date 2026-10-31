@@ -166,6 +166,7 @@ export async function handleChitraguptaApi(
     path === "/api/digest" ||
     path === "/api/classify/run" ||
     path === "/api/transactions" ||
+    path === "/api/transactions/note" ||
     path === "/api/accounts" ||
     path === "/api/aggregates" ||
     path === "/api/aggregates/daily" ||
@@ -1007,8 +1008,11 @@ async function routeWithDb(
       params.push(merchant);
     }
     if (q) {
-      where.push("(t.merchant LIKE ? OR t.description LIKE ?)");
-      params.push(`%${q}%`, `%${q}%`);
+      // Search covers the user's own notes too (txn_notes): a word
+      // that appears only in a note finds its transaction, exactly as
+      // Activity's client-side filter does for snapshot months.
+      where.push("(t.merchant LIKE ? OR t.description LIKE ? OR n.note LIKE ?)");
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
     if (category) {
       // Filter in SQL, before LIMIT: a JS post-filter over a limited
@@ -1021,8 +1025,9 @@ async function routeWithDb(
         `SELECT t.fingerprint AS id, t.person, t.account, t.effective_date AS date,
                 t.year_month AS month, t.description, t.merchant,
                 t.amount_minor AS amountMinor, t.currency, t.movement,
-                ${CATEGORY_SQL} AS category
+                ${CATEGORY_SQL} AS category, n.note AS userNote
          FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
+         LEFT JOIN txn_notes n ON n.fingerprint = t.fingerprint
          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
          ORDER BY t.effective_date DESC LIMIT ?`,
       )
@@ -1038,8 +1043,36 @@ async function routeWithDb(
       currency: string;
       movement: string;
       category: string;
+      userNote: string | null;
     }[];
     return json({ ok: true, count: rows.length, transactions: rows });
+  }
+
+  if (path === "/api/transactions/note" && request.method === "POST") {
+    // The user's own note on one transaction, keyed by fingerprint in
+    // txn_notes (which survives ingest rebuilds like merchant memory).
+    // An empty note deletes the row — no empty-string notes are kept.
+    let body: { id?: string; note?: string };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return json({ ok: false, error: "invalid JSON body" }, 400);
+    }
+    if (!body.id) {
+      return json({ ok: false, error: "id is required" }, 400);
+    }
+    const note = (body.note ?? "").trim();
+    if (note === "") {
+      db.prepare("DELETE FROM txn_notes WHERE fingerprint = ?").run(body.id);
+      return json({ ok: true, id: body.id, note: null });
+    }
+    db.prepare(
+      `INSERT INTO txn_notes (fingerprint, note, updated_at)
+       VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+       ON CONFLICT (fingerprint) DO UPDATE SET
+         note = excluded.note, updated_at = excluded.updated_at`,
+    ).run(body.id, note);
+    return json({ ok: true, id: body.id, note });
   }
 
   if (path === "/api/accounts" && request.method === "GET") {

@@ -99,7 +99,14 @@ export interface Txn {
   accountId?: string;
   kind: Kind;
   fx?: string;
+  /** The statement description, when it adds anything beyond the
+   * merchant name (set by both transaction mappers). Not the user's
+   * own note — that is userNote. */
   note?: string;
+  /** The user's own note on this transaction (txn_notes, keyed by
+   * fingerprint), carried by the snapshot and /api/transactions when
+   * one exists. Searchable in Activity. */
+  userNote?: string;
 }
 
 export interface UpcomingPayment {

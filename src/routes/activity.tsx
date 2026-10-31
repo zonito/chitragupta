@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Paperclip, Upload, X } from "lucide-react";
+import { Search, Paperclip, Upload, X, StickyNote, Copy, Check } from "lucide-react";
 import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
@@ -114,20 +114,36 @@ export function Activity() {
     };
   }, [month, inSnapshot, fetchedMonths, monthCacheKey, accountScope]);
 
+  // Notes saved in this session, applied over both month sources so a
+  // save reflects immediately (list indicator, sheet, search) without
+  // waiting for the snapshot refresh the save also triggers.
+  const [noteOverrides, setNoteOverrides] = useState<Record<string, string | null>>({});
+  const applyNoteLocally = (id: string, note: string | null) => {
+    setNoteOverrides((prev) => ({ ...prev, [id]: note }));
+    void router?.invalidate().catch(() => {});
+  };
+
   // The account scope as a row predicate: snapshot months filter
   // client-side; fetched months arrive pre-filtered and pass through
   // the same predicate, so one rule governs both sources.
-  const scopedMonthTxns = useMemo(
-    () =>
-      accountScope
-        ? monthTxns.filter(
-            (t) =>
-              t.accountId === accountScope.account &&
-              storePersonOf(t) === accountScope.person,
-          )
-        : monthTxns,
-    [monthTxns, accountScope],
-  );
+  const scopedMonthTxns = useMemo(() => {
+    const scoped = accountScope
+      ? monthTxns.filter(
+          (t) =>
+            t.accountId === accountScope.account &&
+            storePersonOf(t) === accountScope.person,
+        )
+      : monthTxns;
+    if (Object.keys(noteOverrides).length === 0) return scoped;
+    return scoped.map((t): Txn => {
+      if (!(t.id in noteOverrides)) return t;
+      const note = noteOverrides[t.id];
+      const next: Txn = { ...t };
+      if (note === null || note === undefined) delete next.userNote;
+      else next.userNote = note;
+      return next;
+    });
+  }, [monthTxns, accountScope, noteOverrides]);
 
   const monthSpend = scopedMonthTxns
     .filter((t) => t.kind === "spend")
@@ -145,7 +161,17 @@ export function Activity() {
         .filter((t) => shareOf(t, person) > 0)
         .filter((t) => whoActive === "all" || t.owner === whoActive)
         .filter((t) => cat === "all" || t.category === cat)
-        .filter((t) => t.merchant.toLowerCase().includes(q.toLowerCase()))
+        // Search matches the merchant, the statement description and
+        // the user's own note — the same fields /api/transactions'
+        // q covers for fetched months.
+        .filter((t) => {
+          const needle = q.toLowerCase();
+          return (
+            t.merchant.toLowerCase().includes(needle) ||
+            (t.note ?? "").toLowerCase().includes(needle) ||
+            (t.userNote ?? "").toLowerCase().includes(needle)
+          );
+        })
         // Newest first by full date. The sort is stable, so rows within
         // a day keep their source order — and both month sources
         // (snapshot builder and /api/transactions) produce their rows
@@ -294,6 +320,7 @@ export function Activity() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {t.userNote && <StickyNote aria-label="Has a note" className="h-3.5 w-3.5 text-muted-foreground" />}
                   {docFor(t.id, documents) && <Paperclip aria-label="Receipt attached" className="h-3.5 w-3.5 text-muted-foreground" />}
                   <span className="num text-body font-medium text-foreground">{gbp(shareOf(t, person))}</span>
                 </div>
@@ -349,10 +376,118 @@ export function Activity() {
             </dl>
             {catError && <p className="mt-2 text-caption text-destructive" role="alert">{catError}</p>}
             {openTxn.kind === "transfer" && <p className="mt-3 text-caption text-muted-foreground">Between Zonito and Nikhila — never counted as spending.</p>}
+            <TransactionNote
+              key={`note-${openTxn.id}`}
+              transaction={openTxn}
+              onSaved={(note) => applyNoteLocally(openTxn.id, note)}
+            />
             <TransactionReceipt key={openTxn.id} transaction={openTxn} />
+            <TransactionIdLine id={openTxn.id} />
           </div>
         )}
       </Sheet>
+    </div>
+  );
+}
+
+/**
+ * The user's own note on this transaction (POST /api/transactions/note,
+ * stored in txn_notes by fingerprint). Plain and calm: a textarea and
+ * one Save; an emptied note deletes itself on save. Distinct from the
+ * statement description the sheet's "Note" row shows.
+ */
+function TransactionNote({
+  transaction,
+  onSaved,
+}: {
+  transaction: Txn;
+  onSaved: (note: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(transaction.userNote ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const dirty = draft.trim() !== (transaction.userNote ?? "");
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/transactions/note", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: transaction.id, note: draft }),
+      });
+      if (!res.ok) throw new Error(`note request failed: ${res.status}`);
+      const body = (await res.json()) as { note: string | null };
+      onSaved(body.note);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError("Could not save that note — please try again.");
+    }
+    setBusy(false);
+  };
+  return (
+    <section className="mt-5 border-t pt-4">
+      <Label>Your note</Label>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={2}
+        placeholder="Add a note to remember something about this payment…"
+        aria-label="Your note"
+        className="mt-2 w-full rounded-lg border bg-card px-3 py-2 text-body"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <Button size="sm" disabled={busy || !dirty} onClick={() => void save()}>
+          {busy ? "Saving…" : "Save note"}
+        </Button>
+        {saved && <span className="text-caption text-muted-foreground">Saved</span>}
+      </div>
+      {error && (
+        <p className="mt-2 text-caption text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The transaction's fingerprint, small and muted at the very bottom
+ * of the sheet, with a copy button that confirms the copy briefly.
+ */
+function TransactionIdLine({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard unavailable (permissions, insecure context): the id
+      // stays readable and selectable in the line itself.
+    }
+  };
+  return (
+    <div className="mt-5 border-t pt-3">
+      <div className="text-caption text-muted-foreground">Transaction ID</div>
+      <div className="mt-1 flex items-start justify-between gap-3">
+        <span className="num min-w-0 break-all text-caption text-muted-foreground">{id}</span>
+        <button
+          type="button"
+          onClick={() => void copy()}
+          aria-label="Copy transaction ID"
+          className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-caption text-muted-foreground transition hover:text-foreground"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
     </div>
   );
 }

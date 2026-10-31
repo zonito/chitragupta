@@ -21,6 +21,8 @@ export interface ApiTxnRow {
   currency: string;
   movement: string;
   category: string;
+  /** The user's own note (txn_notes), when one exists. */
+  userNote?: string | null;
 }
 
 export const ACCOUNT_TXN_LABEL: Record<string, string> = {
@@ -79,6 +81,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     accountId: row.account,
     kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : "transfer",
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
+    ...(row.userNote ? { userNote: row.userNote } : {}),
   };
 }
 

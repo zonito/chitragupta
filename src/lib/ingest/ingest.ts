@@ -746,6 +746,35 @@ function carryMerchantMemory(
   copy(rows);
 }
 
+const NOTE_COLUMNS = "fingerprint, note, updated_at";
+
+/**
+ * Transaction notes are the user's own words keyed by fingerprint —
+ * not derivable from the CSVs, so they get the merchant-memory
+ * treatment: copied into the rebuild's temp store up front. (The swap
+ * itself never touches the live store's txn_notes table, so notes
+ * survive by construction as well; a note whose transaction vanishes
+ * in a rebuild stays harmlessly orphaned and simply never renders.)
+ */
+function carryTxnNotes(
+  from: import("better-sqlite3").Database,
+  to: import("better-sqlite3").Database,
+): void {
+  const rows = from
+    .prepare(`SELECT ${NOTE_COLUMNS} FROM txn_notes`)
+    .all() as Record<string, unknown>[];
+  if (rows.length === 0) return;
+  const insert = to.prepare(
+    `INSERT OR REPLACE INTO txn_notes (${NOTE_COLUMNS}) VALUES (?, ?, ?)`,
+  );
+  const copy = to.transaction((items: Record<string, unknown>[]) => {
+    for (const r of items) {
+      insert.run(r["fingerprint"], r["note"], r["updated_at"]);
+    }
+  });
+  copy(rows);
+}
+
 /**
  * File assignments (meta) are likewise not derivable state the rebuild
  * may drop: the temp store receives the live store's assignments before
@@ -821,6 +850,7 @@ function rebuildStore(
   let results: IngestResult[];
   try {
     carryMerchantMemory(db, tmp);
+    carryTxnNotes(db, tmp);
     carryFileAssignments(db, tmp);
     results = ingestAccounts(tmp, dataDir);
     tmp.pragma("wal_checkpoint(TRUNCATE)");

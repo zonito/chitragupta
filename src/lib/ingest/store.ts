@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS dismissed_merchants (
   merchant TEXT PRIMARY KEY,
   dismissed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS txn_notes (
+  fingerprint TEXT PRIMARY KEY,
+  note TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   merchant TEXT NOT NULL,
