@@ -178,6 +178,74 @@ describe("detectIncomeRegulars", () => {
     ];
     expect(detectIncomeRegulars(stale, "2026-10-15")).toEqual([]);
   });
+
+  it("groups salary landings whose bank reference changes every month", () => {
+    // Each landing's merchant string differs only in its 14-digit
+    // payment reference, so the plain canonical merchants are all
+    // unique — only the detection key (long digit runs stripped)
+    // can group them, on either reading.
+    const steady = [
+      charge("ACME PAYROLL 54829220220901 BGC", "2026-07-28", 250000),
+      charge("ACME PAYROLL 54829220221026 BGC", "2026-08-28", 250000),
+      charge("ACME PAYROLL 54829220221123 BGC", "2026-09-28", 250000),
+    ];
+    const clustered = detectIncomeRegulars(steady, "2026-10-15");
+    expect(clustered).toHaveLength(1);
+    expect(clustered[0]!.amount).toBe(2500);
+    // The projected name is the most recent landing's own merchant
+    // string, reference and all — never the stripped key.
+    expect(clustered[0]!.name).toBe("ACME PAYROLL 54829220221123 BGC");
+
+    const varying = [
+      charge("ACME PAYROLL 54829220220827 BGC", "2026-08-28", 400000),
+      charge("ACME PAYROLL 54829220220924 BGC", "2026-09-28", 500000),
+      charge("ACME PAYROLL 54829220221022 BGC", "2026-10-28", 450000),
+    ];
+    const banded = detectIncomeRegulars(varying, "2026-11-15");
+    expect(banded).toHaveLength(1);
+    expect(banded[0]!.amount).toBe(4500);
+    expect(banded[0]!.name).toBe("ACME PAYROLL 54829220221022 BGC");
+  });
+
+  it("does not merge two employers who merely share a name prefix", () => {
+    // Same prefix, different WORDS (North vs South): the detection
+    // key keeps them apart. Merged, their interleaved landings
+    // would sit ~15 days apart and fail the cadence on both
+    // readings, so two regulars prove the groups stayed separate.
+    const charges = [
+      charge("ACME NORTH LTD 111111111111 BGC", "2026-07-13", 250000),
+      charge("ACME SOUTH LTD 444444444444 BGC", "2026-07-28", 250000),
+      charge("ACME NORTH LTD 222222222222 BGC", "2026-08-13", 250000),
+      charge("ACME SOUTH LTD 555555555555 BGC", "2026-08-28", 250000),
+      charge("ACME NORTH LTD 333333333333 BGC", "2026-09-13", 250000),
+      charge("ACME SOUTH LTD 666666666666 BGC", "2026-09-28", 250000),
+    ];
+    const found = detectIncomeRegulars(charges, "2026-10-15");
+    expect(found).toHaveLength(2);
+    expect(found.map((r) => r.name).sort()).toEqual([
+      "ACME NORTH LTD 333333333333 BGC",
+      "ACME SOUTH LTD 666666666666 BGC",
+    ]);
+  });
+
+  it("leaves short digit runs alone: they are part of real names", () => {
+    const charges = [
+      charge("STUDIO 54", "2026-07-28", 120000),
+      charge("STUDIO 54", "2026-08-28", 120000),
+      charge("STUDIO 54", "2026-09-28", 120000),
+    ];
+    const found = detectIncomeRegulars(charges, "2026-10-15");
+    expect(found).toHaveLength(1);
+    expect(found[0]!.name).toBe("STUDIO 54");
+    // And a five-digit reference is NOT stripped: three landings
+    // whose references differ stay three singletons, no stream.
+    const fiveDigit = [
+      charge("ACME PAYROLL 12345 BGC", "2026-07-28", 250000),
+      charge("ACME PAYROLL 23456 BGC", "2026-08-28", 250000),
+      charge("ACME PAYROLL 34567 BGC", "2026-09-28", 250000),
+    ];
+    expect(detectIncomeRegulars(fiveDigit, "2026-10-15")).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

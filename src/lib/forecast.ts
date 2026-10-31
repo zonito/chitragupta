@@ -70,14 +70,15 @@ function medianOf(values: number[]): number {
 
 // ---------------------------------------------------------------------------
 // Recurring income detection — the spend detector's mirror, kept minimal:
-// the same canonical grouping, the same 7% amount-cluster window and the
-// same cadence discipline, restricted to the Monthly band (25–35 day
-// gaps), because the forecast needs salary-like streams, not a second
-// subscription detector. Two landings a month apart are enough evidence
-// here (the spend side demands three charges, but two matched salary
-// payments plus an in-band gap are a pattern, not a coincidence), and a
-// stream counts as still landing when its last payment is within 1.5
-// cadences of the store's latest date — the detector's own rule.
+// the same grouping discipline (by detection key, below), the same 7%
+// amount-cluster window and the same cadence discipline, restricted to
+// the Monthly band (25–35 day gaps), because the forecast needs
+// salary-like streams, not a second subscription detector. Two landings
+// a month apart are enough evidence here (the spend side demands three
+// charges, but two matched salary payments plus an in-band gap are a
+// pattern, not a coincidence), and a stream counts as still landing
+// when its last payment is within 1.5 cadences of the store's latest
+// date — the detector's own rule.
 //
 // A salary also escapes the 7% window legitimately: pay varies with
 // bonuses, overtime and tax-code changes by far more than a bill does.
@@ -148,6 +149,27 @@ function medianBandStream(group: IncomeCharge[]): {
   return { charges: members, medianGap, medianAmount };
 }
 
+/**
+ * The grouping key for income DETECTION only. A real salary's
+ * merchant string embeds a per-payment reference
+ * ("FACEBOOK UK LTD 54829220220927 BGC") whose long digit run changes
+ * every month, so the plain canonical merchant is unique per landing
+ * and no stream could ever group. The detection key strips digit
+ * runs of 6+ from the canonical merchant (separators are already
+ * gone at that point); short runs stay, because they are part of
+ * real names ("STUDIO 54"). Nothing outside this detector groups by
+ * it — stored merchants, merchant-memory keys and classification
+ * are untouched — and the name a regular projects under is still a
+ * real landing's own merchant string, never this key.
+ */
+function incomeDetectionKey(merchant: string): string {
+  const canonical = canonicalMerchant(merchant);
+  const stripped = canonical.replace(/\d{6,}/g, "");
+  // A merchant that is nothing but a long reference keeps its full
+  // canonical form: an empty key would merge every such string.
+  return stripped === "" ? canonical : stripped;
+}
+
 export function detectIncomeRegulars(
   charges: IncomeCharge[],
   latestDate: string,
@@ -155,7 +177,7 @@ export function detectIncomeRegulars(
   const groups = new Map<string, IncomeCharge[]>();
   for (const charge of charges) {
     if (charge.amountMinor <= 0) continue;
-    const key = canonicalMerchant(charge.merchant);
+    const key = incomeDetectionKey(charge.merchant);
     const list = groups.get(key) ?? [];
     list.push(charge);
     groups.set(key, list);
