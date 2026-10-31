@@ -73,7 +73,7 @@ export function ThemeToggle() {
 function PersonSwitch() {
   const { person, setPerson } = usePerson();
   return (
-    <div className="grid grid-cols-3 rounded-full bg-muted p-1 text-sm">
+    <div className="grid grid-cols-3 rounded-full bg-muted p-1 text-body">
       {OPTS.map((o) => (
         <button
           key={o.v}
@@ -123,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {SIDE.map(({ to, l }) => {
             const on = to === "/" ? path === "/" : path.startsWith(to);
             return (
-              <Link key={to} to={to} className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${on ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+              <Link key={to} to={to} className={`flex items-center gap-3 rounded-xl px-3 py-2 text-body transition ${on ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
                 <DestinationIcon to={to} />
                 {l}
               </Link>
@@ -420,7 +420,7 @@ export function AskButton() {
               {displayAi.figures.perMonth && (
                 <div className="mt-3">
                   {displayAi.figures.perMonth.map((m) => (
-                    <div key={m.month} className="ledger-row flex justify-between gap-3 py-2 text-sm">
+                    <div key={m.month} className="ledger-row flex justify-between gap-3 py-2 text-body">
                       <span>{monthOptions().find((o) => o.key === m.month)?.label ?? m.month}</span>
                       <span className="num shrink-0">{gbp(m.total)}</span>
                     </div>
@@ -439,7 +439,7 @@ export function AskButton() {
                 <div className="num text-title font-semibold">{gbp(monthOnlyTotal)}</div>
                 <p className="mb-4 text-caption leading-relaxed text-muted-foreground">Spent in {monthLabel} across {monthOnlyRows.length} {monthOnlyRows.length === 1 ? "transaction" : "transactions"}.</p>
                 {monthOnlyRows.slice(0, 8).map((t) => (
-                  <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-sm">
+                  <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-body">
                     <span className="min-w-0"><span className="block">{t.merchant}</span><span className="mt-0.5 block text-xs text-muted-foreground">{dayLabel(t.day, true, t.monthKey)}</span></span>
                     <span className="num shrink-0">{gbp(shareOf(t, person))}</span>
                   </div>
@@ -491,7 +491,7 @@ export function AskButton() {
             <div className="num text-title font-semibold">{gbp(answer.total, !isTrip)}</div>
             <p className="mb-4 text-caption leading-relaxed text-muted-foreground">{noHolidays ? "No Holidays charges this month." : answer.fallback ? "Nothing on your own accounts — this is the household picture." : isTrip ? `${answer.orders.length} ${answer.orders.length === 1 ? "booking" : "bookings"} in Holidays this month.` : `${answer.orders.length} orders this month.`}</p>
             {answer.orders.map((t) => (
-              <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-sm">
+              <div key={t.id} className="ledger-row flex justify-between gap-3 py-2 text-body">
                 <span className="min-w-0">{isTrip ? <><span className="block">{t.merchant}</span><span className="mt-0.5 block text-xs text-muted-foreground">{dayLabel(t.day)}</span></> : dayLabel(t.day)}</span>
                 <span className="num shrink-0">{gbp(shareOf(t, answer.answerPerson))}</span>
               </div>

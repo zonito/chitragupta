@@ -125,7 +125,7 @@ function SubCard({ sub: s, person, onOpen }: { sub: Sub; person: string; onOpen:
           {s.card} · last charged {s.last}
           {nextExpectedLabel(s) && <> · {nextExpectedLabel(s)}</>}
           {person === "household" && <> · {ownerName(s.owner)}</>}
-          {s.note && <div className="mt-0.5">{s.note}</div>}
+          {s.note && <div className="mt-0.5 text-body">{s.note}</div>}
         </div>
       </button>
     </Panel>

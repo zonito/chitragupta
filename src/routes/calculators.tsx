@@ -74,7 +74,7 @@ function Calculators() {
         <div className="mt-5 border-t pt-5">
           <div className="text-caption text-muted-foreground">Cost per use</div>
           <output className="num mt-1 block break-words text-title font-semibold text-foreground"><SettlingValue value={perUse} /></output>
-          <p className="num mt-2 text-caption leading-relaxed text-muted-foreground">{gbp(state.usePrice, state.usePrice % 1 !== 0)} boots worn {state.uses} times = {perUse === null ? "—" : gbp(perUse)} per wear.</p>
+          <p className="num mt-2 text-body leading-relaxed text-muted-foreground">{gbp(state.usePrice, state.usePrice % 1 !== 0)} boots worn {state.uses} times = {perUse === null ? "—" : gbp(perUse)} per wear.</p>
         </div>
       </Panel>
 

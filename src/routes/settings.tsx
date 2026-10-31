@@ -127,14 +127,14 @@ export function Settings() {
           right={<Chip tone="neutral">{waiting === 0 ? "Review queue is clear" : `${waiting} ${waiting === 1 ? "merchant" : "merchants"} waiting for review`}</Chip>}
         />
       </Panel>
-      <p className="px-1 text-caption leading-relaxed text-muted-foreground">
+      <p className="px-1 text-body leading-relaxed text-muted-foreground">
         Your data stays with you. Transfers between Zonito and Nikhila are never counted as spending, and money moved to savings or investments shows separately as "Moved aside".
       </p>
-      <p className="px-1 text-caption text-muted-foreground">Statements live in Drive; aggregates are precomputed.</p>
+      <p className="px-1 text-body text-muted-foreground">Statements live in Drive; aggregates are precomputed.</p>
 
       <Sheet open={reviewOpen} onClose={() => setReviewOpen(false)}>
         <h2 className="mb-1 text-heading font-semibold">Merchant review</h2>
-        <p className="mb-4 text-caption leading-relaxed text-muted-foreground">Merchants we haven't seen before. Pick a category and keep to confirm it; dismissing marks it as noise.</p>
+        <p className="mb-4 text-body leading-relaxed text-muted-foreground">Merchants we haven't seen before. Pick a category and keep to confirm it; dismissing marks it as noise.</p>
         {!loaded && <p className="py-2 text-caption text-muted-foreground">Loading…</p>}
         {loaded && (
           <p className="mb-2 text-caption text-muted-foreground">
