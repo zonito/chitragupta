@@ -2,7 +2,7 @@
 - Restore calculator localStorage values only after mount and save only after restoration, so SSR matches and saved inputs are not overwritten.
 - Theme controls and calculator panels through global semantic tokens; the `.dark` token overrides keep the existing shell and new screen consistent.
 - Theme choice (system/light/dark) lives in ThemeProvider in shell.tsx with a pre-paint head script; desktop (lg+) swaps header/tabs for a sidebar in AppShell — keep mobile classes unprefixed and desktop changes behind lg:.
-- Mock document state lives in a root-mounted DocumentsProvider so Activity attachments and Receipts remain synchronized across navigation; detaching retains the file as unmatched.
+- Document state lives in a root-mounted DocumentsProvider synced from the snapshot's persisted documents (files under the data dir's Documents tree, recorded in the store) so Activity attachments and Receipts remain synchronized across navigation; detaching retains the file as unmatched.
 - Logo geometry lives in the reusable Logo component and matching public SVG favicon; keep their paths synchronized so the app and browser icon share one identity.
 - Spending-category colours resolve through CATEGORY_COLOR to global theme tokens; CategoryChip and inherited Sparkline colour keep repeated data visualizations consistent.
 - Shared item-icons maps categories and destinations to semantic palette tokens and informative glyphs; identity surfaces, shadows and serif eligibility are governed globally so routes preserve their data and structure.

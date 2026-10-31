@@ -1,9 +1,9 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Paperclip, Upload, FileText } from "lucide-react";
+import { Search, Paperclip, Upload } from "lucide-react";
 import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { useDocuments } from "@/components/documents";
+import { DocumentPreview, useDocuments } from "@/components/documents";
 import { MerchantTile, AccountTile } from "@/components/tiles";
 import { ALL_TXNS, CATEGORIES, docFor, docName, shareOf, gbp, dayLabel, ownerName, monthOptions, currentMonthKey, txnsInMonth, type Txn, type Category } from "@/lib/data";
 import { fetchApiTransactions } from "@/lib/txn-map";
@@ -213,14 +213,38 @@ export function Activity() {
 
 function TransactionReceipt({ transaction }: { transaction: Txn }) {
   const { documents, attach, remove } = useDocuments();
+  const router = useRouter();
   const receipt = docFor(transaction.id, documents);
-  const [choosing, setChoosing] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const choose = (extension: "pdf" | "jpg" | "png" = "pdf") => {
-    attach(transaction, extension);
-    setChoosing(false);
-    setPreview(false);
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // The file's real bytes are uploaded and filed by the server;
+      // the paperclip state below is the persisted record it returns.
+      await attach(transaction, file);
+      setPreview(false);
+      await router?.invalidate().catch(() => {});
+    } catch {
+      setError("Could not attach that file — please try again.");
+    }
+    setBusy(false);
+  };
+  const onRemove = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await remove(transaction.id);
+      setPreview(false);
+      await router?.invalidate().catch(() => {});
+    } catch {
+      setError("Could not remove that receipt — please try again.");
+    }
+    setBusy(false);
   };
   return (
     <section className="mt-5 border-t pt-4">
@@ -230,35 +254,23 @@ function TransactionReceipt({ transaction }: { transaction: Txn }) {
           <p className="break-all text-body">{docName(receipt)}</p>
           <p className="mt-1 break-all text-caption text-muted-foreground">{receipt.path}</p>
           <div className="mt-2 flex gap-1">
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => { setPreview(!preview); setChoosing(false); }}>View</Button>
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => { setChoosing(true); setPreview(false); }}>Replace</Button>
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => { remove(transaction.id); setPreview(false); setChoosing(false); }}>Remove</Button>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setPreview(!preview)}>View</Button>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={busy} onClick={() => input.current?.click()}>Replace</Button>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={busy} onClick={() => void onRemove()}>Remove</Button>
           </div>
-          {preview && <div className="mt-3 flex h-36 flex-col items-center justify-center rounded-xl border border-dashed bg-muted text-muted-foreground"><FileText className="mb-2 h-7 w-7" /><span className="text-caption">Document preview</span></div>}
+          {preview && <div className="mt-3"><DocumentPreview doc={receipt} /></div>}
         </>
       ) : (
         <>
-          <Button variant="outline" onClick={() => setChoosing(true)}><Upload />Add receipt</Button>
+          <Button variant="outline" disabled={busy} onClick={() => input.current?.click()}><Upload />{busy ? "Attaching…" : "Add receipt"}</Button>
           <p className="mt-2 text-caption text-muted-foreground">Files itself in Drive under PersonalFinance/Documents, matched to this transaction.</p>
         </>
       )}
-      {choosing && (
-        <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border-2 border-dashed bg-muted/40 p-4 text-center">
-          <Upload className="h-5 w-5 text-muted-foreground" />
-          <p className="text-caption text-muted-foreground">Photo or PDF · attached to this transaction in the app</p>
-          <div className="flex flex-wrap justify-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => choose()}>Choose sample PDF</Button>
-            <Button variant="ghost" size="sm" onClick={() => input.current?.click()}>Choose photo / PDF</Button>
-            <Button variant="ghost" size="sm" onClick={() => setChoosing(false)}>Cancel</Button>
-          </div>
-        </div>
-      )}
+      {error && <p className="mt-2 text-caption text-destructive" role="alert">{error}</p>}
       <input ref={input} type="file" aria-label="Receipt file" accept="image/*,application/pdf" className="hidden" onChange={(e) => {
         const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.type !== "application/pdf" && !file.type.startsWith("image/")) return;
-        choose(file.type === "image/png" ? "png" : file.type.startsWith("image/") ? "jpg" : "pdf");
         e.target.value = "";
+        void onFile(file);
       }} />
     </section>
   );
