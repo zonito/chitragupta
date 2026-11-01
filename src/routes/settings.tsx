@@ -1,13 +1,33 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { PageTitle, Panel, Label, Chip, Row, Sheet, meta, useTheme, type ThemeChoice } from "@/components/shell";
-import { ACCOUNTS, appSettings, categoryColor, categoryDefs, reviewTotal, type Category, type CategoryDef, type ReviewQueueItem } from "@/lib/data";
+import {
+  PageTitle,
+  Panel,
+  Label,
+  Chip,
+  Row,
+  Sheet,
+  meta,
+  useTheme,
+  type ThemeChoice,
+} from "@/components/shell";
+import {
+  ACCOUNTS,
+  appSettings,
+  categoryColor,
+  categoryDefs,
+  reviewTotal,
+  type Category,
+  type CategoryDef,
+  type ReviewQueueItem,
+} from "@/lib/data";
 import { AccountTile, MerchantTile } from "@/components/tiles";
 import { CategoryIcon } from "@/components/item-icons";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/settings")({
-  head: () => meta("Settings", "People, accounts, currency and digest preferences."),
+  head: () =>
+    meta("Settings", "People, accounts, currency and digest preferences."),
   component: Settings,
 });
 
@@ -22,7 +42,9 @@ export function Settings() {
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [visible, setVisible] = useState(PAGE_SIZE);
-  const [status, setStatus] = useState<Record<string, "kept" | "dismissed">>({});
+  const [status, setStatus] = useState<Record<string, "kept" | "dismissed">>(
+    {},
+  );
   const [choices, setChoices] = useState<Record<string, string>>({});
   const waiting = reviewTotal();
   const queue = items.filter((m) => !status[m.merchant]);
@@ -40,25 +62,27 @@ export function Settings() {
     setLoaded(false);
     fetch("/api/review-queue")
       .then((res) => res.json())
-      .then((body: { ok?: boolean; queue?: ReviewQueueItem[]; total?: number }) => {
-        if (cancelled) return;
-        if (body.ok && body.queue) {
-          setItems(body.queue);
-          setTotal(body.total ?? body.queue.length);
-          setChoices(
-            Object.fromEntries(
-              body.queue
-                .filter((item) => item.suggestion)
-                .map((item) => [item.merchant, item.suggestion as string]),
-            ),
-          );
-        } else {
-          setItems([]);
-          setTotal(0);
-          setChoices({});
-        }
-        setLoaded(true);
-      })
+      .then(
+        (body: { ok?: boolean; queue?: ReviewQueueItem[]; total?: number }) => {
+          if (cancelled) return;
+          if (body.ok && body.queue) {
+            setItems(body.queue);
+            setTotal(body.total ?? body.queue.length);
+            setChoices(
+              Object.fromEntries(
+                body.queue
+                  .filter((item) => item.suggestion)
+                  .map((item) => [item.merchant, item.suggestion as string]),
+              ),
+            );
+          } else {
+            setItems([]);
+            setTotal(0);
+            setChoices({});
+          }
+          setLoaded(true);
+        },
+      )
       .catch(() => {
         if (cancelled) return;
         setItems([]);
@@ -81,7 +105,11 @@ export function Settings() {
     void fetch("/api/merchants", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ merchant: item.merchant, category, source: "user" }),
+      body: JSON.stringify({
+        merchant: item.merchant,
+        category,
+        source: "user",
+      }),
     }).catch(() => {});
   };
 
@@ -106,53 +134,115 @@ export function Settings() {
       <PageTitle>Settings</PageTitle>
       <Panel className="py-2">
         <Label>People & accounts</Label>
-        {([["Zonito", "zonito"], ["Nikhila", "nikhila"], ["Joint", "joint"]] as const).map(([n, owner]) => (
-          <div key={n} className="ledger-row py-3"><div>{n}</div><div className="flex flex-wrap items-center gap-x-1 gap-y-2 text-caption text-muted-foreground">{accs(owner).map((a, index) => <span key={a.name} className="inline-flex items-center gap-2"><AccountTile account={a.name} /><span>{a.name}{index < accs(owner).length - 1 ? "," : ""}</span></span>)}</div></div>
+        {(
+          [
+            ["Zonito", "zonito"],
+            ["Nikhila", "nikhila"],
+            ["Joint", "joint"],
+          ] as const
+        ).map(([n, owner]) => (
+          <div key={n} className="ledger-row py-3">
+            <div>{n}</div>
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-2 text-caption text-muted-foreground">
+              {accs(owner).map((a, index) => (
+                <span key={a.name} className="inline-flex items-center gap-2">
+                  <AccountTile account={a.name} />
+                  <span>
+                    {a.name}
+                    {index < accs(owner).length - 1 ? "," : ""}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
         ))}
       </Panel>
       <Panel className="py-2">
         <div className="ledger-row flex items-center justify-between gap-3 py-3">
           <span>Theme</span>
-          <div className="grid grid-cols-3 rounded-full bg-muted p-1 text-caption" role="radiogroup" aria-label="Theme">
+          <div
+            className="grid grid-cols-3 rounded-full bg-muted p-1 text-caption"
+            role="radiogroup"
+            aria-label="Theme"
+          >
             {(["system", "light", "dark"] as ThemeChoice[]).map((t) => (
-              <button key={t} role="radio" aria-checked={theme === t} onClick={() => setTheme(t)} className={`rounded-full px-3 py-1 capitalize transition ${theme === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>{t}</button>
+              <button
+                key={t}
+                role="radio"
+                aria-checked={theme === t}
+                onClick={() => setTheme(t)}
+                className={`rounded-full px-3 py-1 capitalize transition ${theme === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+              >
+                {t}
+              </button>
             ))}
           </div>
         </div>
-        {[["Display currency", "GBP £"], ["Weekly digest", "Sunday evening"]].map(([k, v]) => (
-          <div key={k} className="ledger-row flex justify-between py-3"><span>{k}</span><span className="text-muted-foreground">{v}</span></div>
+        {[
+          ["Display currency", "GBP £"],
+          ["Weekly digest", "Sunday evening"],
+        ].map(([k, v]) => (
+          <div key={k} className="ledger-row flex justify-between py-3">
+            <span>{k}</span>
+            <span className="text-muted-foreground">{v}</span>
+          </div>
         ))}
         <Row
           left="Merchant review"
           onClick={() => setReviewOpen(true)}
-          right={<Chip tone="neutral">{waiting === 0 ? "Review queue is clear" : `${waiting} ${waiting === 1 ? "merchant" : "merchants"} waiting for review`}</Chip>}
+          right={
+            <Chip tone="neutral">
+              {waiting === 0
+                ? "Review queue is clear"
+                : `${waiting} ${waiting === 1 ? "merchant" : "merchants"} waiting for review`}
+            </Chip>
+          }
         />
       </Panel>
       <CategoriesManager />
       <FloorsBudgets />
       <JevSettings />
       <p className="px-1 text-body leading-relaxed text-muted-foreground">
-        Your data stays with you. Transfers between Zonito and Nikhila are never counted as spending, and money moved to savings or investments shows separately as "Moved aside".
+        Your data stays with you. Transfers between Zonito and Nikhila are never
+        counted as spending, and money moved to savings or investments shows
+        separately as "Moved aside".
       </p>
-      <p className="px-1 text-body text-muted-foreground">Statements live in Drive; aggregates are precomputed.</p>
+      <p className="px-1 text-body text-muted-foreground">
+        Statements live in Drive; aggregates are precomputed.
+      </p>
 
       <Sheet open={reviewOpen} onClose={() => setReviewOpen(false)}>
         <h2 className="mb-1 text-heading font-semibold">Merchant review</h2>
-        <p className="mb-4 text-body leading-relaxed text-muted-foreground">Merchants we haven't seen before. Pick a category and keep to confirm it; dismissing marks it as noise.</p>
-        {!loaded && <p className="py-2 text-caption text-muted-foreground">Loading…</p>}
+        <p className="mb-4 text-body leading-relaxed text-muted-foreground">
+          Merchants we haven't seen before. Pick a category and keep to confirm
+          it; dismissing marks it as noise.
+        </p>
+        {!loaded && (
+          <p className="py-2 text-caption text-muted-foreground">Loading…</p>
+        )}
         {loaded && (
           <p className="mb-2 text-caption text-muted-foreground">
-            {remaining === 0 ? "Nothing waiting." : `${remaining} ${remaining === 1 ? "merchant" : "merchants"} waiting for review.`}
+            {remaining === 0
+              ? "Nothing waiting."
+              : `${remaining} ${remaining === 1 ? "merchant" : "merchants"} waiting for review.`}
           </p>
         )}
         <div>
           {queue.slice(0, visible).map((m) => (
-            <div key={m.merchant} className="ledger-row flex flex-wrap items-center justify-between gap-3 py-3">
+            <div
+              key={m.merchant}
+              className="ledger-row flex flex-wrap items-center justify-between gap-3 py-3"
+            >
               <div className="flex min-w-0 items-center gap-3">
-                <MerchantTile merchant={m.merchant} category={tileCategory(m)} />
+                <MerchantTile
+                  merchant={m.merchant}
+                  category={tileCategory(m)}
+                />
                 <div className="min-w-0">
                   <div className="truncate text-body">{m.merchant}</div>
-                  <div className="mt-0.5 text-caption text-muted-foreground">{m.detail}</div>
+                  <div className="mt-0.5 text-caption text-muted-foreground">
+                    {m.detail}
+                  </div>
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -160,41 +250,94 @@ export function Settings() {
                   aria-label={`Category for ${m.merchant}`}
                   className={sel}
                   value={choices[m.merchant] ?? ""}
-                  onChange={(e) => setChoices((prev) => ({ ...prev, [m.merchant]: e.target.value }))}
+                  onChange={(e) =>
+                    setChoices((prev) => ({
+                      ...prev,
+                      [m.merchant]: e.target.value,
+                    }))
+                  }
                 >
-                  <option value="" disabled>Choose a category</option>
-                  {categoryDefs().map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  <option value="" disabled>
+                    Choose a category
+                  </option>
+                  {categoryDefs().map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
-                <Button variant="outline" size="sm" disabled={!choices[m.merchant]} onClick={() => keep(m)}>Keep</Button>
-                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => dismiss(m)}>Dismiss</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!choices[m.merchant]}
+                  onClick={() => keep(m)}
+                >
+                  Keep
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => dismiss(m)}
+                >
+                  Dismiss
+                </Button>
               </div>
             </div>
           ))}
           {visible < queue.length && (
             <div className="py-3 text-center">
-              <Button variant="outline" size="sm" onClick={() => setVisible((v) => v + PAGE_SIZE)}>Show more</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisible((v) => v + PAGE_SIZE)}
+              >
+                Show more
+              </Button>
             </div>
           )}
           {loaded && total > items.length && queue.length > 0 && (
-            <p className="py-2 text-caption text-muted-foreground">{total - items.length} more {total - items.length === 1 ? "merchant is" : "merchants are"} waiting beyond the {items.length} shown here.</p>
+            <p className="py-2 text-caption text-muted-foreground">
+              {total - items.length} more{" "}
+              {total - items.length === 1 ? "merchant is" : "merchants are"}{" "}
+              waiting beyond the {items.length} shown here.
+            </p>
           )}
           {handled.map((m) => (
-            <div key={m.merchant} className="ledger-row flex items-center justify-between gap-3 py-3">
+            <div
+              key={m.merchant}
+              className="ledger-row flex items-center justify-between gap-3 py-3"
+            >
               <div className="flex min-w-0 items-center gap-3">
-                <MerchantTile merchant={m.merchant} category={tileCategory(m)} />
+                <MerchantTile
+                  merchant={m.merchant}
+                  category={tileCategory(m)}
+                />
                 <div className="min-w-0">
                   <div className="truncate text-body">{m.merchant}</div>
-                  <div className="mt-0.5 text-caption text-muted-foreground">{m.detail}</div>
+                  <div className="mt-0.5 text-caption text-muted-foreground">
+                    {m.detail}
+                  </div>
                 </div>
               </div>
-              <Chip tone={status[m.merchant] === "kept" ? "good" : "neutral"}>{status[m.merchant] === "kept" ? "Kept" : "Dismissed"}</Chip>
+              <Chip tone={status[m.merchant] === "kept" ? "good" : "neutral"}>
+                {status[m.merchant] === "kept" ? "Kept" : "Dismissed"}
+              </Chip>
             </div>
           ))}
           {loaded && queue.length === 0 && total > items.length && (
-            <p className="py-2 text-caption text-muted-foreground">That's all {items.length} we can show right now — {total - items.length} more {total - items.length === 1 ? "merchant is" : "merchants are"} still waiting beyond that.</p>
+            <p className="py-2 text-caption text-muted-foreground">
+              That's all {items.length} we can show right now —{" "}
+              {total - items.length} more{" "}
+              {total - items.length === 1 ? "merchant is" : "merchants are"}{" "}
+              still waiting beyond that.
+            </p>
           )}
           {loaded && queue.length === 0 && total <= items.length && (
-            <p className="py-2 text-caption text-muted-foreground">That's the queue for now — new merchants appear here when we first see them.</p>
+            <p className="py-2 text-caption text-muted-foreground">
+              That's the queue for now — new merchants appear here when we first
+              see them.
+            </p>
           )}
         </div>
       </Sheet>
@@ -289,7 +432,9 @@ function FloorsBudgets() {
       }
     }
     if (invalid) {
-      setError("Amounts must be £0 or more — leave a field empty for no limit.");
+      setError(
+        "Amounts must be £0 or more — leave a field empty for no limit.",
+      );
       return;
     }
     setBusy(true);
@@ -321,7 +466,9 @@ function FloorsBudgets() {
         /* no live router in some renders */
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not save floors & budgets");
+      setError(
+        e instanceof Error ? e.message : "could not save floors & budgets",
+      );
     }
     setBusy(false);
   };
@@ -332,7 +479,9 @@ function FloorsBudgets() {
     onChange: (v: string) => void,
   ) => (
     <span className="flex shrink-0 items-center gap-1.5">
-      <span aria-hidden="true" className="text-muted-foreground">£</span>
+      <span aria-hidden="true" className="text-muted-foreground">
+        £
+      </span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -365,7 +514,10 @@ function FloorsBudgets() {
         )}
       </div>
       {defs.map((def) => (
-        <div key={def.name} className="ledger-row flex items-center justify-between gap-3 py-2.5">
+        <div
+          key={def.name}
+          className="ledger-row flex items-center justify-between gap-3 py-2.5"
+        >
           <span className="flex min-w-0 items-center gap-2">
             <CategoryIcon category={def.name as Category} />
             <span className="truncate">{def.name}</span>
@@ -383,7 +535,12 @@ function FloorsBudgets() {
         </div>
       ))}
       <div className="flex items-center gap-2 py-3">
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => void save()}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => void save()}
+        >
           Save
         </Button>
         {saved && !dirty && <Chip tone="good">Saved</Chip>}
@@ -451,7 +608,9 @@ function JevSettings() {
         /* no live router in some renders */
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not save the Jev setting");
+      setError(
+        e instanceof Error ? e.message : "could not save the Jev setting",
+      );
     }
     setBusy(false);
   };
@@ -462,7 +621,9 @@ function JevSettings() {
       <div className="ledger-row flex items-center justify-between gap-3 py-3">
         <span>
           Second opinions
-          <span className="block text-caption text-muted-foreground">{status}</span>
+          <span className="block text-caption text-muted-foreground">
+            {status}
+          </span>
         </span>
         <button
           type="button"
@@ -548,7 +709,9 @@ function CategoriesManager() {
       }
       await router.invalidate();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not remove that category");
+      setError(
+        e instanceof Error ? e.message : "could not remove that category",
+      );
     }
     setBusy(false);
   };
@@ -557,7 +720,10 @@ function CategoriesManager() {
     <Panel className="py-2">
       <Label>Categories</Label>
       {defs.map((def) => (
-        <div key={def.name} className="ledger-row flex items-center justify-between gap-3 py-2.5">
+        <div
+          key={def.name}
+          className="ledger-row flex items-center justify-between gap-3 py-2.5"
+        >
           <span className="flex min-w-0 items-center gap-2">
             <CategoryIcon category={def.name as Category} />
             <span className="truncate">{def.name}</span>
@@ -593,7 +759,12 @@ function CategoriesManager() {
           aria-label="New category name"
           className="min-w-0 flex-1 rounded-lg border bg-card px-3 py-1.5 text-body outline-none focus:ring-2 focus:ring-ring"
         />
-        <Button variant="outline" size="sm" disabled={busy || !name.trim()} onClick={() => void add()}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy || !name.trim()}
+          onClick={() => void add()}
+        >
           Add
         </Button>
       </div>
@@ -603,7 +774,8 @@ function CategoriesManager() {
         </p>
       )}
       <p className="pb-2 text-caption text-muted-foreground">
-        Custom categories join the classifier's list too — merchants similar to ones you file under a custom category will be suggested for it.
+        Custom categories join the classifier's list too — merchants similar to
+        ones you file under a custom category will be suggested for it.
       </p>
     </Panel>
   );

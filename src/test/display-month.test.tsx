@@ -24,8 +24,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -63,16 +73,66 @@ function buildFixtureStore(): string {
   );
   // Salary: £3,000 monthly, Jun–Oct 2026 (identical amounts, monthly
   // gaps — the cluster reading; next landing 27 Nov 2026).
-  ["2026-06-29", "2026-07-29", "2026-08-28", "2026-09-28", "2026-10-28"].forEach(
-    (day, i) =>
-      insert.run(`sal${i}`, day, day.slice(0, 7), "ACME PAYROLL", "ACME PAYROLL", 300000, "income", "One-off"),
+  [
+    "2026-06-29",
+    "2026-07-29",
+    "2026-08-28",
+    "2026-09-28",
+    "2026-10-28",
+  ].forEach((day, i) =>
+    insert.run(
+      `sal${i}`,
+      day,
+      day.slice(0, 7),
+      "ACME PAYROLL",
+      "ACME PAYROLL",
+      300000,
+      "income",
+      "One-off",
+    ),
   );
-  insert.run("sep1", "2026-09-15", "2026-09", "Ocado", "Ocado", -1000, "spend", "Groceries");
-  insert.run("oct1", "2026-10-05", "2026-10", "Ocado", "Ocado", -6000, "spend", "Groceries");
-  insert.run("oct2", "2026-10-20", "2026-10", "Ocado", "Ocado", -4000, "spend", "Groceries");
+  insert.run(
+    "sep1",
+    "2026-09-15",
+    "2026-09",
+    "Ocado",
+    "Ocado",
+    -1000,
+    "spend",
+    "Groceries",
+  );
+  insert.run(
+    "oct1",
+    "2026-10-05",
+    "2026-10",
+    "Ocado",
+    "Ocado",
+    -6000,
+    "spend",
+    "Groceries",
+  );
+  insert.run(
+    "oct2",
+    "2026-10-20",
+    "2026-10",
+    "Ocado",
+    "Ocado",
+    -4000,
+    "spend",
+    "Groceries",
+  );
   // The store's latest row (30 Oct) is a moved-aside transfer, so the
   // October spend stays exactly £100 and the pace maths stays clean.
-  insert.run("oct3", "2026-10-30", "2026-10", "Pocket", "Pocket", -2000, "aside", "Moved aside");
+  insert.run(
+    "oct3",
+    "2026-10-30",
+    "2026-10",
+    "Pocket",
+    "Pocket",
+    -2000,
+    "aside",
+    "Moved aside",
+  );
   const agg = db.prepare(
     `INSERT INTO month_aggregates (person, year_month, category, currency, spend_minor, income_minor, aside_minor, txn_count)
      VALUES ('zonito', ?, ?, 'GBP', ?, ?, ?, ?)`,
@@ -112,7 +172,12 @@ describe("scenario 1: today is 1 November, data ends in October", () => {
     const snap = snapshotAt("2026-11-01");
     expect(snap.monthKey).toBe("2026-11");
     expect(snap.months.map((m) => m.key)).toEqual([
-      "2026-11", "2026-10", "2026-09", "2026-08", "2026-07", "2026-06",
+      "2026-11",
+      "2026-10",
+      "2026-09",
+      "2026-08",
+      "2026-07",
+      "2026-06",
     ]);
     expect(snap.months[0]!.label).toBe("November 2026");
     // Ingest stamps stay data-anchored.
@@ -154,13 +219,25 @@ describe("scenario 1: today is 1 November, data ends in October", () => {
     // £5,000 start + £3,000 salary − 31 days at (100/31)/2 ≈ £50.
     expect(forecast!.hasIncome).toBe(true);
     expect(forecast!.regularsInTotal).toBe(3000);
-    expect(forecast!.series[forecast!.series.length - 1]!.date).toBe("2026-11-30");
+    expect(forecast!.series[forecast!.series.length - 1]!.date).toBe(
+      "2026-11-30",
+    );
     expect(forecast!.projectedEnd).toBeCloseTo(7950, 0);
 
     const flow = flowWindowFor("household");
-    expect(flow[flow.length - 1]).toEqual({ month: "2026-11", income: 0, spend: 0, gap: 0 });
+    expect(flow[flow.length - 1]).toEqual({
+      month: "2026-11",
+      income: 0,
+      spend: 0,
+      gap: 0,
+    });
     // October remains fully itself behind it.
-    expect(flow[flow.length - 2]).toEqual({ month: "2026-10", income: 3000, spend: 100, gap: 2900 });
+    expect(flow[flow.length - 2]).toEqual({
+      month: "2026-10",
+      income: 3000,
+      spend: 100,
+      gap: 2900,
+    });
 
     render(
       <PersonProvider>
@@ -175,8 +252,14 @@ describe("scenario 1: today is 1 November, data ends in October", () => {
     expect(headline.textContent).toContain("In £0.00 · Out £0.00 · Gap +£0.00");
     // Both window bars carry their full figures: November empty,
     // October exactly as it was.
-    expect(screen.getByText("November 2026: in £0.00, out £0.00, gap +£0.00")).toBeTruthy();
-    expect(screen.getByText("October 2026: in £3,000.00, out £100.00, gap +£2,900.00")).toBeTruthy();
+    expect(
+      screen.getByText("November 2026: in £0.00, out £0.00, gap +£0.00"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "October 2026: in £3,000.00, out £100.00, gap +£2,900.00",
+      ),
+    ).toBeTruthy();
   });
 
   it("Activity defaults to November (empty, honest £0) with October still offered", async () => {
@@ -204,7 +287,9 @@ describe("scenario 1: today is 1 November, data ends in October", () => {
     expect(period.value).toBe("2026-11");
     expect([...period.options].map((o) => o.value)).toContain("2026-10");
     await waitFor(() =>
-      expect(screen.getByTestId("listed-summary").textContent).toContain("November 2026"),
+      expect(screen.getByTestId("listed-summary").textContent).toContain(
+        "November 2026",
+      ),
     );
     const summary = screen.getByTestId("listed-summary").textContent ?? "";
     expect(summary).toContain("£0.00 spent");
@@ -217,7 +302,11 @@ describe("scenario 2: today pinned inside the latest data month", () => {
     const snap = snapshotAt("2026-10-15");
     expect(snap.monthKey).toBe("2026-10");
     expect(snap.months.map((m) => m.key)).toEqual([
-      "2026-10", "2026-09", "2026-08", "2026-07", "2026-06",
+      "2026-10",
+      "2026-09",
+      "2026-08",
+      "2026-07",
+      "2026-06",
     ]);
     // Window = October + September, as before the display month.
     expect(snap.txns.map((t) => t.id).sort()).toEqual(
@@ -225,7 +314,11 @@ describe("scenario 2: today pinned inside the latest data month", () => {
     );
     // The Money-in feed is October's, as before.
     expect(snap.income).toHaveLength(1);
-    expect(snap.income[0]).toMatchObject({ day: 28, amount: 3000, type: "Salary" });
+    expect(snap.income[0]).toMatchObject({
+      day: 28,
+      amount: 3000,
+      type: "Salary",
+    });
     expect(snap.monthly.months).toEqual(["2026-09", "2026-10"]);
 
     hydrateData(snap);
@@ -256,10 +349,19 @@ describe("paceFor with a month the data has not reached", () => {
     account: "Revolut Main · Zonito",
     kind: "spend",
   });
-  const october = [spendRow("a", "2026-10", 5, 60), spendRow("b", "2026-10", 20, 40)];
+  const october = [
+    spendRow("a", "2026-10", 5, 60),
+    spendRow("b", "2026-10", 20, 40),
+  ];
 
   it("zero elapsed days fall back to the previous complete month's pace, blended", () => {
-    const pace = paceFor("household", "2026-11", "2026-10-30", october, new Set());
+    const pace = paceFor(
+      "household",
+      "2026-11",
+      "2026-10-30",
+      october,
+      new Set(),
+    );
     expect(pace.elapsedDays).toBe(0);
     expect(pace.remainingDays).toBe(30);
     expect(pace.blended).toBe(true);
@@ -267,7 +369,13 @@ describe("paceFor with a month the data has not reached", () => {
   });
 
   it("a mid-month asOf behaves exactly as before", () => {
-    const pace = paceFor("household", "2026-10", "2026-10-30", october, new Set());
+    const pace = paceFor(
+      "household",
+      "2026-10",
+      "2026-10-30",
+      october,
+      new Set(),
+    );
     expect(pace.elapsedDays).toBe(30);
     expect(pace.remainingDays).toBe(1);
     expect(pace.blended).toBe(false);

@@ -59,12 +59,13 @@ export type ClassifySummary = {
   gateway: GatewayStatus;
 };
 
-type Classification = { category: string; icon: string | null; colour: string | null };
+type Classification = {
+  category: string;
+  icon: string | null;
+  colour: string | null;
+};
 
-function dominantMovement(
-  db: Database.Database,
-  merchant: string,
-): string {
+function dominantMovement(db: Database.Database, merchant: string): string {
   const row = db
     .prepare(
       `SELECT movement, COUNT(*) AS n FROM transactions WHERE merchant = ?
@@ -172,7 +173,8 @@ export async function classifyUnknownMerchants(
   if (!config) {
     return {
       ran: false,
-      reason: "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only",
+      reason:
+        "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only",
       classified: 0,
       failed: 0,
       remaining: reviewQueueCount(db),
@@ -251,6 +253,7 @@ export async function classifyUnknownMerchants(
     classified,
     failed,
     remaining: reviewQueueCount(db),
-    gateway: gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false, provider: null },
+    gateway: gatewayFailure ??
+      gatewayLast ?? { attempted: false, ok: false, provider: null },
   };
 }

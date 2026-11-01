@@ -84,9 +84,9 @@ beforeEach(() => {
           .split(",")
           .filter(Boolean),
       );
-      const transactions = Array.from({ length: 14 }, (_, i) => row(i + 1)).filter(
-        (r) => ids.has(r.id),
-      );
+      const transactions = Array.from({ length: 14 }, (_, i) =>
+        row(i + 1),
+      ).filter((r) => ids.has(r.id));
       return { ok: true, json: async () => ({ ok: true, transactions }) };
     }),
   );
@@ -181,7 +181,9 @@ describe("Subscriptions screen", () => {
         <Subs />
       </PersonProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Streamly transactions/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Streamly transactions/ }),
+    );
     expect(await screen.findByText("Streamly charge 1")).toBeTruthy();
     expect(screen.getByText("Streamly charge 10")).toBeTruthy();
     expect(screen.queryByText("Streamly charge 11")).toBeNull();
@@ -204,11 +206,43 @@ describe("Subscriptions screen section order", () => {
     hydrateData({
       ...SAMPLE_SNAPSHOT,
       subs: [
-        sub({ name: "Yearly Late", freq: "Yearly", amount: 120, charges: 2, nextExpected: "2027-09-01", variants: ["Yearly Late"] }),
-        sub({ name: "Monthly Late", amount: 15, charges: 6, nextExpected: "2026-11-28", variants: ["Monthly Late"] }),
-        sub({ name: "Monthly Mid", amount: 12, charges: 6, nextExpected: "2026-11-15", variants: ["Monthly Mid"] }),
-        sub({ name: "Yearly Soon", freq: "Yearly", amount: 95, charges: 3, nextExpected: "2027-03-14", variants: ["Yearly Soon"] }),
-        sub({ name: "Monthly Soon", amount: 9.99, charges: 14, nextExpected: "2026-11-03", variants: ["Monthly Soon"] }),
+        sub({
+          name: "Yearly Late",
+          freq: "Yearly",
+          amount: 120,
+          charges: 2,
+          nextExpected: "2027-09-01",
+          variants: ["Yearly Late"],
+        }),
+        sub({
+          name: "Monthly Late",
+          amount: 15,
+          charges: 6,
+          nextExpected: "2026-11-28",
+          variants: ["Monthly Late"],
+        }),
+        sub({
+          name: "Monthly Mid",
+          amount: 12,
+          charges: 6,
+          nextExpected: "2026-11-15",
+          variants: ["Monthly Mid"],
+        }),
+        sub({
+          name: "Yearly Soon",
+          freq: "Yearly",
+          amount: 95,
+          charges: 3,
+          nextExpected: "2027-03-14",
+          variants: ["Yearly Soon"],
+        }),
+        sub({
+          name: "Monthly Soon",
+          amount: 9.99,
+          charges: 14,
+          nextExpected: "2026-11-03",
+          variants: ["Monthly Soon"],
+        }),
       ],
     });
     render(

@@ -38,7 +38,11 @@ function stubTransactions(rows: ApiTxnRow[]) {
       ? ASK_DOWN
       : {
           ok: true,
-          json: async () => ({ ok: true, count: rows.length, transactions: rows }),
+          json: async () => ({
+            ok: true,
+            count: rows.length,
+            transactions: rows,
+          }),
         },
   );
   vi.stubGlobal("fetch", fetchMock);
@@ -60,7 +64,11 @@ function stubTransactionsDeferred(rows: ApiTxnRow[]) {
     resolve: () =>
       release?.({
         ok: true,
-        json: async () => ({ ok: true, count: rows.length, transactions: rows }),
+        json: async () => ({
+          ok: true,
+          count: rows.length,
+          transactions: rows,
+        }),
       }),
   };
 }
@@ -88,17 +96,26 @@ describe("Ask full-history record search", () => {
   it("finds a merchant last paid before the snapshot months", async () => {
     const deferred = stubTransactionsDeferred([
       apiRow({ id: "fp-aug" }),
-      apiRow({ id: "fp-may", date: "2026-05-11", month: "2026-05", amountMinor: -1800 }),
+      apiRow({
+        id: "fp-may",
+        date: "2026-05-11",
+        month: "2026-05",
+        amountMinor: -1800,
+      }),
     ]);
     renderAsk();
     const input = screen.getByLabelText("Question about your records");
-    fireEvent.change(input, { target: { value: "When did we last pay Mahavir Sweet Mart?" } });
+    fireEvent.change(input, {
+      target: { value: "When did we last pay Mahavir Sweet Mart?" },
+    });
     fireEvent.submit(input.closest("form")!);
 
     expect(await screen.findByText(/Searching your records…/)).toBeTruthy();
     deferred.resolve();
     expect(
-      await screen.findByText(/The latest matching record is Mahavir Sweet Mart, dated 3 Aug 2026 — £27\.10/),
+      await screen.findByText(
+        /The latest matching record is Mahavir Sweet Mart, dated 3 Aug 2026 — £27\.10/,
+      ),
     ).toBeTruthy();
     expect(screen.queryByText(/No matching transactions/)).toBeNull();
     expect(deferred.fetchMock.mock.calls[0]![0]).toContain("q=mahavir");
@@ -107,20 +124,43 @@ describe("Ask full-history record search", () => {
   it("answers a typed India in August question with that month's total", async () => {
     hydrateData({
       ...SAMPLE_SNAPSHOT,
-      months: [...SAMPLE_SNAPSHOT.months, { key: "2026-08", label: "August 2026" }],
+      months: [
+        ...SAMPLE_SNAPSHOT.months,
+        { key: "2026-08", label: "August 2026" },
+      ],
     });
     const fetchMock = stubTransactions([
-      apiRow({ id: "fp-in1", date: "2026-08-12", description: "Air India", merchant: "Air India", amountMinor: -51200, category: "Holidays" }),
-      apiRow({ id: "fp-in2", date: "2026-08-20", description: "Air India", merchant: "Air India", amountMinor: -8840, category: "Holidays" }),
+      apiRow({
+        id: "fp-in1",
+        date: "2026-08-12",
+        description: "Air India",
+        merchant: "Air India",
+        amountMinor: -51200,
+        category: "Holidays",
+      }),
+      apiRow({
+        id: "fp-in2",
+        date: "2026-08-20",
+        description: "Air India",
+        merchant: "Air India",
+        amountMinor: -8840,
+        category: "Holidays",
+      }),
     ]);
     renderAsk();
     // Typed, not clicked: this question is no longer an example chip
     // (G20d), but a user typing it must still get the month's total.
     const input = screen.getByLabelText("Question about your records");
-    fireEvent.change(input, { target: { value: "What did we spend in India in August?" } });
+    fireEvent.change(input, {
+      target: { value: "What did we spend in India in August?" },
+    });
     fireEvent.submit(input.closest("form")!);
 
-    expect(await screen.findByText(/Total in August 2026: £600\.40 across 2 transactions\./)).toBeTruthy();
+    expect(
+      await screen.findByText(
+        /Total in August 2026: £600\.40 across 2 transactions\./,
+      ),
+    ).toBeTruthy();
     const url = fetchMock.mock.calls[0]![0];
     expect(url).toContain("month=2026-08");
     expect(url).toContain("q=india");
@@ -129,30 +169,67 @@ describe("Ask full-history record search", () => {
   it("states a zero total when the named month has no matching spend", async () => {
     hydrateData({
       ...SAMPLE_SNAPSHOT,
-      months: [...SAMPLE_SNAPSHOT.months, { key: "2026-08", label: "August 2026" }],
+      months: [
+        ...SAMPLE_SNAPSHOT.months,
+        { key: "2026-08", label: "August 2026" },
+      ],
     });
     stubTransactions([]);
     renderAsk();
     const input = screen.getByLabelText("Question about your records");
-    fireEvent.change(input, { target: { value: "What did we spend in India in August?" } });
+    fireEvent.change(input, {
+      target: { value: "What did we spend in India in August?" },
+    });
     fireEvent.submit(input.closest("form")!);
-    expect(await screen.findByText(/Total in August 2026: £0\.00\./)).toBeTruthy();
+    expect(
+      await screen.findByText(/Total in August 2026: £0\.00\./),
+    ).toBeTruthy();
   });
 
   it("answers the Air India example chip from the records search, with exactly three chips shown", async () => {
     const fetchMock = stubTransactions([
-      apiRow({ id: "fp-ai1", date: "2026-09-05", month: "2026-09", description: "Air India", merchant: "Air India", amountMinor: -51200, category: "Holidays" }),
-      apiRow({ id: "fp-ai2", date: "2026-09-12", month: "2026-09", description: "Air India", merchant: "Air India", amountMinor: -8840, category: "Holidays" }),
+      apiRow({
+        id: "fp-ai1",
+        date: "2026-09-05",
+        month: "2026-09",
+        description: "Air India",
+        merchant: "Air India",
+        amountMinor: -51200,
+        category: "Holidays",
+      }),
+      apiRow({
+        id: "fp-ai2",
+        date: "2026-09-12",
+        month: "2026-09",
+        description: "Air India",
+        merchant: "Air India",
+        amountMinor: -8840,
+        category: "Holidays",
+      }),
     ]);
     renderAsk();
     // Exactly three chips, and the old India-in-August chip is gone.
-    expect(screen.getByRole("button", { name: "How much on Ocado this month?" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "When did we last get the boiler serviced?" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "What did we spend in India in August?" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "What did we spend with Air India?" }));
     expect(
-      await screen.findByText(/The latest matching record is Air India, dated 12 Sept 2026 — £88\.40/),
+      screen.getByRole("button", { name: "How much on Ocado this month?" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "When did we last get the boiler serviced?",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: "What did we spend in India in August?",
+      }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "What did we spend with Air India?" }),
+    );
+    expect(
+      await screen.findByText(
+        /The latest matching record is Air India, dated 12 Sept 2026 — £88\.40/,
+      ),
     ).toBeTruthy();
     // No month is named, so the search is a merchant search, not a month pull.
     const url = fetchMock.mock.calls[0]![0];
@@ -161,13 +238,20 @@ describe("Ask full-history record search", () => {
   });
 
   it("falls back to the snapshot search with an honest note when the fetch fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })),
+    );
     renderAsk();
     const input = screen.getByLabelText("Question about your records");
-    fireEvent.change(input, { target: { value: "When did we last pay Ocado?" } });
+    fireEvent.change(input, {
+      target: { value: "When did we last pay Ocado?" },
+    });
     fireEvent.submit(input.closest("form")!);
 
-    expect(await screen.findByText(/Full history could not be searched just now/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Full history could not be searched just now/),
+    ).toBeTruthy();
   });
 });
 
@@ -182,7 +266,9 @@ describe("Ask trip caption", () => {
     stubTransactions([]);
     renderAsk();
     const input = screen.getByLabelText("Question about your records");
-    fireEvent.change(input, { target: { value: "What have holidays cost this month?" } });
+    fireEvent.change(input, {
+      target: { value: "What have holidays cost this month?" },
+    });
     fireEvent.submit(input.closest("form")!);
     expect(screen.getByText("No Holidays charges this month.")).toBeTruthy();
     expect(screen.queryByText(/Nothing on your own accounts/)).toBeNull();

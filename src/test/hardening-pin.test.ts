@@ -31,7 +31,13 @@ describe("hardening pins: money path (hand-recomputed)", () => {
     const totals = new Map<string, { in: number; out: number }>();
     for (const r of rows) {
       const minor = gbpPence(r.amount);
-      const movement = classifyMovement(r.type, r.description, minor, r.currency, r.state);
+      const movement = classifyMovement(
+        r.type,
+        r.description,
+        minor,
+        r.currency,
+        r.state,
+      );
       const bucket = totals.get(r.currency) ?? { in: 0, out: 0 };
       if (movement === "spend") bucket.out += -minor;
       if (movement === "income") bucket.in += minor;

@@ -3,7 +3,11 @@ import { tripAnswer, TXNS, type Person } from "@/lib/data";
 
 describe("Ask trip example", () => {
   it.each<[Person, number, string[]]>([
-    ["household", 1555.4, ["Jet2 Holidays · Tenerife Feb", "Airbnb · Lisbon half-term"]],
+    [
+      "household",
+      1555.4,
+      ["Jet2 Holidays · Tenerife Feb", "Airbnb · Lisbon half-term"],
+    ],
     ["zonito", 1284, ["Jet2 Holidays · Tenerife Feb"]],
     ["nikhila", 271.4, ["Airbnb · Lisbon half-term"]],
   ])("totals Holidays shares for %s", (person, total, merchants) => {

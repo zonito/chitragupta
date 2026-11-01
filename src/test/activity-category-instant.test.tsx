@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { Activity } from "@/routes/activity";
 import { PersonProvider } from "@/components/shell";
 import { DocumentsProvider } from "@/components/documents";
@@ -55,7 +61,10 @@ function merchantRows(merchant: string, amount: string) {
   return screen
     .getAllByText(merchant)
     .map((el) => el.closest("button"))
-    .filter((b): b is HTMLButtonElement => !!b && (b.textContent ?? "").includes(amount));
+    .filter(
+      (b): b is HTMLButtonElement =>
+        !!b && (b.textContent ?? "").includes(amount),
+    );
 }
 
 beforeEach(() => {

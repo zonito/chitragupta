@@ -75,7 +75,9 @@ export function categoryColor(name: string): string {
   );
 }
 export function categoryInk(name: string): string {
-  return CATEGORY_INK[name as (typeof CATEGORIES)[number]] ?? categoryColor(name);
+  return (
+    CATEGORY_INK[name as (typeof CATEGORIES)[number]] ?? categoryColor(name)
+  );
 }
 export function categoryIcon(name: string): string {
   return categoryDefs().find((d) => d.name === name)?.icon ?? "tag";
@@ -158,11 +160,17 @@ export interface IncomeRegular {
   periodDays: number;
 }
 export interface Sub {
-  name: string; amount: number; freq: "Weekly" | "Monthly" | "Quarterly" | "Yearly"; last: string; card: string;
+  name: string;
+  amount: number;
+  freq: "Weekly" | "Monthly" | "Quarterly" | "Yearly";
+  last: string;
+  card: string;
   /** "Cancelled" is a human override label, distinct from the
    * detector's own "Ended"; it behaves like Ended everywhere totals
    * and Coming up are computed. */
-  owner: Owner; status: "Active" | "Ended" | "Cancelled"; note?: string;
+  owner: Owner;
+  status: "Active" | "Ended" | "Cancelled";
+  note?: string;
   /** Number of charges in the recurring amount cluster that defines this sub. */
   charges: number;
   /** Store fingerprints of those cluster charges, in charge order. The
@@ -184,8 +192,15 @@ export interface Sub {
   variants: string[];
 }
 export interface CardItem {
-  label: string; type: "Virtual" | "Physical"; last4: string; owner: Owner;
-  status: "Active" | "Frozen" | "Replaced"; issued: string; frozen?: string; replacedBy?: string; account: string;
+  label: string;
+  type: "Virtual" | "Physical";
+  last4: string;
+  owner: Owner;
+  status: "Active" | "Frozen" | "Replaced";
+  issued: string;
+  frozen?: string;
+  replacedBy?: string;
+  account: string;
 }
 /** One GET /api/review-queue item, as fetched by the Settings sheet. */
 export interface ReviewQueueItem {
@@ -234,27 +249,85 @@ export interface AccountInfo {
  * the values every surface renders (theme token, hex or oklch colour;
  * an icon name from the shared set). System movement labels (Moved
  * aside, Fees, Interest, Transfer) are never categories. */
-export interface CategoryDef { name: string; colour: string; icon: string; builtin: boolean }
+export interface CategoryDef {
+  name: string;
+  colour: string;
+  icon: string;
+  builtin: boolean;
+}
 /** The 9 built-in categories with the colour token and icon each has
  * always had. The server seeds its categories table from this list;
  * the client uses it as the fallback when a snapshot carries none. */
 export const BUILTIN_CATEGORY_DEFS: CategoryDef[] = [
-  { name: "Groceries", colour: "var(--cat-groceries)", icon: "shopping-basket", builtin: true },
-  { name: "Eating out", colour: "var(--cat-eating-out)", icon: "utensils-crossed", builtin: true },
-  { name: "Transport", colour: "var(--cat-transport)", icon: "bus", builtin: true },
-  { name: "School", colour: "var(--cat-school)", icon: "graduation-cap", builtin: true },
+  {
+    name: "Groceries",
+    colour: "var(--cat-groceries)",
+    icon: "shopping-basket",
+    builtin: true,
+  },
+  {
+    name: "Eating out",
+    colour: "var(--cat-eating-out)",
+    icon: "utensils-crossed",
+    builtin: true,
+  },
+  {
+    name: "Transport",
+    colour: "var(--cat-transport)",
+    icon: "bus",
+    builtin: true,
+  },
+  {
+    name: "School",
+    colour: "var(--cat-school)",
+    icon: "graduation-cap",
+    builtin: true,
+  },
   { name: "Home", colour: "var(--cat-home)", icon: "home", builtin: true },
-  { name: "Subscriptions", colour: "var(--cat-subscriptions)", icon: "repeat", builtin: true },
-  { name: "Holidays", colour: "var(--cat-holidays)", icon: "plane", builtin: true },
-  { name: "Shopping", colour: "var(--cat-shopping)", icon: "shopping-bag", builtin: true },
-  { name: "One-off", colour: "var(--cat-one-off)", icon: "receipt", builtin: true },
+  {
+    name: "Subscriptions",
+    colour: "var(--cat-subscriptions)",
+    icon: "repeat",
+    builtin: true,
+  },
+  {
+    name: "Holidays",
+    colour: "var(--cat-holidays)",
+    icon: "plane",
+    builtin: true,
+  },
+  {
+    name: "Shopping",
+    colour: "var(--cat-shopping)",
+    icon: "shopping-bag",
+    builtin: true,
+  },
+  {
+    name: "One-off",
+    colour: "var(--cat-one-off)",
+    icon: "receipt",
+    builtin: true,
+  },
 ];
 export type DocType = "Receipt" | "Bill" | "Invoice" | "Warranty";
 export interface Doc {
-  id: string; merchant: string; date: string; amount: number; type: DocType;
-  txnId?: string; matchedLine?: string; path: string; warrantyEnds?: string; owner?: Owner;
+  id: string;
+  merchant: string;
+  date: string;
+  amount: number;
+  type: DocType;
+  txnId?: string;
+  matchedLine?: string;
+  path: string;
+  warrantyEnds?: string;
+  owner?: Owner;
 }
-export interface NewMerchant { merchant: string; category: Category; amount: number; date: string }
+export interface NewMerchant {
+  merchant: string;
+  category: Category;
+  amount: number;
+  date: string;
+}
 
 /** Full monthly spend history per category, from the precomputed
  * month_aggregates (GBP rows): the Categories timeline chart and the
@@ -339,7 +412,10 @@ export interface DataSnapshot {
   subs: Sub[];
   subOverrides: SubOverride[];
   cards: CardItem[];
-  migration: { moved: { name: string; seen: string }[]; waiting: { name: string; seen: string }[] };
+  migration: {
+    moved: { name: string; seen: string }[];
+    waiting: { name: string; seen: string }[];
+  };
   reviewTotal: number; // TRUE review-queue size; the sheet fetches the items itself from /api/review-queue
   accounts: AccountInfo[];
   categories: CategoryDef[]; // built-ins + user-created, from the store's categories table
@@ -352,7 +428,9 @@ export interface DataSnapshot {
   flowMonthly: MonthlyFlow;
   months6: string[];
   newMerchants: NewMerchant[];
-  biggestOneOff: Partial<Record<Person, { merchant: string; amount: number; date: string }>>;
+  biggestOneOff: Partial<
+    Record<Person, { merchant: string; amount: number; date: string }>
+  >;
 }
 
 export const EMPTY_SNAPSHOT: DataSnapshot = {
@@ -411,7 +489,10 @@ function replace<T>(target: T[], next: T[]): void {
 export function hydrateData(next: DataSnapshot): void {
   snapshot = next;
   replace(ALL_TXNS, next.txns);
-  replace(TXNS, next.txns.filter((t) => t.monthKey === next.monthKey));
+  replace(
+    TXNS,
+    next.txns.filter((t) => t.monthKey === next.monthKey),
+  );
   replace(INCOME, next.income);
   replace(INCOME_REGULARS, next.incomeRegulars ?? []);
   replace(UPCOMING, next.upcoming);
@@ -447,12 +528,23 @@ export const newMerchants = () => snapshot.newMerchants;
 export const reviewTotal = () => snapshot.reviewTotal;
 /** The configured floors & budgets (all unset by default). Defensive
  * fallback: a hand-built snapshot without the field reads as unset. */
-export const appSettings = (): AppSettings => snapshot.settings ?? EMPTY_SETTINGS;
+export const appSettings = (): AppSettings =>
+  snapshot.settings ?? EMPTY_SETTINGS;
 export const biggestOneOff = (p: Person) => snapshot.biggestOneOff[p] ?? null;
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 function monthParts(key: string): { year: number; month: number } {
   const m = key.match(/^(\d{4})-(\d{2})$/);
@@ -483,17 +575,24 @@ export function shareOf(txn: Txn, p: Person): number {
   return txn.owner === p ? txn.amount : 0;
 }
 
-export function upcomingShare(payment: UpcomingPayment, person: Person): number {
+export function upcomingShare(
+  payment: UpcomingPayment,
+  person: Person,
+): number {
   if (person === "household") return payment.amount;
   if (payment.owner === "joint") return payment.amount * JOINT_SHARE;
   return payment.owner === person ? payment.amount : 0;
 }
 export function upcomingFor(person: Person): UpcomingPayment[] {
-  return UPCOMING.filter((payment) => upcomingShare(payment, person) > 0)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.day - b.day);
+  return UPCOMING.filter((payment) => upcomingShare(payment, person) > 0).sort(
+    (a, b) => a.date.localeCompare(b.date) || a.day - b.day,
+  );
 }
 export function upcomingTotal(person: Person): number {
-  return UPCOMING.reduce((sum, payment) => sum + upcomingShare(payment, person), 0);
+  return UPCOMING.reduce(
+    (sum, payment) => sum + upcomingShare(payment, person),
+    0,
+  );
 }
 
 /** How many rows the Home "Coming up" panel lists before summarising. */
@@ -517,15 +616,23 @@ export function upcomingPanel(person: Person): {
   return {
     visible,
     restCount: rest.length,
-    restTotal: rest.reduce((sum, payment) => sum + upcomingShare(payment, person), 0),
+    restTotal: rest.reduce(
+      (sum, payment) => sum + upcomingShare(payment, person),
+      0,
+    ),
     total: upcomingTotal(person),
   };
 }
 export const upcomingDateLabel = (date: string) => {
   const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
   return new Intl.DateTimeFormat("en-GB", {
-    weekday: "short", day: "numeric", month: "short", timeZone: "UTC",
-  }).format(d).replace(",", "");
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  })
+    .format(d)
+    .replace(",", "");
 };
 
 export function txnsFor(p: Person) {
@@ -535,7 +642,10 @@ export function txnsInMonth(monthKey: string): Txn[] {
   return ALL_TXNS.filter((t) => t.monthKey === monthKey);
 }
 export function spendTotal(p: Person) {
-  return TXNS.filter((x) => x.kind === "spend").reduce((s, x) => s + shareOf(x, p), 0);
+  return TXNS.filter((x) => x.kind === "spend").reduce(
+    (s, x) => s + shareOf(x, p),
+    0,
+  );
 }
 export function spendTotalInMonth(p: Person, monthKey: string) {
   return txnsInMonth(monthKey)
@@ -543,18 +653,28 @@ export function spendTotalInMonth(p: Person, monthKey: string) {
     .reduce((s, x) => s + shareOf(x, p), 0);
 }
 export function asideTotal(p: Person) {
-  return TXNS.filter((x) => x.kind === "aside").reduce((s, x) => s + shareOf(x, p), 0);
+  return TXNS.filter((x) => x.kind === "aside").reduce(
+    (s, x) => s + shareOf(x, p),
+    0,
+  );
 }
 export function incomeFor(person: Person): IncomeEntry[] {
-  return INCOME.filter((entry) => person === "household" || entry.owner === person);
+  return INCOME.filter(
+    (entry) => person === "household" || entry.owner === person,
+  );
 }
 export function incomeTotal(person: Person): number {
   return incomeFor(person).reduce((sum, entry) => sum + entry.amount, 0);
 }
 export function byCategory(p: Person) {
   const m: Record<string, number> = {};
-  for (const x of TXNS) if (x.kind === "spend") m[x.category] = (m[x.category] ?? 0) + shareOf(x, p);
-  return categoryNames().map((c) => ({ category: c as Category, amount: m[c] ?? 0 })).filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount);
+  for (const x of TXNS)
+    if (x.kind === "spend")
+      m[x.category] = (m[x.category] ?? 0) + shareOf(x, p);
+  return categoryNames()
+    .map((c) => ({ category: c as Category, amount: m[c] ?? 0 }))
+    .filter((c) => c.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
 }
 
 export function typicalFor(c: string, p: Person) {
@@ -564,8 +684,16 @@ export function typicalTotal(p: Person) {
   return categoryNames().reduce((s, c) => s + typicalFor(c, p), 0);
 }
 export function biggestChanges(p: Person) {
-  const cur = Object.fromEntries(byCategory(p).map((c) => [c.category, c.amount]));
-  return categoryNames().map((c) => ({ category: c as Category, now: cur[c] ?? 0, usual: typicalFor(c, p), diff: (cur[c] ?? 0) - typicalFor(c, p) }))
+  const cur = Object.fromEntries(
+    byCategory(p).map((c) => [c.category, c.amount]),
+  );
+  return categoryNames()
+    .map((c) => ({
+      category: c as Category,
+      now: cur[c] ?? 0,
+      usual: typicalFor(c, p),
+      diff: (cur[c] ?? 0) - typicalFor(c, p),
+    }))
     .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
     .slice(0, 3);
 }
@@ -597,12 +725,22 @@ export function monthlyHistoryFor(p: Person): {
   return { months, rows };
 }
 
-const PER_YEAR: Record<Sub["freq"], number> = { Weekly: 52, Monthly: 12, Quarterly: 4, Yearly: 1 };
+const PER_YEAR: Record<Sub["freq"], number> = {
+  Weekly: 52,
+  Monthly: 12,
+  Quarterly: 4,
+  Yearly: 1,
+};
 export const yearlyOf = (s: Sub) => s.amount * PER_YEAR[s.freq];
 export const monthlyOf = (s: Sub) => yearlyOf(s) / 12;
 
 export const gbp = (n: number, dp = true) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", minimumFractionDigits: dp ? 2 : 0, maximumFractionDigits: dp ? 2 : 0 }).format(n);
+  new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    minimumFractionDigits: dp ? 2 : 0,
+    maximumFractionDigits: dp ? 2 : 0,
+  }).format(n);
 
 /** Compact pounds for tight spaces (chart ticks, per-month net
  * figures at phone width): whole pounds under £1,000, then £k with
@@ -616,21 +754,37 @@ export const gbpCompact = (n: number) => {
   return `£${Number(k.toFixed(k >= 100 ? 0 : 1))}k`;
 };
 
-const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WD = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 export const dayLabel = (d: number, long = false, monthKey?: string) => {
   const { year, month } = monthParts(monthKey ?? snapshot.monthKey);
   const w = WD[new Date(Date.UTC(year, month - 1, d)).getUTCDay()] ?? "";
   const mon = (MONTH_NAMES[month - 1] ?? "").slice(0, 3);
-  return long ? `${w} ${d} ${MONTH_NAMES[month - 1]}` : `${w.slice(0, 3)} ${d} ${mon}`;
+  return long
+    ? `${w} ${d} ${MONTH_NAMES[month - 1]}`
+    : `${w.slice(0, 3)} ${d} ${mon}`;
 };
 /** "3 Oct 2026" for an ISO date — used where a transaction's own month matters. */
 export const dateLabel = (iso: string) => {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
 };
 
-export const ownerName = (o: Owner) => (o === "joint" ? "Joint" : o === "zonito" ? "Zonito" : "Nikhila");
+export const ownerName = (o: Owner) =>
+  o === "joint" ? "Joint" : o === "zonito" ? "Zonito" : "Nikhila";
 
 /**
  * The one place person/owner labels get their emoji: chrome and
@@ -639,7 +793,10 @@ export const ownerName = (o: Owner) => (o === "joint" ? "Joint" : o === "zonito"
  * data-bound strings (statement labels, store account names, API
  * payloads) never carry emoji.
  */
-export const PERSON_CHIP: Record<Person | Owner, { emoji: string; label: string }> = {
+export const PERSON_CHIP: Record<
+  Person | Owner,
+  { emoji: string; label: string }
+> = {
   household: { emoji: "🏠", label: "All" },
   zonito: { emoji: "👨", label: "Zonito" },
   nikhila: { emoji: "👩", label: "Nikhila" },
@@ -658,13 +815,19 @@ export const personLabel = (p: Person | Owner): string => {
 export function formatMoney(amount: number, currency: string | null): string {
   if (!currency || currency === "GBP") return gbp(amount);
   try {
-    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amount);
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency,
+    }).format(amount);
   } catch {
     return `${currency} ${amount.toFixed(2)}`;
   }
 }
 
-export interface CurrencyTotal { currency: string; total: number }
+export interface CurrencyTotal {
+  currency: string;
+  total: number;
+}
 export interface AvailableSummary {
   /** Accounts in this view, ordered for the breakdown sheet: GBP
    *  accounts by balance descending (unknown balances last), then
@@ -696,7 +859,8 @@ export function availableFor(person: Person): AvailableSummary {
   const included = ACCOUNTS.filter(
     (a) => person === "household" || a.owner === person,
   );
-  const group = (a: AccountInfo) => (a.currency === "GBP" || a.currency === null ? 0 : 1);
+  const group = (a: AccountInfo) =>
+    a.currency === "GBP" || a.currency === null ? 0 : 1;
   const accounts = [...included].sort((x, y) => {
     const gx = group(x);
     const gy = group(y);
@@ -715,7 +879,11 @@ export function availableFor(person: Person): AvailableSummary {
     if (a.balanceMinor === null || a.currency === null) continue;
     anyBalance = true;
     if (a.currency === "GBP") gbpMinor += a.balanceMinor;
-    else foreignMinor.set(a.currency, (foreignMinor.get(a.currency) ?? 0) + a.balanceMinor);
+    else
+      foreignMinor.set(
+        a.currency,
+        (foreignMinor.get(a.currency) ?? 0) + a.balanceMinor,
+      );
   }
   const foreign = [...foreignMinor.entries()]
     .map(([currency, minor]) => ({ currency, total: minor / 100 }))
@@ -728,23 +896,40 @@ export function availableFor(person: Person): AvailableSummary {
     const d = a.balanceAsOf ?? a.lastDate;
     return d > m ? d : m;
   }, "");
-  return { accounts, gbpTotal: anyBalance ? gbpMinor / 100 : null, foreign, asOf };
+  return {
+    accounts,
+    gbpTotal: anyBalance ? gbpMinor / 100 : null,
+    foreign,
+    asOf,
+  };
 }
 
-export const docFor = (txnId: string, documents: readonly Doc[] = DOCS) => documents.find((d) => d.txnId === txnId);
-export function receiptForTransaction(txn: Txn, extension: "pdf" | "jpg" | "png" = "pdf"): Doc {
+export const docFor = (txnId: string, documents: readonly Doc[] = DOCS) =>
+  documents.find((d) => d.txnId === txnId);
+export function receiptForTransaction(
+  txn: Txn,
+  extension: "pdf" | "jpg" | "png" = "pdf",
+): Doc {
   const [year = "2026", month = "10"] = txn.date.split("-");
   const merchant = txn.merchant.replace(/[^\p{L}\p{N}]/gu, "") || "Receipt";
   return {
-    id: `receipt-${txn.id}`, merchant: txn.merchant, date: dateLabel(txn.date),
-    amount: txn.amount, type: "Receipt", txnId: txn.id,
+    id: `receipt-${txn.id}`,
+    merchant: txn.merchant,
+    date: dateLabel(txn.date),
+    amount: txn.amount,
+    type: "Receipt",
+    txnId: txn.id,
     path: `PersonalFinance/Documents/Receipts/${year}/${year}-${month}/${txn.date}_${merchant}_£${txn.amount.toFixed(2)}.${extension}`,
   };
 }
 export function attachReceipt(documents: readonly Doc[], receipt: Doc): Doc[] {
-  const existing = (receipt.txnId ? docFor(receipt.txnId, documents) : undefined) ?? documents.find((d) => d.id === receipt.id);
+  const existing =
+    (receipt.txnId ? docFor(receipt.txnId, documents) : undefined) ??
+    documents.find((d) => d.id === receipt.id);
   return existing
-    ? documents.map((d) => d.id === existing.id ? { ...receipt, id: existing.id } : d)
+    ? documents.map((d) =>
+        d.id === existing.id ? { ...receipt, id: existing.id } : d,
+      )
     : [...documents, receipt];
 }
 export function detachReceipt(documents: readonly Doc[], txnId: string): Doc[] {
@@ -773,31 +958,55 @@ export function documentsFor(documents: Doc[], person: Person): Doc[] {
 /** Last 7 days of the loaded month vs the 7 before, by transaction date. */
 export function weeklySpend(person: Person) {
   const maxDay = TXNS.reduce((m, t) => Math.max(m, t.day), 0);
-  const total = (start: number, end: number) => TXNS
-    .filter((t) => t.kind === "spend" && t.day >= start && t.day <= end)
-    .reduce((sum, t) => sum + shareOf(t, person), 0);
-  return { thisWeek: total(maxDay - 6, maxDay), lastWeek: total(maxDay - 13, maxDay - 7) };
+  const total = (start: number, end: number) =>
+    TXNS.filter(
+      (t) => t.kind === "spend" && t.day >= start && t.day <= end,
+    ).reduce((sum, t) => sum + shareOf(t, person), 0);
+  return {
+    thisWeek: total(maxDay - 6, maxDay),
+    lastWeek: total(maxDay - 13, maxDay - 7),
+  };
 }
 export function ocadoAnswer(person: Person) {
-  const household = TXNS.filter((t) => t.kind === "spend" && /^ocado/i.test(t.merchant));
+  const household = TXNS.filter(
+    (t) => t.kind === "spend" && /^ocado/i.test(t.merchant),
+  );
   const own = household.filter((t) => shareOf(t, person) > 0);
   const fallback = own.length === 0;
   const answerPerson = fallback ? "household" : person;
   const orders = fallback ? household : own;
-  return { orders, fallback, total: orders.reduce((sum, t) => sum + shareOf(t, answerPerson), 0), answerPerson };
+  return {
+    orders,
+    fallback,
+    total: orders.reduce((sum, t) => sum + shareOf(t, answerPerson), 0),
+    answerPerson,
+  };
 }
-export function tripAnswer(person: Person, transactions: readonly Txn[] = TXNS) {
-  const household = transactions.filter((t) => t.kind === "spend" && t.category === "Holidays");
+export function tripAnswer(
+  person: Person,
+  transactions: readonly Txn[] = TXNS,
+) {
+  const household = transactions.filter(
+    (t) => t.kind === "spend" && t.category === "Holidays",
+  );
   const own = household.filter((t) => shareOf(t, person) > 0);
   const fallback = own.length === 0;
   const answerPerson = fallback ? "household" : person;
   const orders = fallback ? household : own;
-  return { orders, fallback, total: orders.reduce((sum, t) => sum + shareOf(t, answerPerson), 0), answerPerson };
+  return {
+    orders,
+    fallback,
+    total: orders.reduce((sum, t) => sum + shareOf(t, answerPerson), 0),
+    answerPerson,
+  };
 }
 
 // Fact-based accumulation, no advice: small weekday lunches (Pret).
 export function weekdayLunchFact(person: Person = "household") {
-  const lunches = TXNS.filter((x) => x.kind === "spend" && /^pret/i.test(x.merchant) && shareOf(x, person) > 0);
+  const lunches = TXNS.filter(
+    (x) =>
+      x.kind === "spend" && /^pret/i.test(x.merchant) && shareOf(x, person) > 0,
+  );
   const first = lunches[0];
   const each = first ? shareOf(first, person) : 0;
   const total = lunches.reduce((s, x) => s + shareOf(x, person), 0);
@@ -817,11 +1026,15 @@ function medianOf(values: number[]): number {
     ? sorted[mid]!
     : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
 }
-const monthNameOf = (key: string) => MONTH_NAMES[monthParts(key).month - 1] ?? "";
+const monthNameOf = (key: string) =>
+  MONTH_NAMES[monthParts(key).month - 1] ?? "";
 
 /** This view's monthly moved-aside totals, aligned to the aside
  * series' month range (missing entries read as 0). */
-export function asideMonthlyFor(p: Person): { months: string[]; totals: number[] } {
+export function asideMonthlyFor(p: Person): {
+  months: string[];
+  totals: number[];
+} {
   const months = MONTHLY_ASIDE.months;
   const raw = MONTHLY_ASIDE.totals[p] ?? [];
   return { months, totals: months.map((_, i) => raw[i] ?? 0) };
@@ -829,7 +1042,11 @@ export function asideMonthlyFor(p: Person): { months: string[]; totals: number[]
 
 /** This view's monthly income and spend totals, aligned to the flow
  * series' month range (missing entries read as 0). */
-export function flowMonthlyFor(p: Person): { months: string[]; income: number[]; spend: number[] } {
+export function flowMonthlyFor(p: Person): {
+  months: string[];
+  income: number[];
+  spend: number[];
+} {
   const months = MONTHLY_FLOW.months;
   const inc = MONTHLY_FLOW.income[p] ?? [];
   const out = MONTHLY_FLOW.spend[p] ?? [];
@@ -887,7 +1104,9 @@ export function asidePace(p: Person): { monthKey: string; total: number } {
 export function typicalAside(p: Person): number {
   if (!snapshot.monthKey) return 0;
   return medianOf(
-    [1, 2, 3, 4, 5, 6].map((d) => asideInMonth(p, shiftMonthKey(snapshot.monthKey, -d))),
+    [1, 2, 3, 4, 5, 6].map((d) =>
+      asideInMonth(p, shiftMonthKey(snapshot.monthKey, -d)),
+    ),
   );
 }
 
@@ -925,7 +1144,9 @@ export interface CoachLever {
 export function coachLevers(person: Person): CoachLever[] {
   const settings = appSettings();
   const levers: CoachLever[] = [];
-  const nowByCat = new Map(byCategory(person).map((c) => [c.category as string, c.amount]));
+  const nowByCat = new Map(
+    byCategory(person).map((c) => [c.category as string, c.amount]),
+  );
   const overBudget = new Set<string>();
   for (const [category, minor] of Object.entries(settings.categoryBudgets)) {
     const over = (nowByCat.get(category) ?? 0) - minor / 100;
@@ -987,8 +1208,14 @@ export function coachLevers(person: Person): CoachLever[] {
  * the user to configure one.
  */
 export function coachLines(person: Person): string[] {
-  if (person === "nikhila" && spendTotal("nikhila") === 0 && incomeTotal("nikhila") === 0) {
-    return ["No statements from Nikhila yet — her view fills in as soon as her files are imported."];
+  if (
+    person === "nikhila" &&
+    spendTotal("nikhila") === 0 &&
+    incomeTotal("nikhila") === 0
+  ) {
+    return [
+      "No statements from Nikhila yet — her view fills in as soon as her files are imported.",
+    ];
   }
   const settings = appSettings();
   const available = availableFor(person).gbpTotal;
@@ -1020,7 +1247,9 @@ export function coachLines(person: Person): string[] {
   const chosen = coachLevers(person).slice(0, 2);
   lines.push(...chosen.map((l) => l.line));
   const leverCategories = new Set(
-    chosen.map((l) => l.category).filter((c): c is string => typeof c === "string"),
+    chosen
+      .map((l) => l.category)
+      .filter((c): c is string => typeof c === "string"),
   );
   const paceChosen = chosen.some((l) => l.kind === "pace");
   const asideNow = asideTotal(person);
@@ -1036,7 +1265,9 @@ export function coachLines(person: Person): string[] {
   // 4. The standing facts, minus any a chosen lever already stated.
   const oneOff = biggestOneOff(person);
   if (oneOff && oneOff.amount >= 250) {
-    lines.push(`The big one-off is ${oneOff.merchant} at ${gbp(oneOff.amount, false)} — tagged one-off, so it won't skew your usual month.`);
+    lines.push(
+      `The big one-off is ${oneOff.merchant} at ${gbp(oneOff.amount, false)} — tagged one-off, so it won't skew your usual month.`,
+    );
   }
   const [topChange] = biggestChanges(person);
   if (
@@ -1045,13 +1276,18 @@ export function coachLines(person: Person): string[] {
     topChange.usual > 0 &&
     !leverCategories.has(topChange.category)
   ) {
-    lines.push(`${topChange.category} is ${gbp(Math.abs(topChange.diff), false)} ${topChange.diff > 0 ? "above" : "below"} a usual month.`);
+    lines.push(
+      `${topChange.category} is ${gbp(Math.abs(topChange.diff), false)} ${topChange.diff > 0 ? "above" : "below"} a usual month.`,
+    );
   }
   if (asideNow > 0 && !paceChosen) {
-    lines.push(`${gbp(asideNow, false)} was moved aside into savings and investments.`);
+    lines.push(
+      `${gbp(asideNow, false)} was moved aside into savings and investments.`,
+    );
   }
 
-  if (lines.length === 0) return ["A quiet month so far — nothing stands out against a usual month."];
+  if (lines.length === 0)
+    return ["A quiet month so far — nothing stands out against a usual month."];
   return lines;
 }
 

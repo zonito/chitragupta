@@ -16,7 +16,10 @@ import { Subs } from "@/routes/subscriptions";
  * a container with promoted text.
  */
 
-const shell = readFileSync(resolve(__dirname, "../components/shell.tsx"), "utf8");
+const shell = readFileSync(
+  resolve(__dirname, "../components/shell.tsx"),
+  "utf8",
+);
 
 afterEach(() => {
   hydrateData(SAMPLE_SNAPSHOT);
@@ -30,7 +33,10 @@ describe("shell type scale (class pins)", () => {
   });
 
   it("all four Ask ledger row shapes are text-body, not text-sm", () => {
-    const rows = shell.match(/ledger-row flex justify-between gap-3 py-2 text-(sm|body)/g) ?? [];
+    const rows =
+      shell.match(
+        /ledger-row flex justify-between gap-3 py-2 text-(sm|body)/g,
+      ) ?? [];
     expect(rows).toHaveLength(4);
     expect(rows.every((r) => r.endsWith("text-body"))).toBe(true);
   });
@@ -67,12 +73,22 @@ describe("route type scale (rendered)", () => {
   });
 
   it("the Calculators per-wear sentence is text-body in source (route needs no data)", () => {
-    const calc = readFileSync(resolve(__dirname, "../routes/calculators.tsx"), "utf8");
-    const line = calc.split("\n").find((l) => l.includes("boots worn"));
+    const calc = readFileSync(
+      resolve(__dirname, "../routes/calculators.tsx"),
+      "utf8",
+    );
+    // Format-insensitive: the element wrapping the sentence, from its
+    // opening tag to the sentence itself (JSX may wrap across lines).
+    const elementOf = (needle: string): string => {
+      const at = calc.indexOf(needle);
+      const start = calc.lastIndexOf("<p", at);
+      return calc.slice(start, at);
+    };
+    const line = elementOf("boots worn");
     expect(line).toContain("text-body");
     expect(line).not.toContain("text-caption");
     // The illustration caveat is a genuine caveat and stays caption.
-    const caveat = calc.split("\n").find((l) => l.includes("Interest compounded monthly"));
+    const caveat = elementOf("Interest compounded monthly");
     expect(caveat).toContain("text-caption");
   });
 });

@@ -12,8 +12,18 @@ vi.mock("@tanstack/react-router", async () => {
     useRouter: () => ({ invalidate: async () => {} }),
     // Link needs a RouterProvider in real rendering; in these component
     // tests a plain anchor carries the same href and label.
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -32,7 +42,10 @@ const { Import } = await import("@/routes/import");
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, accounts: [] }) })),
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, accounts: [] }),
+    })),
   );
 });
 afterEach(() => {
@@ -50,7 +63,9 @@ describe("Home empty state", () => {
     );
     expect(screen.getByText("No statements imported yet")).toBeTruthy();
     expect(screen.getByText(/Head to/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Import" }).getAttribute("href")).toBe("/import");
+    expect(
+      screen.getByRole("link", { name: "Import" }).getAttribute("href"),
+    ).toBe("/import");
     expect(container.textContent).not.toContain("Spent in");
     expect(container.textContent).not.toContain("Coming up");
     expect(container.textContent).not.toContain("Biggest changes");
@@ -92,7 +107,9 @@ describe("Import empty state", () => {
       </PersonProvider>,
     );
     expect(
-      screen.getByText(/No accounts yet — accounts appear here once statements have been imported/),
+      screen.getByText(
+        /No accounts yet — accounts appear here once statements have been imported/,
+      ),
     ).toBeTruthy();
   });
 

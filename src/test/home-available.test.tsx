@@ -1,14 +1,18 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { PersonProvider, usePerson } from "@/components/shell";
-import {
-  availableFor,
-  hydrateData,
-  type AccountInfo,
-} from "@/lib/data";
+import { availableFor, hydrateData, type AccountInfo } from "@/lib/data";
 import { SAMPLE_SNAPSHOT } from "@/test/fixtures";
 
 vi.mock("@tanstack/react-router", async () => {
@@ -18,8 +22,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -58,9 +72,25 @@ describe("availableFor", () => {
         acct({ name: "Main", balanceMinor: 10000, currency: "GBP" }),
         acct({ name: "USD-Invest", balanceMinor: 5000, currency: "USD" }),
         acct({ name: "EUR Pot", balanceMinor: 3000, currency: "EUR" }),
-        acct({ name: "Joint Bills", owner: "joint", balanceMinor: 20000, currency: "GBP" }),
-        acct({ name: "Her Current", owner: "nikhila", balanceMinor: null, currency: null, lastDate: "2026-10-29" }),
-        acct({ name: "Her Pro", owner: "nikhila", balanceMinor: 5000, currency: "GBP" }),
+        acct({
+          name: "Joint Bills",
+          owner: "joint",
+          balanceMinor: 20000,
+          currency: "GBP",
+        }),
+        acct({
+          name: "Her Current",
+          owner: "nikhila",
+          balanceMinor: null,
+          currency: null,
+          lastDate: "2026-10-29",
+        }),
+        acct({
+          name: "Her Pro",
+          owner: "nikhila",
+          balanceMinor: 5000,
+          currency: "GBP",
+        }),
       ],
     });
     const avail = availableFor("household");
@@ -102,8 +132,18 @@ describe("availableFor", () => {
       ...SAMPLE_SNAPSHOT,
       accounts: [
         acct({ name: "Main", balanceMinor: 10000, currency: "GBP" }),
-        acct({ name: "Joint Bills", owner: "joint", balanceMinor: 20000, currency: "GBP" }),
-        acct({ name: "Her Pro", owner: "nikhila", balanceMinor: 5000, currency: "GBP" }),
+        acct({
+          name: "Joint Bills",
+          owner: "joint",
+          balanceMinor: 20000,
+          currency: "GBP",
+        }),
+        acct({
+          name: "Her Pro",
+          owner: "nikhila",
+          balanceMinor: 5000,
+          currency: "GBP",
+        }),
       ],
     });
     const zonito = availableFor("zonito");
@@ -117,7 +157,10 @@ describe("availableFor", () => {
   it("no recorded balance anywhere is an honest null, never a zero total", () => {
     hydrateData({
       ...SAMPLE_SNAPSHOT,
-      accounts: [acct({ name: "Main" }), acct({ name: "Her Pro", owner: "nikhila" })],
+      accounts: [
+        acct({ name: "Main" }),
+        acct({ name: "Her Pro", owner: "nikhila" }),
+      ],
     });
     const avail = availableFor("household");
     expect(avail.gbpTotal).toBeNull();
@@ -165,7 +208,16 @@ describe("snapshot account balances", () => {
   it("carries the balance of the latest real run; a later failed run does not pose as the balance", async () => {
     const accounts = await buildAccounts([
       ["zonito", "Main", "2026-10-28T09:00:00.000Z", 3, 3, 14274, "GBP", null],
-      ["zonito", "Main", "2026-10-30T09:00:00.000Z", 0, 0, null, null, "ingest failed for x.csv"],
+      [
+        "zonito",
+        "Main",
+        "2026-10-30T09:00:00.000Z",
+        0,
+        0,
+        null,
+        null,
+        "ingest failed for x.csv",
+      ],
     ]);
     expect(accounts).toHaveLength(1);
     expect(accounts[0]).toMatchObject({
@@ -208,10 +260,14 @@ describe("Home Available card and breakdown", () => {
     );
     // Sample balances: 1250.00 + 342.10 + 5000.00 + 864.20 + 2210.45 + 640.00.
     expect(screen.getAllByText("£10,306.75").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Across 6 accounts · Latest balances · 28 Oct 2026/)).toBeTruthy();
+    expect(
+      screen.getByText(/Across 6 accounts · Latest balances · 28 Oct 2026/),
+    ).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Available balance, show breakdown by account" }),
+      screen.getByRole("button", {
+        name: "Available balance, show breakdown by account",
+      }),
     );
     const dialog = screen.getByRole("dialog");
     expect(dialog.textContent).toContain("Revolut Savings");
@@ -219,7 +275,14 @@ describe("Home Available card and breakdown", () => {
     expect(dialog.textContent).toContain("Total available");
     expect(dialog.textContent).toContain("🤝 Joint · last upload 27 Oct 2026");
     // GBP order in the sheet: biggest balance first.
-    const names = ["Revolut Savings", "Monzo Current", "Revolut Main", "Joint Bills", "Amex Gold", "Revolut Pro"];
+    const names = [
+      "Revolut Savings",
+      "Monzo Current",
+      "Revolut Main",
+      "Joint Bills",
+      "Amex Gold",
+      "Revolut Pro",
+    ];
     const positions = names.map((n) => dialog.textContent!.indexOf(n));
     expect(positions.every((p) => p >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -262,7 +325,9 @@ describe("Home Available card and breakdown", () => {
     );
     expect(screen.getByText(/No balances recorded yet/)).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Available balance, show breakdown by account" }),
+      screen.queryByRole("button", {
+        name: "Available balance, show breakdown by account",
+      }),
     ).toBeNull();
     expect(container.textContent).not.toContain("£0.00");
   });
@@ -300,7 +365,10 @@ describeRepro2("Available totals on the real two-person store (repro2)", () => {
     const res = await api.handleChitraguptaApi(
       new Request("http://test/api/ingest/status"),
     );
-    const body = (await res!.json()) as { ok: boolean; accounts: typeof statusAccounts };
+    const body = (await res!.json()) as {
+      ok: boolean;
+      accounts: typeof statusAccounts;
+    };
     expect(body.ok).toBe(true);
     statusAccounts = body.accounts;
     const { buildSnapshot } = await import("@/lib/snapshot.server");
@@ -342,7 +410,11 @@ describeRepro2("Available totals on the real two-person store (repro2)", () => {
     hydrateData(built);
     const household = availableFor("household");
     const joint = household.accounts.find((a) => a.owner === "joint");
-    expect(joint).toMatchObject({ name: "Joint Bills", balanceMinor: 0, currency: "GBP" });
+    expect(joint).toMatchObject({
+      name: "Joint Bills",
+      balanceMinor: 0,
+      currency: "GBP",
+    });
     const usd = household.accounts.find((a) => a.currency === "USD");
     expect(usd).toMatchObject({ name: "Revolut USD-Invest", balanceMinor: 0 });
     expect(household.foreign).toEqual([]);

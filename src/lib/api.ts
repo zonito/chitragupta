@@ -32,10 +32,7 @@ import {
   seedMerchantMemory,
   type MerchantSource,
 } from "./ingest/merchants";
-import {
-  classifyUnknownMerchants,
-  claudeConfig,
-} from "./ingest/classify";
+import { classifyUnknownMerchants, claudeConfig } from "./ingest/classify";
 import {
   getSettings,
   updateSettings,
@@ -47,7 +44,10 @@ import { loadEnvFile } from "./env.server";
 import { answerAsk } from "./ask.server";
 import { parseAmountQuery } from "./amount-search";
 import { coachJevOpinion, subJevAsk, subJevCached } from "./jev.server";
-import { canonicalMerchant, type SubscriptionOverrideMode } from "./subscriptions";
+import {
+  canonicalMerchant,
+  type SubscriptionOverrideMode,
+} from "./subscriptions";
 import { displayMonthKey } from "./calendar.server";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
@@ -255,7 +255,10 @@ function shiftDay(iso: string, delta: number): string {
 function aggregatesDaily(db: Database.Database, url: URL): Response {
   const person = url.searchParams.get("person") ?? "household";
   if (!SCOPE_PERSONS.has(person)) {
-    return json({ ok: false, error: "person must be household, zonito or nikhila" }, 400);
+    return json(
+      { ok: false, error: "person must be household, zonito or nikhila" },
+      400,
+    );
   }
   const daysParam = Number(url.searchParams.get("days") ?? 30);
   const days = Number.isFinite(daysParam)
@@ -267,7 +270,15 @@ function aggregatesDaily(db: Database.Database, url: URL): Response {
     )
     .get() as { first: string | null; last: string | null };
   if (!span.last) {
-    return json({ ok: true, person, days, start: null, end: null, dataStart: null, buckets: [] });
+    return json({
+      ok: true,
+      person,
+      days,
+      start: null,
+      end: null,
+      dataStart: null,
+      buckets: [],
+    });
   }
   const end = span.last;
   const start = shiftDay(end, -(days - 1));
@@ -294,7 +305,11 @@ function aggregatesDaily(db: Database.Database, url: URL): Response {
     if (!dayMap) byDay.set(r.day, (dayMap = new Map()));
     dayMap.set(category, (dayMap.get(category) ?? 0) + r.spend);
   }
-  const buckets: { date: string; total_minor: number; categories: Record<string, number> }[] = [];
+  const buckets: {
+    date: string;
+    total_minor: number;
+    categories: Record<string, number>;
+  }[] = [];
   for (let i = 0; i < days; i++) {
     const date = shiftDay(start, i);
     const dayMap = byDay.get(date);
@@ -310,7 +325,15 @@ function aggregatesDaily(db: Database.Database, url: URL): Response {
     }
     buckets.push({ date, total_minor: total, categories });
   }
-  return json({ ok: true, person, days, start, end, dataStart: span.first, buckets });
+  return json({
+    ok: true,
+    person,
+    days,
+    start,
+    end,
+    dataStart: span.first,
+    buckets,
+  });
 }
 
 /**
@@ -396,9 +419,15 @@ function accountsInsights(db: Database.Database): Response {
   }[];
 
   const keyOf = (person: string, account: string) => `${person}|${account}`;
-  const flows = new Map<string, { spend: Record<string, number>; moneyIn: Record<string, number> }>();
+  const flows = new Map<
+    string,
+    { spend: Record<string, number>; moneyIn: Record<string, number> }
+  >();
   for (const r of flowRows) {
-    const entry = flows.get(keyOf(r.person, r.account)) ?? { spend: {}, moneyIn: {} };
+    const entry = flows.get(keyOf(r.person, r.account)) ?? {
+      spend: {},
+      moneyIn: {},
+    };
     if (r.spend > 0) entry.spend[r.currency] = r.spend;
     if (r.money_in > 0) entry.moneyIn[r.currency] = r.money_in;
     flows.set(keyOf(r.person, r.account), entry);
@@ -423,7 +452,10 @@ function accountsInsights(db: Database.Database): Response {
     const topCategories = [...(cats.get(key)?.entries() ?? [])]
       .map(([category, spend_minor]) => ({ category, spend_minor }))
       .filter((c) => c.spend_minor > 0)
-      .sort((a, b) => b.spend_minor - a.spend_minor || a.category.localeCompare(b.category))
+      .sort(
+        (a, b) =>
+          b.spend_minor - a.spend_minor || a.category.localeCompare(b.category),
+      )
       .slice(0, 3);
     const big = biggest.get(key);
     return {
@@ -485,7 +517,10 @@ function accountsInsights(db: Database.Database): Response {
 function aggregatesScope(db: Database.Database, url: URL): Response {
   const person = url.searchParams.get("person") ?? "household";
   if (!SCOPE_PERSONS.has(person)) {
-    return json({ ok: false, error: "person must be household, zonito or nikhila" }, 400);
+    return json(
+      { ok: false, error: "person must be household, zonito or nikhila" },
+      400,
+    );
   }
   const scopeParam = url.searchParams.get("scope");
   const kind =
@@ -562,7 +597,10 @@ function aggregatesScope(db: Database.Database, url: URL): Response {
       .all() as { y: string }[]
   ).map((r) => r.y);
   const yearMonths = (y: string): string[] =>
-    Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
+    Array.from(
+      { length: 12 },
+      (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`,
+    );
   const yearSpend = (y: string, category: string): number =>
     yearMonths(y).reduce((s, ym) => s + monthSpend(ym, category), 0);
 
@@ -571,7 +609,9 @@ function aggregatesScope(db: Database.Database, url: URL): Response {
   let inScope: (ym: string) => boolean;
   let typicalFor: (category: string) => number | null;
   if (kind === "month") {
-    seriesPeriods = [5, 4, 3, 2, 1, 0].map((d) => shiftMonthKey(monthParam, -d));
+    seriesPeriods = [5, 4, 3, 2, 1, 0].map((d) =>
+      shiftMonthKey(monthParam, -d),
+    );
     seriesLabels = seriesPeriods.map(shortMonthLabel);
     const prior6 = [6, 5, 4, 3, 2, 1].map((d) => shiftMonthKey(monthParam, -d));
     inScope = (ym) => ym === monthParam;
@@ -662,7 +702,10 @@ function aggregatesScope(db: Database.Database, url: URL): Response {
     body["category"] = categoryParam;
     body["merchants"] = [...merchants.entries()]
       .map(([merchant, spend]) => ({ merchant, spend_minor: spend }))
-      .sort((a, b) => b.spend_minor - a.spend_minor || a.merchant.localeCompare(b.merchant));
+      .sort(
+        (a, b) =>
+          b.spend_minor - a.spend_minor || a.merchant.localeCompare(b.merchant),
+      );
   }
   return json(body);
 }
@@ -875,7 +918,10 @@ async function routeWithDb(
       return json({ ok: false, error: "invalid JSON body" }, 400);
     }
     if (typeof body !== "object" || body === null || Array.isArray(body)) {
-      return json({ ok: false, error: "settings patch must be an object" }, 400);
+      return json(
+        { ok: false, error: "settings patch must be an object" },
+        400,
+      );
     }
     // Only the three known keys form the patch; anything else in the
     // body is ignored rather than stored.
@@ -933,7 +979,8 @@ async function routeWithDb(
     } catch {
       return json({ ok: false, error: "invalid JSON body" }, 400);
     }
-    const merchant = typeof body.merchant === "string" ? body.merchant.trim() : "";
+    const merchant =
+      typeof body.merchant === "string" ? body.merchant.trim() : "";
     if (!merchant) {
       return json({ ok: false, error: "merchant is required" }, 400);
     }
@@ -941,7 +988,11 @@ async function routeWithDb(
     if (result.kind === "ok") {
       return json({
         ok: true,
-        jev: { answers: result.opinion.answers, at: result.opinion.at, cached: false },
+        jev: {
+          answers: result.opinion.answers,
+          at: result.opinion.at,
+          cached: false,
+        },
       });
     }
     if (result.kind === "unavailable") {
@@ -991,7 +1042,9 @@ async function routeWithDb(
     const weekStart = isoWeekMonday(week);
     const month = weekStart ? weekStart.slice(0, 7) : week.slice(0, 7);
     const weekEnd = weekStart
-      ? new Date(Date.parse(weekStart) + 7 * 86400000).toISOString().slice(0, 10)
+      ? new Date(Date.parse(weekStart) + 7 * 86400000)
+          .toISOString()
+          .slice(0, 10)
       : null;
     // byMonth is per-person by contract; the stored household rows are
     // the sum of these, so including them would double the totals for
@@ -1143,7 +1196,9 @@ async function routeWithDb(
           `${amountQuery.text}%`,
         );
       } else {
-        where.push("(t.merchant LIKE ? OR t.description LIKE ? OR n.note LIKE ?)");
+        where.push(
+          "(t.merchant LIKE ? OR t.description LIKE ? OR n.note LIKE ?)",
+        );
         params.push(`%${q}%`, `%${q}%`, `%${q}%`);
       }
     }
@@ -1225,12 +1280,21 @@ async function routeWithDb(
     }
     const key = canonicalMerchant(body.merchant);
     if (body.mode === null || body.mode === undefined) {
-      db.prepare("DELETE FROM subscription_overrides WHERE merchant = ?").run(key);
+      db.prepare("DELETE FROM subscription_overrides WHERE merchant = ?").run(
+        key,
+      );
       return json({ ok: true, merchant: body.merchant, mode: null });
     }
-    const MODES: ReadonlySet<string> = new Set(["force", "suppress", "cancelled"]);
+    const MODES: ReadonlySet<string> = new Set([
+      "force",
+      "suppress",
+      "cancelled",
+    ]);
     if (!MODES.has(body.mode)) {
-      return json({ ok: false, error: "mode must be force, suppress, cancelled or null" }, 400);
+      return json(
+        { ok: false, error: "mode must be force, suppress, cancelled or null" },
+        400,
+      );
     }
     db.prepare(
       `INSERT INTO subscription_overrides (merchant, label, mode, source, updated_at)
@@ -1309,7 +1373,10 @@ async function routeWithDb(
     const extension = documentExtension(filename);
     if (!DOC_EXTENSIONS.has(extension)) {
       return json(
-        { ok: false, error: "file must be a PDF or an image (pdf, jpg, jpeg, png)" },
+        {
+          ok: false,
+          error: "file must be a PDF or an image (pdf, jpg, jpeg, png)",
+        },
         400,
       );
     }
@@ -1467,9 +1534,8 @@ async function routeWithDb(
   const fileMatch = path.match(/^\/api\/documents\/([^/]+)\/file$/);
   if (fileMatch && request.method === "GET") {
     const id = decodeURIComponent(fileMatch[1]!);
-    const row = db
-      .prepare("SELECT * FROM documents WHERE id = ?")
-      .get(id) as DocumentRow | undefined;
+    const row = db.prepare("SELECT * FROM documents WHERE id = ?").get(id) as
+      DocumentRow | undefined;
     if (!row) {
       return json({ ok: false, error: "document not found" }, 404);
     }

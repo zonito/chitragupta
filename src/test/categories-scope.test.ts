@@ -161,10 +161,7 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
           `scope=month&month=2026-10&person=${person}`,
         );
         const fromClient = new Map(
-          byCategory(person).map((c) => [
-            c.category,
-            norm(c.amount * 100),
-          ]),
+          byCategory(person).map((c) => [c.category, norm(c.amount * 100)]),
         );
         expectMapsEqual(rowsMap(body), fromClient);
         expect(norm(body.total_minor)).toBe(
@@ -214,11 +211,14 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
 
   it("all-time scope equals direct weighted SQL over the whole store, typical null", async () => {
     const body = await getScope("scope=all&person=zonito");
-    expectMapsEqual(
-      rowsMap(body),
-      weightedByCategory("zonito", "1 = 1"),
-    );
-    expect(body.seriesPeriods).toEqual(["2022", "2023", "2024", "2025", "2026"]);
+    expectMapsEqual(rowsMap(body), weightedByCategory("zonito", "1 = 1"));
+    expect(body.seriesPeriods).toEqual([
+      "2022",
+      "2023",
+      "2024",
+      "2025",
+      "2026",
+    ]);
     for (const row of body.rows) {
       expect(row.typical_minor).toBeNull();
       expect(row.series).toHaveLength(5);
@@ -261,7 +261,9 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
       .get() as { raw: string };
     const category = uiCategory(resolved.raw);
 
-    const household = await getScope("scope=month&month=2025-04&person=household");
+    const household = await getScope(
+      "scope=month&month=2025-04&person=household",
+    );
     const zonito = await getScope("scope=month&month=2025-04&person=zonito");
     const hRow = household.rows.find((r) => r.category === category)!;
     const zRow = zonito.rows.find((r) => r.category === category)!;
@@ -282,10 +284,20 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
 
   it("month-scope typical is the median of the prior 6 months, computed independently", async () => {
     const body = await getScope("scope=month&month=2026-10&person=household");
-    const prior6 = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+    const prior6 = [
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+    ];
     for (const category of ["Groceries", "Transport"]) {
       const monthly = prior6.map(
-        (ym) => weightedByCategory("household", "t.year_month = ?", [ym]).get(category) ?? 0,
+        (ym) =>
+          weightedByCategory("household", "t.year_month = ?", [ym]).get(
+            category,
+          ) ?? 0,
       );
       const sorted = [...monthly].sort((a, b) => a - b);
       const expected = (sorted[2]! + sorted[3]!) / 2;
@@ -295,7 +307,12 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
     }
     // Series: the 6 months ending at the scope month, last point = total.
     expect(body.seriesPeriods).toEqual([
-      "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
     ]);
     for (const row of body.rows) {
       expect(row.series).toHaveLength(6);
@@ -323,7 +340,9 @@ describeFixture("Categories scoped aggregates (repro copy in /tmp)", () => {
 
   it("rejects a bad person and a bad scope with 400", async () => {
     const badPerson = await api.handleChitraguptaApi(
-      new Request("http://local/api/aggregates?scope=month&month=2026-10&person=nobody"),
+      new Request(
+        "http://local/api/aggregates?scope=month&month=2026-10&person=nobody",
+      ),
     );
     expect(badPerson?.status).toBe(400);
     const badScope = await api.handleChitraguptaApi(

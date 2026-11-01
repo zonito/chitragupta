@@ -1,7 +1,15 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { Activity } from "@/routes/activity";
 import { PersonProvider } from "@/components/shell";
@@ -23,7 +31,10 @@ import { openStore } from "@/lib/ingest/store";
 describe("parseAmountQuery", () => {
   it("accepts plain amounts, £ signs, commas and two-decimal forms", () => {
     expect(parseAmountQuery("148")).toEqual({ minor: 14800, text: "148" });
-    expect(parseAmountQuery("148.00")).toEqual({ minor: 14800, text: "148.00" });
+    expect(parseAmountQuery("148.00")).toEqual({
+      minor: 14800,
+      text: "148.00",
+    });
     expect(parseAmountQuery("£148")).toEqual({ minor: 14800, text: "148" });
     expect(parseAmountQuery("£1,284")).toEqual({ minor: 128400, text: "1284" });
     expect(parseAmountQuery("7.45")).toEqual({ minor: 745, text: "7.45" });
@@ -66,7 +77,9 @@ function renderActivity() {
 }
 
 const search = (value: string) =>
-  fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value } });
+  fireEvent.change(screen.getByPlaceholderText(/Search/), {
+    target: { value },
+  });
 
 describe("Activity amount search (client)", () => {
   beforeEach(() => {
@@ -155,7 +168,9 @@ async function seededApi() {
 async function queryIds(q: string): Promise<string[]> {
   const api = await seededApi();
   const res = (await api.handleChitraguptaApi(
-    new Request(`http://local/api/transactions?q=${encodeURIComponent(q)}&limit=50`),
+    new Request(
+      `http://local/api/transactions?q=${encodeURIComponent(q)}&limit=50`,
+    ),
   ))!;
   expect(res.status).toBe(200);
   const body = (await res.json()) as { transactions: { id: string }[] };

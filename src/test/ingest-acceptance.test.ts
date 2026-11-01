@@ -71,9 +71,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
       .get() as { s: number };
     expect(phantom.s).toBe(0);
     const total = db
-      .prepare(
-        "SELECT COUNT(*) AS n FROM transactions WHERE person = 'zonito'",
-      )
+      .prepare("SELECT COUNT(*) AS n FROM transactions WHERE person = 'zonito'")
       .get() as {
       n: number;
     };
@@ -107,9 +105,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-")));
     const results = ingestAll(db, DATA_DIR!);
     const byAccount = Object.fromEntries(
-      results
-        .filter((r) => r.person === "zonito")
-        .map((r) => [r.account, r]),
+      results.filter((r) => r.person === "zonito").map((r) => [r.account, r]),
     );
     expect(byAccount["Main"]!.balanceMinor).toBe(14274);
     expect(byAccount["Pro"]!.balanceMinor).toBe(15833);

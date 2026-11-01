@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Receipts } from "@/routes/receipts";
 import { Activity } from "@/routes/activity";
 import { PersonProvider } from "@/components/shell";
@@ -50,27 +56,42 @@ describe("Receipts save flow", () => {
     );
 
     const fileInput = container.querySelector('input[type="file"]')!;
-    const file = new File(["pdf-bytes"], "penny.pdf", { type: "application/pdf" });
+    const file = new File(["pdf-bytes"], "penny.pdf", {
+      type: "application/pdf",
+    });
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // The form arrives pre-filled with type Receipt and a date.
-    const typeSelect = screen.getByLabelText("Document type") as HTMLSelectElement;
+    const typeSelect = screen.getByLabelText(
+      "Document type",
+    ) as HTMLSelectElement;
     expect(typeSelect.value).toBe("Receipt");
-    const dateInput = screen.getByLabelText("Document date") as HTMLInputElement;
+    const dateInput = screen.getByLabelText(
+      "Document date",
+    ) as HTMLInputElement;
     expect(dateInput.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
-    fireEvent.change(screen.getByLabelText("Merchant"), { target: { value: "Penny Caulfield" } });
+    fireEvent.change(screen.getByLabelText("Merchant"), {
+      target: { value: "Penny Caulfield" },
+    });
     fireEvent.change(dateInput, { target: { value: "2026-10-09" } });
-    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "148" } });
+    fireEvent.change(screen.getByLabelText("Amount"), {
+      target: { value: "148" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save document" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0]! as unknown as [string, { method: string; body: string }];
+    const [url, init] = fetchMock.mock.calls[0]! as unknown as [
+      string,
+      { method: string; body: string },
+    ];
     expect(url).toBe("/api/documents");
     expect(init.method).toBe("POST");
     const payload = JSON.parse(init.body) as Record<string, unknown>;
     expect(payload["filename"]).toBe("penny.pdf");
-    expect(payload["contentBase64"]).toBe(Buffer.from("pdf-bytes").toString("base64"));
+    expect(payload["contentBase64"]).toBe(
+      Buffer.from("pdf-bytes").toString("base64"),
+    );
     expect(payload["type"]).toBe("Receipt");
     expect(payload["merchant"]).toBe("Penny Caulfield");
     expect(payload["date"]).toBe("2026-10-09");
@@ -101,7 +122,10 @@ describe("Activity attach and detach", () => {
   it("uploads the chosen file with the transaction's merchant, date, amount and fingerprint", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: { body?: string }) => {
       const payload = JSON.parse(init?.body ?? "{}") as {
-        merchant: string; date: string; amount: number; txnId: string;
+        merchant: string;
+        date: string;
+        amount: number;
+        txnId: string;
       };
       const doc: Doc = {
         id: "doc-attached",
@@ -125,15 +149,24 @@ describe("Activity attach and detach", () => {
 
     fireEvent.click(screen.getAllByText("Ocado")[0]!);
     expect(await screen.findByText("Add receipt")).toBeTruthy();
-    const file = new File(["receipt-bytes"], "ocado.pdf", { type: "application/pdf" });
-    fireEvent.change(screen.getByLabelText("Receipt file"), { target: { files: [file] } });
+    const file = new File(["receipt-bytes"], "ocado.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getByLabelText("Receipt file"), {
+      target: { files: [file] },
+    });
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0]! as unknown as [string, { method: string; body: string }];
+    const [url, init] = fetchMock.mock.calls[0]! as unknown as [
+      string,
+      { method: string; body: string },
+    ];
     expect(url).toBe("/api/documents");
     const payload = JSON.parse(init.body) as Record<string, unknown>;
     expect(payload["filename"]).toBe("ocado.pdf");
-    expect(payload["contentBase64"]).toBe(Buffer.from("receipt-bytes").toString("base64"));
+    expect(payload["contentBase64"]).toBe(
+      Buffer.from("receipt-bytes").toString("base64"),
+    );
     expect(payload["merchant"]).toBe("Ocado");
     expect(payload["date"]).toBe("2026-10-29");
     expect(payload["amount"]).toBe(89.3);
@@ -144,7 +177,9 @@ describe("Activity attach and detach", () => {
   });
 
   it("detaches through the detach endpoint and the receipt returns to Add", async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ ok: true, detached: 1 }));
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ ok: true, detached: 1 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     render(
       <PersonProvider>
@@ -155,11 +190,16 @@ describe("Activity attach and detach", () => {
     );
 
     fireEvent.click(screen.getByText("John Lewis"));
-    expect(await screen.findByText("2026-10-11_JohnLewis_£64.00.pdf")).toBeTruthy();
+    expect(
+      await screen.findByText("2026-10-11_JohnLewis_£64.00.pdf"),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0]! as unknown as [string, { method: string; body: string }];
+    const [url, init] = fetchMock.mock.calls[0]! as unknown as [
+      string,
+      { method: string; body: string },
+    ];
     expect(url).toBe("/api/documents/detach");
     expect(JSON.parse(init.body)).toEqual({ txnId: "21" });
     expect(await screen.findByText("Add receipt")).toBeTruthy();

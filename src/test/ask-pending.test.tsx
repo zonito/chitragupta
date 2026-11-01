@@ -23,7 +23,14 @@ const PENNY_QUESTION = "how much have i paid to penny last 2 years?";
 const PENNY_ANSWER = {
   ok: true,
   answer: "You paid Penny Caulfield £4,428.00 in total.",
-  figures: { total: 4428, count: 13, latest: null, perMonth: null, month: null, truncated: false },
+  figures: {
+    total: 4428,
+    count: 13,
+    latest: null,
+    perMonth: null,
+    month: null,
+    truncated: false,
+  },
   ai: true,
 };
 
@@ -73,12 +80,16 @@ afterEach(() => {
 
 describe("Ask pending behaviour", () => {
   it("slow AI answer: working state throughout, no false no-result, answer on completion", async () => {
-    stubFetch(() => delayed(3000, { ok: true, json: async () => PENNY_ANSWER }));
+    stubFetch(() =>
+      delayed(3000, { ok: true, json: async () => PENNY_ANSWER }),
+    );
     renderAsk();
     submit(PENNY_QUESTION);
 
     // The working state is up for the whole wait…
-    expect(await screen.findByText(/Looking through your records…/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Looking through your records…/),
+    ).toBeTruthy();
     expect(screen.queryByText(/No matching transactions/)).toBeNull();
     // …including midway through it (the deterministic search has
     // long settled by now — that was the false-verdict moment).
@@ -93,7 +104,11 @@ describe("Ask pending behaviour", () => {
     expect(screen.getByText(/Looking through your records…/)).toBeTruthy();
 
     expect(
-      await screen.findByText(/You paid Penny Caulfield £4,428\.00 in total\./, undefined, { timeout: 5000 }),
+      await screen.findByText(
+        /You paid Penny Caulfield £4,428\.00 in total\./,
+        undefined,
+        { timeout: 5000 },
+      ),
     ).toBeTruthy();
     expect(screen.getByText(/Across 13 matching transactions/)).toBeTruthy();
     expect(screen.queryByText(/No matching transactions/)).toBeNull();
@@ -103,18 +118,26 @@ describe("Ask pending behaviour", () => {
   it("zero matches: the no-result copy appears only after every search has completed", async () => {
     // The AI endpoint fails (its designed fallback situation) after a
     // delay, and the history search finds nothing.
-    stubFetch(() => delayed(1500, { ok: false, status: 503, json: async () => ({}) }));
+    stubFetch(() =>
+      delayed(1500, { ok: false, status: 503, json: async () => ({}) }),
+    );
     renderAsk();
     submit("when did we last pay the window cleaner?");
 
-    expect(await screen.findByText(/Looking through your records…/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Looking through your records…/),
+    ).toBeTruthy();
     await sleep(600);
     // Still waiting on the AI path: the zero-match verdict must NOT
     // be showing yet.
     expect(screen.queryByText(/No matching transactions/)).toBeNull();
 
     expect(
-      await screen.findByText(/No matching transactions or documents in the household records\./, undefined, { timeout: 5000 }),
+      await screen.findByText(
+        /No matching transactions or documents in the household records\./,
+        undefined,
+        { timeout: 5000 },
+      ),
     ).toBeTruthy();
   }, 15000);
 
@@ -125,7 +148,11 @@ describe("Ask pending behaviour", () => {
         new Promise((_resolve, reject) => {
           const signal = init?.signal;
           signal?.addEventListener("abort", () =>
-            reject(Object.assign(new Error("The operation was aborted"), { name: "AbortError" })),
+            reject(
+              Object.assign(new Error("The operation was aborted"), {
+                name: "AbortError",
+              }),
+            ),
           );
         }),
     );
@@ -144,29 +171,41 @@ describe("Ask pending behaviour", () => {
 
 describe("Ask fresh-state chips and no question echo (addendum)", () => {
   it("chips show only in the fresh state; the asked question is never echoed", async () => {
-    stubFetch(() => Promise.resolve({ ok: true, json: async () => PENNY_ANSWER }));
+    stubFetch(() =>
+      Promise.resolve({ ok: true, json: async () => PENNY_ANSWER }),
+    );
     renderAsk();
     // Fresh: chips visible, no echo block anywhere.
-    expect(screen.getByRole("button", { name: "How much on Ocado this month?" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "How much on Ocado this month?" }),
+    ).toBeTruthy();
     expect(screen.queryByText(/You asked/i)).toBeNull();
 
     const input = screen.getByLabelText("Question about your records");
     fireEvent.change(input, { target: { value: "how much" } });
-    expect(screen.queryByRole("button", { name: "How much on Ocado this month?" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "How much on Ocado this month?" }),
+    ).toBeNull();
     // Clearing back to the fresh empty state restores them.
     fireEvent.change(input, { target: { value: "" } });
-    expect(screen.getByRole("button", { name: "How much on Ocado this month?" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "How much on Ocado this month?" }),
+    ).toBeTruthy();
 
     submit(PENNY_QUESTION);
     expect(
       await screen.findByText(/You paid Penny Caulfield £4,428\.00 in total\./),
     ).toBeTruthy();
     // With an answer rendered: no chips, no echo.
-    expect(screen.queryByRole("button", { name: "How much on Ocado this month?" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "How much on Ocado this month?" }),
+    ).toBeNull();
     expect(screen.queryByText(/You asked/i)).toBeNull();
     // Even clearing the input after asking does not bring them back:
     // something has been asked in this session.
     fireEvent.change(input, { target: { value: "" } });
-    expect(screen.queryByRole("button", { name: "How much on Ocado this month?" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "How much on Ocado this month?" }),
+    ).toBeNull();
   });
 });

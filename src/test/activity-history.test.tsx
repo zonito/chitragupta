@@ -101,9 +101,30 @@ describe("Activity older months", () => {
         { key: "2026-08", label: "August 2026" },
       ],
       txns: [
-        { ...sepTxn, id: "oct-late", date: "2026-10-10", day: 10, monthKey: "2026-10", merchant: "Later Shop" },
-        { ...sepTxn, id: "oct-early", date: "2026-10-10", day: 10, monthKey: "2026-10", merchant: "Earlier Shop" },
-        { ...sepTxn, id: "oct-prev", date: "2026-10-09", day: 9, monthKey: "2026-10", merchant: "Previous Day Shop" },
+        {
+          ...sepTxn,
+          id: "oct-late",
+          date: "2026-10-10",
+          day: 10,
+          monthKey: "2026-10",
+          merchant: "Later Shop",
+        },
+        {
+          ...sepTxn,
+          id: "oct-early",
+          date: "2026-10-10",
+          day: 10,
+          monthKey: "2026-10",
+          merchant: "Earlier Shop",
+        },
+        {
+          ...sepTxn,
+          id: "oct-prev",
+          date: "2026-10-09",
+          day: 9,
+          monthKey: "2026-10",
+          merchant: "Previous Day Shop",
+        },
       ],
     });
     const fetchMock = vi.fn(async (_url: string) => ({
@@ -112,8 +133,18 @@ describe("Activity older months", () => {
         ok: true,
         count: 2,
         transactions: [
-          augRow({ id: "fp-aug-late", date: "2026-08-03", merchant: "Aug Later", description: "Aug Later" }),
-          augRow({ id: "fp-aug-early", date: "2026-08-03", merchant: "Aug Earlier", description: "Aug Earlier" }),
+          augRow({
+            id: "fp-aug-late",
+            date: "2026-08-03",
+            merchant: "Aug Later",
+            description: "Aug Later",
+          }),
+          augRow({
+            id: "fp-aug-early",
+            date: "2026-08-03",
+            merchant: "Aug Earlier",
+            description: "Aug Earlier",
+          }),
         ],
       }),
     }));
@@ -126,13 +157,19 @@ describe("Activity older months", () => {
       </PersonProvider>,
     );
     const text = () => container.textContent ?? "";
-    expect(text().indexOf("Later Shop")).toBeLessThan(text().indexOf("Earlier Shop"));
-    expect(text().indexOf("Earlier Shop")).toBeLessThan(text().indexOf("Previous Day Shop"));
+    expect(text().indexOf("Later Shop")).toBeLessThan(
+      text().indexOf("Earlier Shop"),
+    );
+    expect(text().indexOf("Earlier Shop")).toBeLessThan(
+      text().indexOf("Previous Day Shop"),
+    );
 
     const monthSelect = screen.getByLabelText("Period");
     fireEvent.change(monthSelect, { target: { value: "2026-08" } });
     expect(await screen.findByText("Aug Later")).toBeTruthy();
-    expect(text().indexOf("Aug Later")).toBeLessThan(text().indexOf("Aug Earlier"));
+    expect(text().indexOf("Aug Later")).toBeLessThan(
+      text().indexOf("Aug Earlier"),
+    );
   });
 
   it("renders a snapshot-window month without fetching", () => {

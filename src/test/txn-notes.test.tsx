@@ -1,4 +1,13 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,7 +46,11 @@ const mkTxn = (over: Partial<Txn>): Txn => ({
 function hydrateNotes() {
   const snap = structuredClone(SAMPLE_SNAPSHOT) as DataSnapshot;
   snap.txns = [
-    mkTxn({ id: "fp-note-1", merchant: "Ocado", userNote: "purple banana hammock" }),
+    mkTxn({
+      id: "fp-note-1",
+      merchant: "Ocado",
+      userNote: "purple banana hammock",
+    }),
     mkTxn({ id: "fp-plain-1", merchant: "Tesco", date: "2026-10-19", day: 19 }),
   ];
   hydrateData(snap);
@@ -69,14 +82,22 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).includes("/api/transactions/note")) {
-        const body = JSON.parse(String(init?.body ?? "{}")) as { id: string; note?: string };
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          id: string;
+          note?: string;
+        };
         const note = (body.note ?? "").trim();
-        return new Response(JSON.stringify({ ok: true, id: body.id, note: note || null }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ ok: true, id: body.id, note: note || null }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       }
-      return new Response(JSON.stringify({ ok: true, transactions: [] }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true, transactions: [] }), {
+        status: 200,
+      });
     }),
   );
 });
@@ -105,7 +126,9 @@ describe("Activity notes", () => {
     expect((area as HTMLTextAreaElement).value).toBe("purple banana hammock");
     expect(screen.getByText("Transaction ID")).toBeTruthy();
     expect(screen.getByText("fp-note-1")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Copy transaction ID" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy transaction ID" }),
+    );
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("fp-note-1"));
     expect(await screen.findByText("Copied")).toBeTruthy();
   });
@@ -144,7 +167,9 @@ describe("Activity notes", () => {
     );
     expect(await screen.findByText("Saved")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
-    await waitFor(() => expect(screen.getAllByLabelText("Has a note")).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getAllByLabelText("Has a note")).toHaveLength(2),
+    );
   });
 
   it("the Save note states are token classes, identical under the dark theme", async () => {
@@ -186,7 +211,11 @@ const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"];
 const BOTH_PEOPLE =
   !!DATA_DIR &&
   existsSync(
-    join(DATA_DIR, "Originals", "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv"),
+    join(
+      DATA_DIR,
+      "Originals",
+      "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv",
+    ),
   );
 
 describe.runIf(BOTH_PEOPLE)("Transaction notes (repro2, HTTP)", () => {
@@ -204,8 +233,12 @@ describe.runIf(BOTH_PEOPLE)("Transaction notes (repro2, HTTP)", () => {
       }),
     );
   const getNote = async (id: string): Promise<string | null> => {
-    const res = await api(new Request(`http://test/api/transactions?ids=${encodeURIComponent(id)}`));
-    const body = (await res!.json()) as { transactions: { userNote?: string | null }[] };
+    const res = await api(
+      new Request(`http://test/api/transactions?ids=${encodeURIComponent(id)}`),
+    );
+    const body = (await res!.json()) as {
+      transactions: { userNote?: string | null }[];
+    };
     return body.transactions[0]?.userNote ?? null;
   };
 
@@ -232,12 +265,22 @@ describe.runIf(BOTH_PEOPLE)("Transaction notes (repro2, HTTP)", () => {
   });
 
   it("round-trips set → read → edit → clear over HTTP", async () => {
-    let res = await post("/api/transactions/note", { id: fp, note: "zzq note one" });
-    expect(((await res!.json()) as { note: string | null }).note).toBe("zzq note one");
+    let res = await post("/api/transactions/note", {
+      id: fp,
+      note: "zzq note one",
+    });
+    expect(((await res!.json()) as { note: string | null }).note).toBe(
+      "zzq note one",
+    );
     expect(await getNote(fp)).toBe("zzq note one");
 
-    res = await post("/api/transactions/note", { id: fp, note: "zzq note two" });
-    expect(((await res!.json()) as { note: string | null }).note).toBe("zzq note two");
+    res = await post("/api/transactions/note", {
+      id: fp,
+      note: "zzq note two",
+    });
+    expect(((await res!.json()) as { note: string | null }).note).toBe(
+      "zzq note two",
+    );
     expect(await getNote(fp)).toBe("zzq note two");
 
     res = await post("/api/transactions/note", { id: fp, note: "  " });
@@ -246,19 +289,25 @@ describe.runIf(BOTH_PEOPLE)("Transaction notes (repro2, HTTP)", () => {
   });
 
   it("server search finds a transaction by a word that appears only in its note", async () => {
-    await post("/api/transactions/note", { id: fp, note: "zzqonlyword present" });
-    const hit = (await (
-      await api(new Request("http://test/api/transactions?q=zzqonlyword"))
-    )!.json()) as { transactions: { id: string }[] };
+    await post("/api/transactions/note", {
+      id: fp,
+      note: "zzqonlyword present",
+    });
+    const hit = (await (await api(
+      new Request("http://test/api/transactions?q=zzqonlyword"),
+    ))!.json()) as { transactions: { id: string }[] };
     expect(hit.transactions.map((t) => t.id)).toContain(fp);
-    const miss = (await (
-      await api(new Request("http://test/api/transactions?q=zzqabsentword"))
-    )!.json()) as { transactions: { id: string }[] };
+    const miss = (await (await api(
+      new Request("http://test/api/transactions?q=zzqabsentword"),
+    ))!.json()) as { transactions: { id: string }[] };
     expect(miss.transactions.map((t) => t.id)).not.toContain(fp);
   });
 
   it("the snapshot carries the note, and it survives an ingest rebuild", async () => {
-    await post("/api/transactions/note", { id: fp, note: "zzq keep through rebuild" });
+    await post("/api/transactions/note", {
+      id: fp,
+      note: "zzq keep through rebuild",
+    });
     const { buildSnapshot } = await import("@/lib/snapshot.server");
     const inSnapshot = buildSnapshot().txns.find((t) => t.id === fp);
     expect(inSnapshot?.userNote).toBe("zzq keep through rebuild");

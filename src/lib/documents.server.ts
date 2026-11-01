@@ -49,8 +49,7 @@ export function documentRelativePath(input: {
 }): string {
   const year = input.date.slice(0, 4);
   const yearMonth = input.date.slice(0, 7);
-  const merchant =
-    input.merchant.replace(/[^\p{L}\p{N}]/gu, "") || "Receipt";
+  const merchant = input.merchant.replace(/[^\p{L}\p{N}]/gu, "") || "Receipt";
   return `Documents/${PLURAL[input.type]}/${year}/${yearMonth}/${input.date}_${merchant}_£${input.amount.toFixed(2)}.${input.extension}`;
 }
 

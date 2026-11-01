@@ -18,9 +18,24 @@ const row = (over: Partial<ApiTxnRow>): ApiTxnRow => ({
 });
 
 const mahavirRows: ApiTxnRow[] = [
-  row({ id: "fp-aug", date: "2026-08-03", month: "2026-08", amountMinor: -2710 }),
-  row({ id: "fp-may", date: "2026-05-11", month: "2026-05", amountMinor: -1800 }),
-  row({ id: "fp-dec", date: "2025-12-24", month: "2025-12", amountMinor: -2200 }),
+  row({
+    id: "fp-aug",
+    date: "2026-08-03",
+    month: "2026-08",
+    amountMinor: -2710,
+  }),
+  row({
+    id: "fp-may",
+    date: "2026-05-11",
+    month: "2026-05",
+    amountMinor: -1800,
+  }),
+  row({
+    id: "fp-dec",
+    date: "2025-12-24",
+    month: "2025-12",
+    amountMinor: -2200,
+  }),
 ];
 
 describe("apiTxnToTxn", () => {
@@ -75,12 +90,16 @@ describe("apiTxnToTxn", () => {
   });
 
   it("maps internal and aside movements, and Joint accounts to the joint owner", () => {
-    const transfer = apiTxnToTxn(row({ movement: "internal", account: "Joint", category: "Transfer" }));
+    const transfer = apiTxnToTxn(
+      row({ movement: "internal", account: "Joint", category: "Transfer" }),
+    );
     expect(transfer?.kind).toBe("transfer");
     expect(transfer?.category).toBe("Transfer");
     expect(transfer?.owner).toBe("joint");
     expect(transfer?.account).toBe("Joint Bills · Revolut");
-    const aside = apiTxnToTxn(row({ movement: "aside", category: "Moved aside" }));
+    const aside = apiTxnToTxn(
+      row({ movement: "aside", category: "Moved aside" }),
+    );
     expect(aside?.kind).toBe("aside");
     expect(aside?.category).toBe("Moved aside");
   });
@@ -90,7 +109,9 @@ describe("apiTxnToTxn", () => {
   });
 
   it("keeps a differing description as a note so record search can match it", () => {
-    const txn = apiTxnToTxn(row({ merchant: "Trainline", description: "Train ticket to Edinburgh" }));
+    const txn = apiTxnToTxn(
+      row({ merchant: "Trainline", description: "Train ticket to Edinburgh" }),
+    );
     expect(txn?.note).toBe("Train ticket to Edinburgh");
   });
 });
@@ -108,7 +129,14 @@ describe("searchRecords over API-shaped rows", () => {
   });
 
   it("matches on the description note, the way the API q search does", () => {
-    const txns = [apiTxnToTxn(row({ merchant: "Trainline", description: "Train ticket to Edinburgh" }))!];
+    const txns = [
+      apiTxnToTxn(
+        row({
+          merchant: "Trainline",
+          description: "Train ticket to Edinburgh",
+        }),
+      )!,
+    ];
     const result = searchRecords("edinburgh", "household", [], txns);
     expect(result.records).toHaveLength(1);
   });

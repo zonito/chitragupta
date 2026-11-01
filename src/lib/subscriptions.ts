@@ -104,9 +104,9 @@ function testCluster(charges: SubCharge[]): Cluster | null {
  * Overlapping windows that select the same charges are returned once.
  */
 function amountClusters(charges: SubCharge[]): SubCharge[][] {
-  const amounts = [...new Set(charges.map((c) => Math.abs(c.amountMinor)))].sort(
-    (a, b) => a - b,
-  );
+  const amounts = [
+    ...new Set(charges.map((c) => Math.abs(c.amountMinor))),
+  ].sort((a, b) => a - b);
   const seen = new Set<string>();
   const clusters: SubCharge[][] = [];
   for (const low of amounts) {
@@ -210,7 +210,9 @@ export function detectSubscriptions(
       status: active ? "Active" : "Ended",
       charges: cluster.length,
       chargeIds: cluster.map((c) => c.id),
-      nextExpected: active ? addDays(lastDate, Math.round(best.medianGap)) : null,
+      nextExpected: active
+        ? addDays(lastDate, Math.round(best.medianGap))
+        : null,
       periodDays: Math.round(best.medianGap),
       variants,
       ...(note ? { note } : {}),
@@ -251,7 +253,12 @@ function mostCommonFreq(gaps: number[]): SubFreq {
   let best: SubFreq = "Monthly";
   let bestCount = 0;
   // Monthly is also the fallback, so it wins ties.
-  for (const freq of ["Monthly", "Weekly", "Quarterly", "Yearly"] as SubFreq[]) {
+  for (const freq of [
+    "Monthly",
+    "Weekly",
+    "Quarterly",
+    "Yearly",
+  ] as SubFreq[]) {
     const count = counts.get(freq) ?? 0;
     if (count > bestCount) {
       best = freq;
@@ -275,7 +282,8 @@ function forcedSub(group: SubCharge[], format: DetectFormat): Sub {
     gaps.push((dayMs(sorted[i]!.date) - dayMs(sorted[i - 1]!.date)) / DAY);
   }
   const freq = mostCommonFreq(gaps);
-  const step = gaps.length > 0 ? Math.round(medianOf(gaps)) : FREQ_PERIOD_DAYS[freq];
+  const step =
+    gaps.length > 0 ? Math.round(medianOf(gaps)) : FREQ_PERIOD_DAYS[freq];
   const variantCounts = new Map<string, number>();
   for (const c of sorted) {
     variantCounts.set(c.merchant, (variantCounts.get(c.merchant) ?? 0) + 1);

@@ -143,9 +143,9 @@ export function openStoreFile(path: string): Database.Database {
   // ingest_runs gained a person column when ingest became person-aware
   // (two people can both hold a "Pro" account). Stores created before
   // that have only zonito runs, so the column backfills with his name.
-  const runColumns = db
-    .prepare("PRAGMA table_info(ingest_runs)")
-    .all() as { name: string }[];
+  const runColumns = db.prepare("PRAGMA table_info(ingest_runs)").all() as {
+    name: string;
+  }[];
   if (!runColumns.some((c) => c.name === "person")) {
     db.exec(
       "ALTER TABLE ingest_runs ADD COLUMN person TEXT NOT NULL DEFAULT 'zonito'",

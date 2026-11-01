@@ -71,7 +71,11 @@ describe("Sheet", () => {
   });
 
   it("no call site keeps its own 75vh scroll wrapper", () => {
-    for (const file of ["components/shell.tsx", "routes/activity.tsx", "routes/subscriptions.tsx"]) {
+    for (const file of [
+      "components/shell.tsx",
+      "routes/activity.tsx",
+      "routes/subscriptions.tsx",
+    ]) {
       const src = readFileSync(resolve(__dirname, "..", file), "utf8");
       expect(src, file).not.toContain("max-h-[75vh]");
     }

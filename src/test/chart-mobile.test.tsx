@@ -13,8 +13,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -70,21 +80,35 @@ describe("SpendChart at phone width (350px measured)", () => {
   it("merges 30 day buckets into legible bars with summed figures", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const { container } = render(
-      <SpendChart buckets={dailyBuckets()} selected={null} onSelect={() => {}} />,
+      <SpendChart
+        buckets={dailyBuckets()}
+        selected={null}
+        onSelect={() => {}}
+      />,
     );
     // 30 days merge pairwise into 15 bars (one hit area + title each).
     expect(container.querySelectorAll("title")).toHaveLength(15);
     // The readout defaults to the last merged group, totals summed.
-    expect(screen.getByText(/30 Oct 2026 – 31 Oct 2026 — £100\.00/)).toBeTruthy();
+    expect(
+      screen.getByText(/30 Oct 2026 – 31 Oct 2026 — £100\.00/),
+    ).toBeTruthy();
     // Legend totals are the unmerged sums: 28×50 + 3940 + 800.
-    expect(screen.getByRole("button", { name: `Finance · ${gbp(3940)}` })).toBeTruthy();
-    expect(screen.getByRole("button", { name: `Groceries · ${gbp(28 * 50)}` })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: `Finance · ${gbp(3940)}` }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: `Groceries · ${gbp(28 * 50)}` }),
+    ).toBeTruthy();
   });
 
   it("caps the lone spike: break label carries its exact total, ordinary days stay visible", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const { container } = render(
-      <SpendChart buckets={dailyBuckets()} selected={null} onSelect={() => {}} />,
+      <SpendChart
+        buckets={dailyBuckets()}
+        selected={null}
+        onSelect={() => {}}
+      />,
     );
     // The merged spike group totals £3,990 (£3,940 + the next day's
     // £50): labelled in full above the clipped bar…
@@ -104,9 +128,27 @@ describe("SpendChart at phone width (350px measured)", () => {
   it("uses compact £k tick labels at phone width", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const buckets: ChartBucket[] = [
-      { key: "2026-08", label: "August 2026", short: "Aug", total: 3000, values: { Groceries: 3000 } },
-      { key: "2026-09", label: "September 2026", short: "Sep", total: 5000, values: { Groceries: 5000 } },
-      { key: "2026-10", label: "October 2026", short: "Oct", total: 2000, values: { Groceries: 2000 } },
+      {
+        key: "2026-08",
+        label: "August 2026",
+        short: "Aug",
+        total: 3000,
+        values: { Groceries: 3000 },
+      },
+      {
+        key: "2026-09",
+        label: "September 2026",
+        short: "Sep",
+        total: 5000,
+        values: { Groceries: 5000 },
+      },
+      {
+        key: "2026-10",
+        label: "October 2026",
+        short: "Oct",
+        total: 2000,
+        values: { Groceries: 2000 },
+      },
     ];
     const { container } = render(
       <SpendChart buckets={buckets} selected={null} onSelect={() => {}} />,
@@ -121,9 +163,27 @@ describe("SpendChart at phone width (350px measured)", () => {
 describe("SpendChart without a measured width (desktop path)", () => {
   it("keeps every bucket and the full tick labels", () => {
     const buckets: ChartBucket[] = [
-      { key: "2026-08", label: "August 2026", short: "Aug", total: 20000, values: { Groceries: 20000 } },
-      { key: "2026-09", label: "September 2026", short: "Sep", total: 5000, values: { Groceries: 5000 } },
-      { key: "2026-10", label: "October 2026", short: "Oct", total: 8000, values: { Groceries: 8000 } },
+      {
+        key: "2026-08",
+        label: "August 2026",
+        short: "Aug",
+        total: 20000,
+        values: { Groceries: 20000 },
+      },
+      {
+        key: "2026-09",
+        label: "September 2026",
+        short: "Sep",
+        total: 5000,
+        values: { Groceries: 5000 },
+      },
+      {
+        key: "2026-10",
+        label: "October 2026",
+        short: "Oct",
+        total: 8000,
+        values: { Groceries: 8000 },
+      },
     ];
     const { container } = render(
       <SpendChart buckets={buckets} selected={null} onSelect={() => {}} />,
@@ -138,7 +198,14 @@ describe("Income vs spending compact nets", () => {
     hydrateData({
       ...SAMPLE_SNAPSHOT,
       flowMonthly: {
-        months: ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"],
+        months: [
+          "2026-05",
+          "2026-06",
+          "2026-07",
+          "2026-08",
+          "2026-09",
+          "2026-10",
+        ],
         income: { household: [0, 0, 0, 0, 18775.2, 311.82] },
         spend: { household: [2268.51, 0, 0, 0, 3999.71, 2102.39] },
       },
@@ -156,6 +223,8 @@ describe("Income vs spending compact nets", () => {
     expect(container.textContent).toContain("+£14.8k");
     // The headline gap keeps its full signed figure in one nowrap span.
     const headline = screen.getByText(/In £311\.82/);
-    expect(headline.textContent).toContain("In £311.82 · Out £2,102.39 · Gap −£1,790.57");
+    expect(headline.textContent).toContain(
+      "In £311.82 · Out £2,102.39 · Gap −£1,790.57",
+    );
   });
 });

@@ -107,7 +107,11 @@ describe("Activity listed-total summary", () => {
       t.account === "Revolut Main · Zonito" ? { ...t, accountId: "Main" } : t,
     );
     hydrateData(snap);
-    window.history.pushState({}, "", "/activity?account=Main&accountPerson=zonito");
+    window.history.pushState(
+      {},
+      "",
+      "/activity?account=Main&accountPerson=zonito",
+    );
     renderActivity();
     await waitFor(() => expect(summaryText()).toContain("Revolut Main"));
     expect(summaryText()).toContain("£3,470.59 spent");

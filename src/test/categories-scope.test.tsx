@@ -10,7 +10,14 @@ import { PersonProvider } from "@/components/shell";
  * breakdown comes from the API's merchant mode.
  */
 
-const seriesPeriods = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+const seriesPeriods = [
+  "2026-04",
+  "2026-05",
+  "2026-06",
+  "2026-07",
+  "2026-08",
+  "2026-09",
+];
 const seriesLabels = ["Apr", "May", "Jun", "Jul", "Aug", "Sep"];
 
 function mockFetch() {

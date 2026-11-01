@@ -18,8 +18,18 @@ import type { Person } from "./data";
  */
 
 const MONTH_INDEX: Record<string, number> = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  january: 0,
+  february: 1,
+  march: 2,
+  april: 3,
+  may: 4,
+  june: 5,
+  july: 6,
+  august: 7,
+  september: 8,
+  october: 9,
+  november: 10,
+  december: 11,
 };
 
 // Question-framing words that are never merchant or category content.
@@ -27,16 +37,36 @@ const MONTH_INDEX: Record<string, number> = {
 // there because every term must match); for planning they would poison
 // the term list, so they are stripped here.
 const FRAMING = new Set([
-  "what", "spend", "spent", "spending", "money", "transaction",
-  "transactions", "record", "records", "during", "year", "went", "go", "goes",
+  "what",
+  "spend",
+  "spent",
+  "spending",
+  "money",
+  "transaction",
+  "transactions",
+  "record",
+  "records",
+  "during",
+  "year",
+  "went",
+  "go",
+  "goes",
   // "with" links the question to its merchant ("spend with Air India");
   // as a search term it would poison the every-term-must-match rule.
   "with",
   // Pure framing and period words: they describe the question's shape,
   // never a merchant, so they must not reach record search as terms
   // (its every-term-must-match rule would filter the answer to zero).
-  "total", "expense", "expenses", "week", "weeks", "weekly", "yearly",
-  "monthly", "days", "today",
+  "total",
+  "expense",
+  "expenses",
+  "week",
+  "weeks",
+  "weekly",
+  "yearly",
+  "monthly",
+  "days",
+  "today",
 ]);
 
 // Single-word categories the transactions API can filter on directly;
@@ -143,12 +173,13 @@ const isYearToken = (term: string) => YEAR_TOKEN.test(term);
  * content token. A year buried inside a merchant name ("Boiler
  * Service 2026 Ltd") meets none of these and pins nothing.
  */
-function standaloneYear(lower: string, hasOtherContent: boolean): string | undefined {
+function standaloneYear(
+  lower: string,
+  hasOtherContent: boolean,
+): string | undefined {
   for (const match of lower.matchAll(/\b((?:19|20)\d{2})\b/g)) {
     const year = match[1]!;
-    const prevWord = lower
-      .slice(0, match.index)
-      .match(/([a-z]+)[^a-z]*$/)?.[1];
+    const prevWord = lower.slice(0, match.index).match(/([a-z]+)[^a-z]*$/)?.[1];
     const hasNextWord = /[a-z]/.test(lower.slice(match.index + year.length));
     if (
       prevWord === "in" ||
@@ -164,8 +195,16 @@ function standaloneYear(lower: string, hasOtherContent: boolean): string | undef
 }
 
 const NUMBER_WORDS: Record<string, number> = {
-  one: 1, two: 2, three: 3, four: 4, five: 5,
-  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
 };
 const TOP_NOUN = "(?:transactions?|payments?|purchases?|expenses?|spends?)";
 
@@ -217,7 +256,11 @@ function mondayOfWeek(ymd: string): string {
 /** Shift a YYYY-MM month key by whole months. */
 function shiftMonth(monthKey: string, delta: number): string {
   const d = new Date(
-    Date.UTC(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)) - 1 + delta, 1),
+    Date.UTC(
+      Number(monthKey.slice(0, 4)),
+      Number(monthKey.slice(5, 7)) - 1 + delta,
+      1,
+    ),
   );
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
 }
@@ -295,7 +338,10 @@ export function parseAskQuery(
         // The most recent occurrence of that month not after the current one.
         const year = Number(currentMonthKey.slice(0, 4));
         const candidate = `${year}-${mm}`;
-        month = candidate <= currentMonthKey ? candidate : `${year - 1}-${candidate.slice(5)}`;
+        month =
+          candidate <= currentMonthKey
+            ? candidate
+            : `${year - 1}-${candidate.slice(5)}`;
       }
     }
   }

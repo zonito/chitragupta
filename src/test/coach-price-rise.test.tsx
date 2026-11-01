@@ -69,7 +69,9 @@ describe("Coach price-rise insight (G17)", () => {
     ]);
     expect(screen.getByText("A subscription price went up")).toBeTruthy();
     expect(
-      screen.getByText(/Netflix is now £18\.99, up from £17\.99\. That's £12\.00 more a year\./),
+      screen.getByText(
+        /Netflix is now £18\.99, up from £17\.99\. That's £12\.00 more a year\./,
+      ),
     ).toBeTruthy();
   });
 
@@ -85,7 +87,9 @@ describe("Coach price-rise insight (G17)", () => {
       }),
     ]);
     expect(
-      screen.getByText(/Grammarly is now £115\.09, up from £114\.23\. That's £0\.86 more a year\./),
+      screen.getByText(
+        /Grammarly is now £115\.09, up from £114\.23\. That's £0\.86 more a year\./,
+      ),
     ).toBeTruthy();
   });
 });

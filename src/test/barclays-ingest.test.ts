@@ -34,9 +34,30 @@ const row = (
 /** A minimal Revolut Main export (Zonito's, by the f5660e hint). */
 const REVOLUT_MAIN = [
   HEADER,
-  row("Deposit", "Main", "2026-09-10", "Bank transfer deposit", "500.00", "500.00"),
-  row("Deposit", "Main", "2026-09-21", "Bank transfer deposit", "3000.00", "3500.00"),
-  row("Card Payment", "Main", "2026-09-06", "EXAMPLE COFFEE", "-4.50", "3495.50"),
+  row(
+    "Deposit",
+    "Main",
+    "2026-09-10",
+    "Bank transfer deposit",
+    "500.00",
+    "500.00",
+  ),
+  row(
+    "Deposit",
+    "Main",
+    "2026-09-21",
+    "Bank transfer deposit",
+    "3000.00",
+    "3500.00",
+  ),
+  row(
+    "Card Payment",
+    "Main",
+    "2026-09-06",
+    "EXAMPLE COFFEE",
+    "-4.50",
+    "3495.50",
+  ),
 ].join("\n");
 
 /** The prepared Barclays file: two products in one export. */
@@ -45,17 +66,73 @@ const BARCLAYS_FILE = [
   // Current account: salary (varying ±25% around £4,500), a transfer
   // to his own Revolut, two direct debits (one is the card
   // settlement), a card payment. No Balance column values at all.
-  row("Transfer", "Current", "2026-08-28", "EXAMPLE EMPLOYER LTD BGC", "4000.00"),
-  row("Transfer", "Current", "2026-09-20", "EXAMPLE NAME TO REVOLUT -ABCD- FT", "-3000.00"),
-  row("Transfer", "Current", "2026-09-28", "EXAMPLE EMPLOYER LTD BGC", "5000.00"),
-  row("Direct Debit", "Current", "2026-09-15", "EXAMPLE UTILITIES LTD DDR", "-100.00"),
-  row("Direct Debit", "Current", "2026-09-16", "B/CARD PLAT VISA 0000000000000000 DDR", "-59.00"),
-  row("Card Payment", "Current", "2026-09-05", "EXAMPLE SHOP ON 05 SEP BCC", "-25.00"),
-  row("Transfer", "Current", "2026-10-28", "EXAMPLE EMPLOYER LTD BGC", "4500.00"),
+  row(
+    "Transfer",
+    "Current",
+    "2026-08-28",
+    "EXAMPLE EMPLOYER LTD BGC",
+    "4000.00",
+  ),
+  row(
+    "Transfer",
+    "Current",
+    "2026-09-20",
+    "EXAMPLE NAME TO REVOLUT -ABCD- FT",
+    "-3000.00",
+  ),
+  row(
+    "Transfer",
+    "Current",
+    "2026-09-28",
+    "EXAMPLE EMPLOYER LTD BGC",
+    "5000.00",
+  ),
+  row(
+    "Direct Debit",
+    "Current",
+    "2026-09-15",
+    "EXAMPLE UTILITIES LTD DDR",
+    "-100.00",
+  ),
+  row(
+    "Direct Debit",
+    "Current",
+    "2026-09-16",
+    "B/CARD PLAT VISA 0000000000000000 DDR",
+    "-59.00",
+  ),
+  row(
+    "Card Payment",
+    "Current",
+    "2026-09-05",
+    "EXAMPLE SHOP ON 05 SEP BCC",
+    "-25.00",
+  ),
+  row(
+    "Transfer",
+    "Current",
+    "2026-10-28",
+    "EXAMPLE EMPLOYER LTD BGC",
+    "4500.00",
+  ),
   // The card: one purchase, settled in full by direct debit. The
   // Balance column is −(owed), so the settlement returns it to 0.00.
-  row("Card Payment", "Barclaycard", "2026-09-03", "EXAMPLE STORE", "-59.00", "-59.00"),
-  row("Transfer", "Barclaycard", "2026-09-16", "Payment By Direct Debit", "59.00", "0.00"),
+  row(
+    "Card Payment",
+    "Barclaycard",
+    "2026-09-03",
+    "EXAMPLE STORE",
+    "-59.00",
+    "-59.00",
+  ),
+  row(
+    "Transfer",
+    "Barclaycard",
+    "2026-09-16",
+    "Payment By Direct Debit",
+    "59.00",
+    "0.00",
+  ),
 ].join("\n");
 
 function makeDataDir(): string {
@@ -69,7 +146,13 @@ function makeDataDir(): string {
     REVOLUT_MAIN,
   );
   writeFileSync(
-    join(dir, "Zonito", "Barclay", "Barclaycard", "barclaycard-full-history.csv"),
+    join(
+      dir,
+      "Zonito",
+      "Barclay",
+      "Barclaycard",
+      "barclaycard-full-history.csv",
+    ),
     BARCLAYS_FILE,
   );
   return dir;
@@ -99,9 +182,9 @@ describe("Barclays discovery and account mapping", () => {
         "Zonito/Barclay/Barclaycard/barclaycard-full-history.csv",
       );
     }
-    expect(barclays.find((a) => a.account === "Barclays Current")!.product).toBe(
-      "Current",
-    );
+    expect(
+      barclays.find((a) => a.account === "Barclays Current")!.product,
+    ).toBe("Current");
     expect(barclays.find((a) => a.account === "Barclaycard")!.product).toBe(
       "Barclaycard",
     );
@@ -145,7 +228,6 @@ describe("Barclays discovery and account mapping", () => {
     expect(run.balance_minor).toBeNull();
     db.close();
   });
-
 });
 
 describe("Barclays movement mapping and transfer matching", () => {
@@ -188,7 +270,11 @@ describe("Barclays movement mapping and transfer matching", () => {
     const db = makeStore();
     ingestAccounts(db, makeDataDir());
     expect(
-      movementOf(db, "B/CARD PLAT VISA 0000000000000000 DDR", "Barclays Current"),
+      movementOf(
+        db,
+        "B/CARD PLAT VISA 0000000000000000 DDR",
+        "Barclays Current",
+      ),
     ).toBe("aside");
     expect(movementOf(db, "Payment By Direct Debit", "Barclaycard")).toBe(
       "aside",
@@ -247,9 +333,7 @@ describe("Barclays movement mapping and transfer matching", () => {
       })),
       "2026-10-28",
     );
-    const salary = regulars.find(
-      (r) => r.name === "EXAMPLE EMPLOYER LTD BGC",
-    );
+    const salary = regulars.find((r) => r.name === "EXAMPLE EMPLOYER LTD BGC");
     expect(salary).toBeDefined();
     // £4,000 / £5,000 / £4,500: no 7% cluster, so the median band
     // carries it, projected at the £4,500 median.

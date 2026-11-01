@@ -54,7 +54,9 @@ const apiRow = (over: Partial<ApiTxnRow>): ApiTxnRow => ({
 describe("apiTxnToTxn time", () => {
   it("a timestamped row maps its time; a midnight row maps none", () => {
     expect(apiTxnToTxn(apiRow({}))?.time).toBe("14:32");
-    expect(apiTxnToTxn(apiRow({ date: "2026-10-23 00:00:00" }))?.time).toBeUndefined();
+    expect(
+      apiTxnToTxn(apiRow({ date: "2026-10-23 00:00:00" }))?.time,
+    ).toBeUndefined();
     expect(apiTxnToTxn(apiRow({ date: "2026-10-23" }))?.time).toBeUndefined();
   });
 });

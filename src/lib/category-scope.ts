@@ -22,7 +22,8 @@ export type ScopeSelection =
 export function parseScope(value: string): ScopeSelection {
   if (value === "all") return { kind: "all" };
   if (value.startsWith("year:")) return { kind: "year", year: value.slice(5) };
-  if (value.startsWith("month:")) return { kind: "month", month: value.slice(6) };
+  if (value.startsWith("month:"))
+    return { kind: "month", month: value.slice(6) };
   return { kind: "all" };
 }
 
@@ -95,7 +96,11 @@ function scopeParams(value: string, person: Person): URLSearchParams {
   return params;
 }
 
-async function fetchScope(value: string, person: Person, category?: string): Promise<ApiScopeBody> {
+async function fetchScope(
+  value: string,
+  person: Person,
+  category?: string,
+): Promise<ApiScopeBody> {
   const params = scopeParams(value, person);
   if (category) params.set("category", category);
   const res = await fetch(`/api/aggregates?${params.toString()}`);

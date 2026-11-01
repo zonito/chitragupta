@@ -1,15 +1,46 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { usePerson, PageTitle, Panel, Chip, Label, CategoryChip, meta } from "@/components/shell";
-import { ACCOUNTS, CARDS, MIGRATION, personLabel, gbp, formatMoney, dateLabel, monthOptions, type AccountInfo, type CardItem, type Category, type Owner, type Person } from "@/lib/data";
+import {
+  usePerson,
+  PageTitle,
+  Panel,
+  Chip,
+  Label,
+  CategoryChip,
+  meta,
+} from "@/components/shell";
+import {
+  ACCOUNTS,
+  CARDS,
+  MIGRATION,
+  personLabel,
+  gbp,
+  formatMoney,
+  dateLabel,
+  monthOptions,
+  type AccountInfo,
+  type CardItem,
+  type Category,
+  type Owner,
+  type Person,
+} from "@/lib/data";
 import { migrateStoredCards, newCardId, type StoredCard } from "@/lib/cards";
-import { fetchAccountInsights, primaryFigures, type AccountInsight, type AccountsData } from "@/lib/accounts";
+import {
+  fetchAccountInsights,
+  primaryFigures,
+  type AccountInsight,
+  type AccountsData,
+} from "@/lib/accounts";
 import { AnimatedBar } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/cards")({
-  head: () => meta("Cards", "Card register with a migration watch for the card being rotated."),
+  head: () =>
+    meta(
+      "Cards",
+      "Card register with a migration watch for the card being rotated.",
+    ),
   component: Cards,
 });
 
@@ -43,7 +74,10 @@ export function AccountsSection({ person }: { person: Person }) {
     };
   }, []);
   const byKey = useMemo(
-    () => new Map((data?.accounts ?? []).map((a) => [`${a.person}|${a.account}`, a])),
+    () =>
+      new Map(
+        (data?.accounts ?? []).map((a) => [`${a.person}|${a.account}`, a]),
+      ),
     [data],
   );
   if (ACCOUNTS.length === 0) return null;
@@ -56,7 +90,10 @@ export function AccountsSection({ person }: { person: Person }) {
   const groups: { owner: Owner; list: AccountInfo[] }[] =
     person === "household"
       ? (["zonito", "nikhila", "joint"] as Owner[])
-          .map((owner) => ({ owner, list: visible.filter((a) => a.owner === owner) }))
+          .map((owner) => ({
+            owner,
+            list: visible.filter((a) => a.owner === owner),
+          }))
           .filter((g) => g.list.length > 0)
       : [{ owner: person as Owner, list: visible }];
 
@@ -65,13 +102,16 @@ export function AccountsSection({ person }: { person: Person }) {
       <h2 className="mb-3 text-heading font-semibold">Accounts</h2>
       {failed && (
         <p className="mb-3 text-caption text-muted-foreground">
-          This month's account figures could not be loaded just now — balances are still shown.
+          This month's account figures could not be loaded just now — balances
+          are still shown.
         </p>
       )}
       {groups.map((g) => (
         <div key={g.owner} className="mb-5 last:mb-0">
           {person === "household" && (
-            <h3 className="mb-2 text-body font-medium">{personLabel(g.owner)}</h3>
+            <h3 className="mb-2 text-body font-medium">
+              {personLabel(g.owner)}
+            </h3>
           )}
           <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
             {g.list.map((a) => (
@@ -114,7 +154,8 @@ function AccountInsightCard({
           <div className="min-w-0">
             <div className="truncate text-body font-medium">{info.name}</div>
             <div className="text-caption text-muted-foreground">
-              {personLabel(info.owner)} · last statement {dateLabel(info.lastDate)}
+              {personLabel(info.owner)} · last statement{" "}
+              {dateLabel(info.lastDate)}
             </div>
           </div>
         </div>
@@ -129,24 +170,32 @@ function AccountInsightCard({
         </div>
       </div>
       {loading && (
-        <p className="mt-3 text-caption text-muted-foreground">Loading this month's figures…</p>
+        <p className="mt-3 text-caption text-muted-foreground">
+          Loading this month's figures…
+        </p>
       )}
       {insight && !figures && (
         <p className="mt-3 text-caption text-muted-foreground">
-          No spending or money in{monthLabel ? ` in ${monthLabel}` : " this month"}.
+          No spending or money in
+          {monthLabel ? ` in ${monthLabel}` : " this month"}.
         </p>
       )}
       {figures && (
         <p className="num mt-3 text-body">
           Spent {formatMoney(figures.spend, figures.currency)} · In{" "}
           {formatMoney(figures.moneyIn, figures.currency)}
-          {monthLabel && <span className="text-muted-foreground"> · {monthLabel}</span>}
+          {monthLabel && (
+            <span className="text-muted-foreground"> · {monthLabel}</span>
+          )}
         </p>
       )}
       {figures?.others.map((o) => (
-        <p key={o.currency} className="num mt-1 text-caption text-muted-foreground">
-          Also {formatMoney(o.spend, o.currency)} spent · {formatMoney(o.moneyIn, o.currency)} in
-          (in {o.currency})
+        <p
+          key={o.currency}
+          className="num mt-1 text-caption text-muted-foreground"
+        >
+          Also {formatMoney(o.spend, o.currency)} spent ·{" "}
+          {formatMoney(o.moneyIn, o.currency)} in (in {o.currency})
         </p>
       ))}
       {insight && insight.topCategories.length > 0 && (
@@ -164,8 +213,11 @@ function AccountInsightCard({
       {insight?.biggest && (
         <p className="mt-3 text-caption text-muted-foreground">
           Biggest payment: {insight.biggest.merchant} ·{" "}
-          {formatMoney(insight.biggest.amount_minor / 100, insight.biggest.currency)} ·{" "}
-          {dateLabel(insight.biggest.date)}
+          {formatMoney(
+            insight.biggest.amount_minor / 100,
+            insight.biggest.currency,
+          )}{" "}
+          · {dateLabel(insight.biggest.date)}
         </p>
       )}
     </>
@@ -202,12 +254,18 @@ export function Cards() {
       // to the id-carrying shape on restore; the save effect below then
       // persists the migrated shape under the same key.
       if (raw) setAdded(migrateStoredCards(JSON.parse(raw)));
-    } catch { /* unreadable storage: start empty */ }
+    } catch {
+      /* unreadable storage: start empty */
+    }
     setRestored(true);
   }, []);
   useEffect(() => {
     if (!restored) return;
-    try { localStorage.setItem(CARDS_KEY, JSON.stringify(added)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(CARDS_KEY, JSON.stringify(added));
+    } catch {
+      /* ignore */
+    }
   }, [added, restored]);
 
   const all = [...CARDS, ...added];
@@ -234,7 +292,9 @@ export function Cards() {
   const [type, setType] = useState<CardItem["type"]>("Virtual");
   const [last4, setLast4] = useState("");
   const [account, setAccount] = useState("");
-  const [owner, setOwner] = useState<Owner>(person === "household" ? "zonito" : person);
+  const [owner, setOwner] = useState<Owner>(
+    person === "household" ? "zonito" : person,
+  );
   // The Owner select follows the person switch, not just the person at
   // mount: switching person re-points the form at the new person.
   useEffect(() => {
@@ -252,76 +312,154 @@ export function Cards() {
         last4: cleanLast4,
         owner,
         status: "Active",
-        issued: new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date()),
+        issued: new Intl.DateTimeFormat("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(new Date()),
         account: account.trim(),
       },
     ]);
-    setLabel(""); setLast4(""); setAccount("");
+    setLabel("");
+    setLast4("");
+    setAccount("");
   };
 
   return (
     <div>
-      <PageTitle sub={frozen ? `${frozen.type} ending ${frozen.last4} is frozen` : "Every card, in one register"}>Cards</PageTitle>
+      <PageTitle
+        sub={
+          frozen
+            ? `${frozen.type} ending ${frozen.last4} is frozen`
+            : "Every card, in one register"
+        }
+      >
+        Cards
+      </PageTitle>
 
       <AccountsSection person={person} />
 
       {showWatch && (
         <Panel className="mb-6 bg-secondary">
-          <Label>{frozen ? `Migration watch · ${frozen.last4} → ${frozen.replacedBy!.replace(/\D/g, "")}` : "Migration watch"}</Label>
+          <Label>
+            {frozen
+              ? `Migration watch · ${frozen.last4} → ${frozen.replacedBy!.replace(/\D/g, "")}`
+              : "Migration watch"}
+          </Label>
           <div className="mt-3">
-            <div className="mb-1.5 text-caption text-muted-foreground">{MIGRATION.moved.length} of {MIGRATION.moved.length + MIGRATION.waiting.length} moved</div>
-            <div className="h-1.5 rounded-lg bg-muted" role="progressbar" aria-label="Cards migration" aria-valuemin={0} aria-valuemax={MIGRATION.moved.length + MIGRATION.waiting.length} aria-valuenow={MIGRATION.moved.length}>
-              <AnimatedBar percent={MIGRATION.moved.length / (MIGRATION.moved.length + MIGRATION.waiting.length) * 100} className="bg-good" />
+            <div className="mb-1.5 text-caption text-muted-foreground">
+              {MIGRATION.moved.length} of{" "}
+              {MIGRATION.moved.length + MIGRATION.waiting.length} moved
+            </div>
+            <div
+              className="h-1.5 rounded-lg bg-muted"
+              role="progressbar"
+              aria-label="Cards migration"
+              aria-valuemin={0}
+              aria-valuemax={MIGRATION.moved.length + MIGRATION.waiting.length}
+              aria-valuenow={MIGRATION.moved.length}
+            >
+              <AnimatedBar
+                percent={
+                  (MIGRATION.moved.length /
+                    (MIGRATION.moved.length + MIGRATION.waiting.length)) *
+                  100
+                }
+                className="bg-good"
+              />
             </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <div className="mb-2 text-body font-medium text-good">Moved ({MIGRATION.moved.length})</div>
+              <div className="mb-2 text-body font-medium text-good">
+                Moved ({MIGRATION.moved.length})
+              </div>
               {MIGRATION.moved.map((m) => (
-                <div key={m.name} className="mb-2"><div className="text-body">{m.name}</div><div className="text-caption text-muted-foreground">{m.seen}</div></div>
+                <div key={m.name} className="mb-2">
+                  <div className="text-body">{m.name}</div>
+                  <div className="text-caption text-muted-foreground">
+                    {m.seen}
+                  </div>
+                </div>
               ))}
             </div>
             <div>
-              <div className="mb-2 text-body font-medium text-warn">Not seen yet ({MIGRATION.waiting.length})</div>
+              <div className="mb-2 text-body font-medium text-warn">
+                Not seen yet ({MIGRATION.waiting.length})
+              </div>
               {MIGRATION.waiting.map((m) => (
-                <div key={m.name} className="mb-2"><div className="text-body">{m.name}</div><div className="text-caption text-muted-foreground">{m.seen}</div></div>
+                <div key={m.name} className="mb-2">
+                  <div className="text-body">{m.name}</div>
+                  <div className="text-caption text-muted-foreground">
+                    {m.seen}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-          <p className="mt-2 border-t border-dashed pt-3 text-body text-muted-foreground">Still needed? If not, let them lapse on the frozen card.</p>
+          <p className="mt-2 border-t border-dashed pt-3 text-body text-muted-foreground">
+            Still needed? If not, let them lapse on the frozen card.
+          </p>
         </Panel>
       )}
 
       <div className="rounded-xl border bg-card px-4">
         {list.length === 0 && (
-          <p className="py-6 text-center text-body text-muted-foreground">No cards registered yet. Statements do not say which card was used, so cards are kept here by hand — add your first one below.</p>
+          <p className="py-6 text-center text-body text-muted-foreground">
+            No cards registered yet. Statements do not say which card was used,
+            so cards are kept here by hand — add your first one below.
+          </p>
         )}
         {list.map((c) => (
-          <div key={rowKey(c)} className="ledger-row flex items-center gap-2 py-3.5">
+          <div
+            key={rowKey(c)}
+            className="ledger-row flex items-center gap-2 py-3.5"
+          >
             <AccountTile account={c.type} />
             <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between">
-              <div className="text-body">{c.type} ending <span className="num">{c.last4}</span></div>
-              <span className="flex shrink-0 items-center gap-2">
-                <Chip tone={c.status === "Active" ? "good" : c.status === "Frozen" ? "warn" : "neutral"}>{c.status}</Chip>
-                {storedIdOf(c) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground"
-                    aria-label={`Delete ${c.label} ending ${c.last4}`}
-                    onClick={() => deleteCard(storedIdOf(c)!)}
+              <div className="flex items-center justify-between">
+                <div className="text-body">
+                  {c.type} ending <span className="num">{c.last4}</span>
+                </div>
+                <span className="flex shrink-0 items-center gap-2">
+                  <Chip
+                    tone={
+                      c.status === "Active"
+                        ? "good"
+                        : c.status === "Frozen"
+                          ? "warn"
+                          : "neutral"
+                    }
                   >
-                    Delete
-                  </Button>
+                    {c.status}
+                  </Chip>
+                  {storedIdOf(c) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      aria-label={`Delete ${c.label} ending ${c.last4}`}
+                      onClick={() => deleteCard(storedIdOf(c)!)}
+                    >
+                      Delete
+                    </Button>
+                  )}
+                </span>
+              </div>
+              <div className="mt-1 text-caption text-muted-foreground">
+                {c.account} · {personLabel(c.owner)} · issued {c.issued}
+                {c.frozen && (
+                  <>
+                    {" "}
+                    · {c.status === "Frozen" ? "frozen" : "retired"} {c.frozen}
+                  </>
                 )}
-              </span>
-            </div>
-            <div className="mt-1 text-caption text-muted-foreground">
-              {c.account} · {personLabel(c.owner)} · issued {c.issued}
-              {c.frozen && <> · {c.status === "Frozen" ? "frozen" : "retired"} {c.frozen}</>}
-            </div>
-            {c.replacedBy && <div className="mt-0.5 text-caption text-muted-foreground">Replaced by {c.replacedBy}</div>}
+              </div>
+              {c.replacedBy && (
+                <div className="mt-0.5 text-caption text-muted-foreground">
+                  Replaced by {c.replacedBy}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -330,23 +468,55 @@ export function Cards() {
       <Panel className="mt-6">
         <Label>Add a card</Label>
         <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-caption text-muted-foreground">Label
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Online spending" className={field} />
+          <label className="flex flex-col gap-1 text-caption text-muted-foreground">
+            Label
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Online spending"
+              className={field}
+            />
           </label>
-          <label className="flex flex-col gap-1 text-caption text-muted-foreground">Type
-            <select value={type} onChange={(e) => setType(e.target.value as CardItem["type"])} className={field}>
-              <option>Virtual</option><option>Physical</option>
+          <label className="flex flex-col gap-1 text-caption text-muted-foreground">
+            Type
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as CardItem["type"])}
+              className={field}
+            >
+              <option>Virtual</option>
+              <option>Physical</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-caption text-muted-foreground">Last 4 digits
-            <input value={last4} onChange={(e) => setLast4(e.target.value)} inputMode="numeric" placeholder="1234" className={`${field} w-24`} />
+          <label className="flex flex-col gap-1 text-caption text-muted-foreground">
+            Last 4 digits
+            <input
+              value={last4}
+              onChange={(e) => setLast4(e.target.value)}
+              inputMode="numeric"
+              placeholder="1234"
+              className={`${field} w-24`}
+            />
           </label>
-          <label className="flex flex-col gap-1 text-caption text-muted-foreground">Account
-            <input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="Revolut Main" className={field} />
+          <label className="flex flex-col gap-1 text-caption text-muted-foreground">
+            Account
+            <input
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+              placeholder="Revolut Main"
+              className={field}
+            />
           </label>
-          <label className="flex flex-col gap-1 text-caption text-muted-foreground">Owner
-            <select value={owner} onChange={(e) => setOwner(e.target.value as Owner)} className={field}>
-              <option value="zonito">Zonito</option><option value="nikhila">Nikhila</option><option value="joint">Joint</option>
+          <label className="flex flex-col gap-1 text-caption text-muted-foreground">
+            Owner
+            <select
+              value={owner}
+              onChange={(e) => setOwner(e.target.value as Owner)}
+              className={field}
+            >
+              <option value="zonito">Zonito</option>
+              <option value="nikhila">Nikhila</option>
+              <option value="joint">Joint</option>
             </select>
           </label>
           <Button onClick={addCard}>Add card</Button>

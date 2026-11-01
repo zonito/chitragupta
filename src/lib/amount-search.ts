@@ -34,7 +34,10 @@ export function parseAmountQuery(raw: string): AmountQuery | null {
 }
 
 /** Does an absolute amount (major units, e.g. 128.04) match? */
-export function amountMatchesQuery(absMajor: number, query: AmountQuery): boolean {
+export function amountMatchesQuery(
+  absMajor: number,
+  query: AmountQuery,
+): boolean {
   const minor = Math.round(absMajor * 100);
   if (minor === query.minor) return true;
   return (minor / 100).toFixed(2).startsWith(query.text);

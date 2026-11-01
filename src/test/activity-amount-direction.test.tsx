@@ -13,8 +13,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -48,12 +58,62 @@ const mk = (over: Partial<Txn>): Txn => ({
 });
 
 const ROWS: Txn[] = [
-  mk({ id: "inc", merchant: "ACME PAYROLL", category: "One-off", kind: "income", incoming: true, amount: 3000, day: 28, date: "2026-10-28" }),
-  mk({ id: "spend", merchant: "Corner Shop", kind: "spend", amount: 42.5, day: 27, date: "2026-10-27" }),
-  mk({ id: "tin", merchant: "Nikhila → Zonito", category: "Transfer", kind: "transfer", incoming: true, amount: 250, day: 26, date: "2026-10-26" }),
-  mk({ id: "tout", merchant: "Zonito → Nikhila", category: "Transfer", kind: "transfer", amount: 600, day: 25, date: "2026-10-25" }),
-  mk({ id: "aout", merchant: "Trading 212", category: "Moved aside", kind: "aside", amount: 900, day: 24, date: "2026-10-24" }),
-  mk({ id: "ain", merchant: "ISA Withdrawal", category: "Moved aside", kind: "aside", incoming: true, amount: 120, day: 23, date: "2026-10-23" }),
+  mk({
+    id: "inc",
+    merchant: "ACME PAYROLL",
+    category: "One-off",
+    kind: "income",
+    incoming: true,
+    amount: 3000,
+    day: 28,
+    date: "2026-10-28",
+  }),
+  mk({
+    id: "spend",
+    merchant: "Corner Shop",
+    kind: "spend",
+    amount: 42.5,
+    day: 27,
+    date: "2026-10-27",
+  }),
+  mk({
+    id: "tin",
+    merchant: "Nikhila → Zonito",
+    category: "Transfer",
+    kind: "transfer",
+    incoming: true,
+    amount: 250,
+    day: 26,
+    date: "2026-10-26",
+  }),
+  mk({
+    id: "tout",
+    merchant: "Zonito → Nikhila",
+    category: "Transfer",
+    kind: "transfer",
+    amount: 600,
+    day: 25,
+    date: "2026-10-25",
+  }),
+  mk({
+    id: "aout",
+    merchant: "Trading 212",
+    category: "Moved aside",
+    kind: "aside",
+    amount: 900,
+    day: 24,
+    date: "2026-10-24",
+  }),
+  mk({
+    id: "ain",
+    merchant: "ISA Withdrawal",
+    category: "Moved aside",
+    kind: "aside",
+    incoming: true,
+    amount: 120,
+    day: 23,
+    date: "2026-10-23",
+  }),
 ];
 
 function hydrateRows() {
@@ -109,13 +169,21 @@ describe("Activity credit/debit amounts", () => {
   it("transfer legs and moved-aside rows follow their own sign", () => {
     renderActivity();
     expect(rowAmount("Nikhila → Zonito").textContent).toBe("+£250.00");
-    expect(rowAmount("Nikhila → Zonito").classList.contains("amount-in")).toBe(true);
+    expect(rowAmount("Nikhila → Zonito").classList.contains("amount-in")).toBe(
+      true,
+    );
     expect(rowAmount("Zonito → Nikhila").textContent).toBe("−£600.00");
-    expect(rowAmount("Zonito → Nikhila").classList.contains("amount-out")).toBe(true);
+    expect(rowAmount("Zonito → Nikhila").classList.contains("amount-out")).toBe(
+      true,
+    );
     expect(rowAmount("Trading 212").textContent).toBe("−£900.00");
-    expect(rowAmount("Trading 212").classList.contains("amount-out")).toBe(true);
+    expect(rowAmount("Trading 212").classList.contains("amount-out")).toBe(
+      true,
+    );
     expect(rowAmount("ISA Withdrawal").textContent).toBe("+£120.00");
-    expect(rowAmount("ISA Withdrawal").classList.contains("amount-in")).toBe(true);
+    expect(rowAmount("ISA Withdrawal").classList.contains("amount-in")).toBe(
+      true,
+    );
   });
 
   it("the detail sheet headline matches the row's direction", async () => {
@@ -141,6 +209,8 @@ describe("Activity credit/debit amounts", () => {
     // none of its amounts took the credit/debit treatment. (Home's
     // Biggest-changes deltas have always used their own +/- signs —
     // those are change figures, not transaction amounts.)
-    expect(container.querySelectorAll(".amount-in, .amount-out")).toHaveLength(0);
+    expect(container.querySelectorAll(".amount-in, .amount-out")).toHaveLength(
+      0,
+    );
   });
 });

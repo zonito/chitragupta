@@ -58,7 +58,12 @@ async function freshApi(storeDir: string) {
   return import("@/lib/api");
 }
 
-function postJson(api: Awaited<ReturnType<typeof freshApi>>, path: string, body: unknown, method = "POST") {
+function postJson(
+  api: Awaited<ReturnType<typeof freshApi>>,
+  path: string,
+  body: unknown,
+  method = "POST",
+) {
   return api.handleChitraguptaApi(
     new Request(`http://local${path}`, {
       method,
@@ -99,7 +104,12 @@ describe("categories API (scratch store)", () => {
     expect(created?.status).toBe(200);
     const createdBody = (await created!.json()) as {
       ok: boolean;
-      category: { name: string; colour: string; icon: string; builtin: boolean };
+      category: {
+        name: string;
+        colour: string;
+        icon: string;
+        builtin: boolean;
+      };
     };
     expect(createdBody.category).toMatchObject({
       name: "Tuition",
@@ -109,7 +119,15 @@ describe("categories API (scratch store)", () => {
     expect(createdBody.category.colour).toMatch(/^oklch\(/);
 
     // Duplicates (any case), built-ins and system labels are refused.
-    for (const name of ["tuition", "TUITION", "School", "Transfer", "Fees", "Moved aside", "Interest"]) {
+    for (const name of [
+      "tuition",
+      "TUITION",
+      "School",
+      "Transfer",
+      "Fees",
+      "Moved aside",
+      "Interest",
+    ]) {
       const res = await postJson(api, "/api/categories", { name });
       expect(res?.status, name).toBe(400);
       const body = (await res!.json()) as { ok: boolean; error: string };
@@ -125,7 +143,12 @@ describe("categories API (scratch store)", () => {
     // An unused custom can be deleted; a built-in cannot.
     const spare = await postJson(api, "/api/categories", { name: "Spare" });
     expect(spare?.status).toBe(200);
-    const del = await postJson(api, "/api/categories", { name: "Spare" }, "DELETE");
+    const del = await postJson(
+      api,
+      "/api/categories",
+      { name: "Spare" },
+      "DELETE",
+    );
     expect(del?.status).toBe(200);
     const after = await api.handleChitraguptaApi(
       new Request("http://local/api/categories"),
@@ -136,9 +159,19 @@ describe("categories API (scratch store)", () => {
     expect(afterBody.categories.map((c) => c.name)).not.toContain("Spare");
     expect(afterBody.categories.map((c) => c.name)).toContain("Tuition");
 
-    const delBuiltin = await postJson(api, "/api/categories", { name: "School" }, "DELETE");
+    const delBuiltin = await postJson(
+      api,
+      "/api/categories",
+      { name: "School" },
+      "DELETE",
+    );
     expect(delBuiltin?.status).toBe(400);
-    const delMissing = await postJson(api, "/api/categories", { name: "Nope" }, "DELETE");
+    const delMissing = await postJson(
+      api,
+      "/api/categories",
+      { name: "Nope" },
+      "DELETE",
+    );
     expect(delMissing?.status).toBe(400);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -150,7 +183,12 @@ describe("categories API (scratch store)", () => {
     setMerchant(db, "Penny Caulfield", "Tuition", { source: "user" });
     db.close();
     const api = await freshApi(dir);
-    const res = await postJson(api, "/api/categories", { name: "Tuition" }, "DELETE");
+    const res = await postJson(
+      api,
+      "/api/categories",
+      { name: "Tuition" },
+      "DELETE",
+    );
     expect(res?.status).toBe(400);
     const body = (await res!.json()) as { ok: boolean; error: string };
     expect(body.error).toMatch(/still used/);
@@ -160,7 +198,9 @@ describe("categories API (scratch store)", () => {
 
 describe("classifier learns custom categories", () => {
   function seededDb() {
-    const db = openStore(mkdtempSync(join(tmpdir(), "chitra-classify-custom-")));
+    const db = openStore(
+      mkdtempSync(join(tmpdir(), "chitra-classify-custom-")),
+    );
     db.prepare(
       `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
         description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
@@ -289,7 +329,11 @@ describe("ingest-run classifies behind ingest when a gateway is configured", () 
       );
       const body = (await res!.json()) as {
         ok: boolean;
-        classification: { ran: boolean; classified: number; failed: number } | null;
+        classification: {
+          ran: boolean;
+          classified: number;
+          failed: number;
+        } | null;
       };
       expect(body.classification).not.toBeNull();
       expect(body.classification!.ran).toBe(true);
@@ -364,7 +408,9 @@ describeRepro("Penny Caulfield → Tuition (repro fixture)", () => {
       expect(categoryNames()).toContain("Tuition");
       const tuitionDef = snapshot.categories.find((c) => c.name === "Tuition")!;
       expect(categoryColor("Tuition")).toBe(tuitionDef.colour);
-      const october = byCategory("household").find((c) => (c.category as string) === "Tuition");
+      const october = byCategory("household").find(
+        (c) => (c.category as string) === "Tuition",
+      );
       expect(october?.amount).toBe(148);
     } finally {
       hydrateData(SAMPLE_SNAPSHOT);

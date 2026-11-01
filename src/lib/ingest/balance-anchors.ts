@@ -209,7 +209,9 @@ export function recordedBalance(
   person: string,
   account: string,
 ): { balanceMinor: number; currency: string | null } | null {
-  const pick = (where: string): { balance_minor: number | null; currency: string | null } | undefined =>
+  const pick = (
+    where: string,
+  ): { balance_minor: number | null; currency: string | null } | undefined =>
     db
       .prepare(
         `SELECT balance_minor, currency FROM ingest_runs
@@ -217,8 +219,7 @@ export function recordedBalance(
          ORDER BY id DESC LIMIT 1`,
       )
       .get(person, account) as
-      | { balance_minor: number | null; currency: string | null }
-      | undefined;
+      { balance_minor: number | null; currency: string | null } | undefined;
   const chosen = pick("AND rows_seen > 0") ?? pick("");
   if (!chosen || chosen.balance_minor === null) {
     return null;

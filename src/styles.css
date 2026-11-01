@@ -93,7 +93,8 @@
   --tile-foreground: oklch(0.99 0 0);
   --brand-puregym-foreground: oklch(0.87 0.17 95);
   --shadow-tint: oklch(0.35 0.045 75 / 0.08);
-  --shadow-elevated: 0 2px 4px var(--shadow-tint), 0 10px 24px -12px var(--shadow-tint);
+  --shadow-elevated:
+    0 2px 4px var(--shadow-tint), 0 10px 24px -12px var(--shadow-tint);
   --cat-groceries: oklch(0.55 0.145 150);
   --cat-eating-out: oklch(0.57 0.155 38);
   --cat-transport: oklch(0.52 0.115 252);
@@ -116,26 +117,26 @@
   --cat-holidays-ink: oklch(0.51 0.115 208);
   --cat-shopping-ink: oklch(0.54 0.155 12);
   --cat-one-off-ink: oklch(0.52 0.035 55);
-  --brand-netflix: #E50914;
-  --brand-spotify: #1DB954;
+  --brand-netflix: #e50914;
+  --brand-spotify: #1db954;
   --brand-ocado: #822673;
   --brand-amazon: #131921;
-  --brand-tfl: #DC241F;
-  --brand-ikea: #0058A3;
-  --brand-pret: #4A0D18;
-  --brand-octopus: #D6336C;
-  --brand-jet2: #C8102E;
-  --brand-airbnb: #FF5A5F;
-  --brand-disney: #113CCF;
+  --brand-tfl: #dc241f;
+  --brand-ikea: #0058a3;
+  --brand-pret: #4a0d18;
+  --brand-octopus: #d6336c;
+  --brand-jet2: #c8102e;
+  --brand-airbnb: #ff5a5f;
+  --brand-disney: #113ccf;
   --brand-times: #111111;
-  --brand-puregym: #1D1D1B;
+  --brand-puregym: #1d1d1b;
   --brand-john-lewis: #004225;
-  --brand-tesco: #00539F;
-  --brand-waitrose: #003D2B;
-  --brand-deliveroo: #00CCBC;
+  --brand-tesco: #00539f;
+  --brand-waitrose: #003d2b;
+  --brand-deliveroo: #00ccbc;
   --brand-uber: #000000;
-  --brand-icloud: #3693F3;
-  --brand-microsoft: #D83B01;
+  --brand-icloud: #3693f3;
+  --brand-microsoft: #d83b01;
 }
 
 .dark {
@@ -191,7 +192,9 @@
 
 @utility ledger-row {
   border-bottom: 1px dashed var(--color-border);
-  &:last-child { border-bottom: 0; }
+  &:last-child {
+    border-bottom: 0;
+  }
 }
 
 @utility num {
@@ -203,13 +206,22 @@
    scrollbar is ever rendered, whatever the engine. */
 @utility no-scrollbar {
   scrollbar-width: none;
-  &::-webkit-scrollbar { display: none; }
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
   body {
-    background: linear-gradient(180deg, oklch(0.976 0.016 82), oklch(0.936 0.024 72)) fixed;
+    background: linear-gradient(
+        180deg,
+        oklch(0.976 0.016 82),
+        oklch(0.936 0.024 72)
+      )
+      fixed;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-size: var(--text-body);
@@ -219,48 +231,164 @@
     -moz-osx-font-smoothing: grayscale;
   }
   .dark body {
-    background: linear-gradient(180deg, oklch(0.185 0.022 205), oklch(0.135 0.024 195)) fixed;
+    background: linear-gradient(
+        180deg,
+        oklch(0.185 0.022 205),
+        oklch(0.135 0.024 195)
+      )
+      fixed;
   }
 }
 
-.hero-panel { background: linear-gradient(135deg, oklch(0.4 0.09 176), oklch(0.31 0.075 186)); color: var(--hero-foreground); box-shadow: 0 12px 32px -12px oklch(0.3 0.08 180 / 0.45); }
-.dark .hero-panel { background: linear-gradient(135deg, oklch(0.32 0.075 176), oklch(0.23 0.06 188)); box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.6); }
-.hero-label { color: oklch(0.87 0.025 182); }
-.hero-comparison { color: oklch(0.9 0.02 182); }
+.hero-panel {
+  background: linear-gradient(
+    135deg,
+    oklch(0.4 0.09 176),
+    oklch(0.31 0.075 186)
+  );
+  color: var(--hero-foreground);
+  box-shadow: 0 12px 32px -12px oklch(0.3 0.08 180 / 0.45);
+}
+.dark .hero-panel {
+  background: linear-gradient(
+    135deg,
+    oklch(0.32 0.075 176),
+    oklch(0.23 0.06 188)
+  );
+  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.6);
+}
+.hero-label {
+  color: oklch(0.87 0.025 182);
+}
+.hero-comparison {
+  color: oklch(0.9 0.02 182);
+}
 /* Danger that stays AA-legible on the hero's dark teal gradient in
    both themes (the plain --destructive is tuned for light card
    surfaces and would sink into the hero). The hero panel is dark in
    both themes and the dark theme's gradient is darker still, so one
    value passes in both, contrast only improving in dark. */
-.hero-danger { color: var(--danger-on-hero); }
-.hero-number { color: var(--hero-foreground); letter-spacing: -0.01em; line-height: 1.05; font-size: var(--text-hero); }
-.hero-panel .hero-track { background: color-mix(in oklab, var(--hero-foreground) 10%, transparent); }
-.data-bar { transition: width 0.9s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.hero-danger {
+  color: var(--danger-on-hero);
+}
+.hero-number {
+  color: var(--hero-foreground);
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  font-size: var(--text-hero);
+}
+.hero-panel .hero-track {
+  background: color-mix(in oklab, var(--hero-foreground) 10%, transparent);
+}
+.data-bar {
+  transition: width 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
 
 /* Existing shared component styles kept so tiles, icons and charts still render. */
-.item-icon { display: inline-flex; width: 28px; height: 28px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
-.recognition-tile { display: inline-flex; width: 36px; height: 36px; flex: 0 0 36px; align-items: center; justify-content: center; border-radius: var(--radius-xl); font-family: var(--font-sans); font-size: var(--text-heading); font-weight: 600; line-height: 1; background: var(--tile-background, var(--muted)); color: var(--tile-ink, var(--foreground)); }
-.route-content .rounded-xl.border.bg-card, .route-content .rounded-2xl.border.bg-card { box-shadow: var(--shadow-elevated); }
-.font-display:not(.brand-wordmark):not(.hero-number) { font-family: var(--font-sans); }
-.ledger-row .num { font-size: var(--text-body); font-weight: 500; color: var(--foreground); }
-.amount { font-size: var(--text-body); font-weight: 500; color: var(--foreground); }
+.item-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+.recognition-tile {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xl);
+  font-family: var(--font-sans);
+  font-size: var(--text-heading);
+  font-weight: 600;
+  line-height: 1;
+  background: var(--tile-background, var(--muted));
+  color: var(--tile-ink, var(--foreground));
+}
+.route-content .rounded-xl.border.bg-card,
+.route-content .rounded-2xl.border.bg-card {
+  box-shadow: var(--shadow-elevated);
+}
+.font-display:not(.brand-wordmark):not(.hero-number) {
+  font-family: var(--font-sans);
+}
+.ledger-row .num {
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--foreground);
+}
+.amount {
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--foreground);
+}
 /* Activity direction amounts: money in reads as a green credit,
    money out as a red debit. The .num-qualified selectors outrank
    .ledger-row .num's foreground default; the colours are the
    --good / --destructive tokens already AA-verified as card text. */
-.num.amount-in { color: var(--good); }
-.num.amount-out { color: var(--destructive); }
-.font-bold { font-weight: 600; }
-input::placeholder, textarea::placeholder { color: var(--muted-foreground); opacity: 1; }
-.trend-draw { stroke-dasharray: 1; stroke-dashoffset: 0; animation: trend-draw 550ms ease-out both; }
-.chart-grow { transform-origin: bottom; animation: chart-grow 350ms ease-out both; }
-.reduced-number { display: none; }
-@keyframes trend-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes chart-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.num.amount-in {
+  color: var(--good);
+}
+.num.amount-out {
+  color: var(--destructive);
+}
+.font-bold {
+  font-weight: 600;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+.trend-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: trend-draw 550ms ease-out both;
+}
+.chart-grow {
+  transform-origin: bottom;
+  animation: chart-grow 350ms ease-out both;
+}
+.reduced-number {
+  display: none;
+}
+@keyframes trend-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes chart-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
-  .data-bar { width: var(--bar-width) !important; }
-  .motion-number { display: none; }
-  .reduced-number { display: inline; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .data-bar {
+    width: var(--bar-width) !important;
+  }
+  .motion-number {
+    display: none;
+  }
+  .reduced-number {
+    display: inline;
+  }
 }

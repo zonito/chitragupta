@@ -2,16 +2,53 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, gbpCompact, TXNS, ALL_TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, flowWindowFor, type IncomeEntry, type Person } from "@/lib/data";
+import {
+  spendTotal,
+  typicalTotal,
+  biggestChanges,
+  asideTotal,
+  coachNote,
+  currentMonthKey,
+  currentMonthName,
+  nextMonthName,
+  gbp,
+  gbpCompact,
+  TXNS,
+  ALL_TXNS,
+  upcomingPanel,
+  upcomingShare,
+  upcomingDateLabel,
+  incomeFor,
+  incomeTotal,
+  ownerName,
+  personLabel,
+  categoryColor,
+  availableFor,
+  appSettings,
+  formatMoney,
+  dateLabel,
+  monthlyHistoryFor,
+  flowWindowFor,
+  type IncomeEntry,
+  type Person,
+} from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
 import { SpendTimelineSection } from "@/components/spend-chart";
 import { fetchJevCoachOpinion, type JevOpinion } from "@/lib/jev-client";
-import { forecastFor, forecastIsStale, type MonthForecast } from "@/lib/forecast";
+import {
+  forecastFor,
+  forecastIsStale,
+  type MonthForecast,
+} from "@/lib/forecast";
 
 export const Route = createFileRoute("/")({
-  head: () => meta("This month", "This month at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note."),
+  head: () =>
+    meta(
+      "This month",
+      "This month at a glance for Zonito and Nikhila: spending, usual month, and a calm coach note.",
+    ),
   component: Index,
 });
 
@@ -41,7 +78,9 @@ const gbpTrim = (n: number) => gbp(n, n % 1 !== 0);
  * pounds) and whether the view's GBP headline sits below it. Null
  * floor = no signal anywhere. The comparison uses the very number the
  * card displays, so what you see is what is judged. */
-export function floorState(person: Person): { floor: number; below: boolean } | null {
+export function floorState(
+  person: Person,
+): { floor: number; below: boolean } | null {
   const { availableFloorMinor } = appSettings();
   if (availableFloorMinor === null) return null;
   const total = availableFor(person).gbpTotal;
@@ -50,14 +89,23 @@ export function floorState(person: Person): { floor: number; below: boolean } | 
   return { floor, below: total < floor };
 }
 
-export function AvailableCard({ person, onOpen, className }: { person: Person; onOpen: () => void; className?: string }) {
+export function AvailableCard({
+  person,
+  onOpen,
+  className,
+}: {
+  person: Person;
+  onOpen: () => void;
+  className?: string;
+}) {
   const avail = availableFor(person);
   if (avail.gbpTotal === null) {
     return (
       <Panel {...(className ? { className } : {})}>
         <Label>Available</Label>
         <p className="text-body leading-relaxed text-muted-foreground">
-          No balances recorded yet — they appear here once a statement import records them.
+          No balances recorded yet — they appear here once a statement import
+          records them.
         </p>
       </Panel>
     );
@@ -74,10 +122,18 @@ export function AvailableCard({ person, onOpen, className }: { person: Person; o
       >
         <div className="min-w-0">
           <Label>Available</Label>
-          <div className={`num text-title font-semibold${floor?.below ? " text-destructive" : ""}`}><CountUpMoney value={avail.gbpTotal} pence /></div>
+          <div
+            className={`num text-title font-semibold${floor?.below ? " text-destructive" : ""}`}
+          >
+            <CountUpMoney value={avail.gbpTotal} pence />
+          </div>
           {avail.foreign.length > 0 && (
             <p className="num mt-1 text-caption text-muted-foreground">
-              plus {avail.foreign.map((f) => formatMoney(f.total, f.currency)).join(" · ")} in other currencies
+              plus{" "}
+              {avail.foreign
+                .map((f) => formatMoney(f.total, f.currency))
+                .join(" · ")}{" "}
+              in other currencies
             </p>
           )}
           {floor !== null &&
@@ -91,10 +147,14 @@ export function AvailableCard({ person, onOpen, className }: { person: Person; o
               </p>
             ))}
           <p className="mt-1 text-caption text-muted-foreground">
-            Across {known} account{known === 1 ? "" : "s"} · Latest balances · {dateLabel(avail.asOf)}
+            Across {known} account{known === 1 ? "" : "s"} · Latest balances ·{" "}
+            {dateLabel(avail.asOf)}
           </p>
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <ChevronRight
+          className="h-5 w-5 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
       </button>
     </Panel>
   );
@@ -109,7 +169,11 @@ export function AvailableBreakdown({ person }: { person: Person }) {
   return (
     <div>
       <div className="text-body text-muted-foreground">Available</div>
-      <div className={`num mb-1 text-title font-semibold${floor?.below ? " text-destructive" : ""}`}>{avail.gbpTotal !== null ? gbp(avail.gbpTotal) : "—"}</div>
+      <div
+        className={`num mb-1 text-title font-semibold${floor?.below ? " text-destructive" : ""}`}
+      >
+        {avail.gbpTotal !== null ? gbp(avail.gbpTotal) : "—"}
+      </div>
       {floor !== null &&
         (floor.below ? (
           <p className="num mb-1 text-caption font-medium text-destructive">
@@ -127,7 +191,10 @@ export function AvailableBreakdown({ person }: { person: Person }) {
         {avail.asOf ? ` · Latest balances · ${dateLabel(avail.asOf)}` : ""}
       </p>
       {avail.accounts.map((a) => (
-        <div key={`${a.owner}:${a.name}`} className="ledger-row flex items-center justify-between gap-3 py-3">
+        <div
+          key={`${a.owner}:${a.name}`}
+          className="ledger-row flex items-center justify-between gap-3 py-3"
+        >
           <div className="flex min-w-0 items-center gap-2">
             <AccountTile account={a.name} />
             <div className="min-w-0">
@@ -141,7 +208,9 @@ export function AvailableBreakdown({ person }: { person: Person }) {
             {a.stale && <Chip tone="warn">Stale</Chip>}
             {a.balanceSource === "derived" && <Chip>Derived</Chip>}
             <span className="num text-body">
-              {a.balanceMinor !== null ? formatMoney(a.balanceMinor / 100, a.currency) : "Not recorded"}
+              {a.balanceMinor !== null
+                ? formatMoney(a.balanceMinor / 100, a.currency)
+                : "Not recorded"}
             </span>
           </div>
         </div>
@@ -149,17 +218,23 @@ export function AvailableBreakdown({ person }: { person: Person }) {
       <div className="mt-4 border-t pt-4">
         <div className="flex items-center justify-between">
           <span className="text-body font-medium">Total available</span>
-          <span className="num text-body font-semibold">{avail.gbpTotal !== null ? gbp(avail.gbpTotal) : "—"}</span>
+          <span className="num text-body font-semibold">
+            {avail.gbpTotal !== null ? gbp(avail.gbpTotal) : "—"}
+          </span>
         </div>
         {avail.foreign.map((f) => (
-          <div key={f.currency} className="num mt-1.5 flex items-center justify-between text-caption text-muted-foreground">
+          <div
+            key={f.currency}
+            className="num mt-1.5 flex items-center justify-between text-caption text-muted-foreground"
+          >
             <span>held in {f.currency}</span>
             <span>{formatMoney(f.total, f.currency)}</span>
           </div>
         ))}
         {avail.asOf && (
           <p className="mt-3 text-caption text-muted-foreground">
-            As of {dateLabel(avail.asOf)} — the latest statement across these accounts.
+            As of {dateLabel(avail.asOf)} — the latest statement across these
+            accounts.
           </p>
         )}
       </div>
@@ -203,7 +278,10 @@ export function ForecastChart({ forecast }: { forecast: MonthForecast }) {
     padL + (series.length <= 1 ? plotW / 2 : (i / (series.length - 1)) * plotW);
   const y = (v: number) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
   const ticks = [0, 1 / 3, 2 / 3, 1].map((f) => lo + f * (hi - lo));
-  const lowIdx = Math.max(0, series.findIndex((s) => s.date === lowPoint.date));
+  const lowIdx = Math.max(
+    0,
+    series.findIndex((s) => s.date === lowPoint.date),
+  );
   const points = series.map((s, i) => `${x(i)},${y(s.balance)}`).join(" ");
   const shortDay = (iso: string) =>
     new Intl.DateTimeFormat("en-GB", {
@@ -274,14 +352,24 @@ export function ForecastChart({ forecast }: { forecast: MonthForecast }) {
           stroke="var(--color-primary)"
           strokeWidth={2}
         />
-        <circle cx={x(lowIdx)} cy={y(lowPoint.amount)} r={4.5} className="fill-destructive" />
+        <circle
+          cx={x(lowIdx)}
+          cy={y(lowPoint.amount)}
+          r={4.5}
+          className="fill-destructive"
+        />
         <circle
           cx={x(series.length - 1)}
           cy={y(forecast.projectedEnd)}
           r={3.5}
           fill="var(--color-primary)"
         />
-        <text x={padL} y={H - 5} fontSize={11} className="fill-muted-foreground">
+        <text
+          x={padL}
+          y={H - 5}
+          fontSize={11}
+          className="fill-muted-foreground"
+        >
           {shortDay(series[0]!.date)}
         </text>
         <text
@@ -295,7 +383,10 @@ export function ForecastChart({ forecast }: { forecast: MonthForecast }) {
           {shortDay(series[series.length - 1]!.date)}
         </text>
       </svg>
-      <p className="num mt-1 text-caption text-muted-foreground" aria-live="polite">
+      <p
+        className="num mt-1 text-caption text-muted-foreground"
+        aria-live="polite"
+      >
         Lowest point {gbp(lowPoint.amount)} on {dateLabel(lowPoint.date)}
       </p>
     </div>
@@ -310,7 +401,13 @@ export function ForecastChart({ forecast }: { forecast: MonthForecast }) {
  * rest). With no recorded balance the forecast has no honest start
  * and the card renders nothing — the Available card already says so.
  */
-export function ForecastCard({ person, className }: { person: Person; className?: string }) {
+export function ForecastCard({
+  person,
+  className,
+}: {
+  person: Person;
+  className?: string;
+}) {
   const forecast = useMemo(() => forecastFor(person), [person]);
   if (!forecast) return null;
   const month = currentMonthName();
@@ -346,11 +443,19 @@ export function ForecastCard({ person, className }: { person: Person; className?
         {forecast.regularsOutTotal > 0 || forecast.regularsInTotal > 0 ? (
           <p className="num">
             {forecast.regularsOutTotal > 0 && (
-              <>{gbp(forecast.regularsOutTotal, false)} of regulars still to go out</>
+              <>
+                {gbp(forecast.regularsOutTotal, false)} of regulars still to go
+                out
+              </>
             )}
-            {forecast.regularsOutTotal > 0 && forecast.regularsInTotal > 0 && " · "}
+            {forecast.regularsOutTotal > 0 &&
+              forecast.regularsInTotal > 0 &&
+              " · "}
             {forecast.regularsInTotal > 0 && (
-              <>{gbp(forecast.regularsInTotal, false)} of regular income still to come in</>
+              <>
+                {gbp(forecast.regularsInTotal, false)} of regular income still
+                to come in
+              </>
             )}
           </p>
         ) : (
@@ -358,8 +463,8 @@ export function ForecastCard({ person, className }: { person: Person; className?
         )}
         {breach && floor !== null && (
           <p className="font-medium text-destructive">
-            Dips <span className="num">{gbp(breach.shortfall, false)}</span> below your{" "}
-            {gbpTrim(floor)} floor on {dateLabel(breach.date)}
+            Dips <span className="num">{gbp(breach.shortfall, false)}</span>{" "}
+            below your {gbpTrim(floor)} floor on {dateLabel(breach.date)}
             {breach.culprit
               ? `, the day ${breach.culprit.name} ${gbp(breach.culprit.amount)} lands`
               : ""}
@@ -370,8 +475,8 @@ export function ForecastCard({ person, className }: { person: Person; className?
           <p>
             <span className="num">{gbp(headroom)}</span> of headroom above your{" "}
             {gbpTrim(floor)} floor at the tightest point — about{" "}
-            <span className="num">{gbp(perWeek, false)}</span> a week safe to spend for
-            the rest of the month.
+            <span className="num">{gbp(perWeek, false)}</span> a week safe to
+            spend for the rest of the month.
           </p>
         )}
         {!forecast.hasIncome && (
@@ -382,8 +487,9 @@ export function ForecastCard({ person, className }: { person: Person; className?
       </div>
       <p className="mt-3 text-caption text-muted-foreground">
         Regulars land on their usual dates; other spending runs at{" "}
-        <span className="num">{gbp(forecast.paceDaily)}</span> a day, this month&rsquo;s
-        pace so far{forecast.paceBlended ? ", steadied against last month" : ""}.
+        <span className="num">{gbp(forecast.paceDaily)}</span> a day, this
+        month&rsquo;s pace so far
+        {forecast.paceBlended ? ", steadied against last month" : ""}.
       </p>
       {stamp}
     </Panel>
@@ -465,12 +571,19 @@ const flowMonthLong = (key: string) =>
  * is ahead, red (--destructive via text-destructive) when behind —
  * the same token pair the .amount-in/.amount-out classes use.
  */
-export function IncomeSpendingCard({ person, className }: { person: Person; className?: string }) {
+export function IncomeSpendingCard({
+  person,
+  className,
+}: {
+  person: Person;
+  className?: string;
+}) {
   const rows = useMemo(() => flowWindowFor(person), [person]);
   if (rows.length === 0) return null;
   const current = rows[rows.length - 1]!;
   const max = Math.max(...rows.flatMap((r) => [r.income, r.spend]), 0);
-  const signedGap = (gap: number) => `${gap >= 0 ? "+" : "−"}${gbp(Math.abs(gap))}`;
+  const signedGap = (gap: number) =>
+    `${gap >= 0 ? "+" : "−"}${gbp(Math.abs(gap))}`;
   // Bar fill height as a plain percentage of the window max; a
   // positive value also carries a 2px minimum-height class so a
   // small-but-real month (a few pounds against a five-figure one)
@@ -480,13 +593,22 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
     <Panel {...(className ? { className } : {})}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label>Income vs spending</Label>
-        <div className="flex gap-3 text-caption text-muted-foreground" aria-hidden="true">
+        <div
+          className="flex gap-3 text-caption text-muted-foreground"
+          aria-hidden="true"
+        >
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: "var(--good)" }} />
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: "var(--good)" }}
+            />
             In
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: "var(--destructive)" }} />
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: "var(--destructive)" }}
+            />
             Out
           </span>
         </div>
@@ -503,23 +625,38 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
         {rows.map((r) => {
           const figures = `${flowMonthLong(r.month)}: in ${gbp(r.income)}, out ${gbp(r.spend)}, gap ${signedGap(r.gap)}`;
           return (
-            <div key={r.month} className="flex min-w-0 flex-1 flex-col items-center" title={figures}>
+            <div
+              key={r.month}
+              className="flex min-w-0 flex-1 flex-col items-center"
+              title={figures}
+            >
               <span className="sr-only">{figures}</span>
-              <div className="flex h-24 w-full items-end justify-center gap-1" aria-hidden="true">
+              <div
+                className="flex h-24 w-full items-end justify-center gap-1"
+                aria-hidden="true"
+              >
                 <div className="flex h-full w-3.5 items-end rounded-sm bg-muted/60">
                   <div
                     className={`w-full rounded-sm ${r.income > 0 ? "min-h-[2px]" : ""}`}
-                    style={{ height: `${barPct(r.income)}%`, backgroundColor: "var(--good)" }}
+                    style={{
+                      height: `${barPct(r.income)}%`,
+                      backgroundColor: "var(--good)",
+                    }}
                   />
                 </div>
                 <div className="flex h-full w-3.5 items-end rounded-sm bg-muted/60">
                   <div
                     className={`w-full rounded-sm ${r.spend > 0 ? "min-h-[2px]" : ""}`}
-                    style={{ height: `${barPct(r.spend)}%`, backgroundColor: "var(--destructive)" }}
+                    style={{
+                      height: `${barPct(r.spend)}%`,
+                      backgroundColor: "var(--destructive)",
+                    }}
                   />
                 </div>
               </div>
-              <div className="mt-1.5 text-micro text-muted-foreground">{flowMonthShort(r.month)}</div>
+              <div className="mt-1.5 text-micro text-muted-foreground">
+                {flowMonthShort(r.month)}
+              </div>
               {/* The net under each pair: full figure where the
                   column can hold it, compact (£14.8k) at phone
                   widths — six full "−£14,775.49" texts in ~55px
@@ -529,7 +666,9 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
                 className={`num ${r.gap >= 0 ? "text-good" : "text-destructive"}`}
                 aria-hidden="true"
               >
-                <span className="hidden text-caption sm:inline">{signedGap(r.gap)}</span>
+                <span className="hidden text-caption sm:inline">
+                  {signedGap(r.gap)}
+                </span>
                 <span className="text-micro sm:hidden">
                   {`${r.gap >= 0 ? "+" : "−"}${gbpCompact(Math.abs(r.gap))}`}
                 </span>
@@ -539,7 +678,8 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
         })}
       </div>
       <p className="mt-3 text-caption leading-relaxed text-muted-foreground">
-        Transfers between your own accounts and money moved aside count as neither in nor out.
+        Transfers between your own accounts and money moved aside count as
+        neither in nor out.
       </p>
     </Panel>
   );
@@ -565,8 +705,14 @@ export function Index() {
         <Label>Home</Label>
         <p className="text-heading font-semibold">No statements imported yet</p>
         <p className="mt-2 text-body leading-relaxed text-muted-foreground">
-          Once statements are imported, this screen shows the month at a glance. Head to{" "}
-          <Link to="/import" className="font-medium text-primary underline underline-offset-4">Import</Link>{" "}
+          Once statements are imported, this screen shows the month at a glance.
+          Head to{" "}
+          <Link
+            to="/import"
+            className="font-medium text-primary underline underline-offset-4"
+          >
+            Import
+          </Link>{" "}
           to add the first ones.
         </p>
       </Panel>
@@ -586,7 +732,7 @@ export function Index() {
   const overBudget = overallBudget !== null && total > overallBudget;
   return (
     <>
-    {/* Home is bands of two independent stacks, ordered by value,
+      {/* Home is bands of two independent stacks, ordered by value,
         highest first. Within a band each column is a vertical stack
         of natural-height cards, so a short card never shares a row
         with a taller row-mate: the only unevenness a band can show
@@ -607,158 +753,260 @@ export function Index() {
         purely to sequence the desktop bands around the chart's 4,
         the flow card's 5 and the strip's 11; on mobile the wrappers
         have no box, so only the cards' order classes act.) */}
-    <div className="flex flex-col gap-5 lg:gap-6">
-      <div className="contents order-1 lg:flex lg:gap-6">
-        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-      <div className="hero-panel order-1 rounded-xl p-5">
-        <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">Spent in {currentMonthName()}</div>
-        <div className="hero-number font-display num text-hero"><CountUpMoney value={total} /></div>
-        <p className="hero-comparison num mt-2 text-caption">
-          {gbp(Math.abs(diff), false)} {diff >= 0 ? "more" : "less"} than a typical month ({gbp(usual, false)})
-        </p>
-        <div className="mt-3 space-y-1.5" role="img" aria-label={`${currentMonthName()} ${gbp(total, false)}; typical month ${gbp(usual, false)}`}>
-          {[{ name: currentMonthName(), value: total, colour: "bg-accent" }, { name: "Typical", value: usual, colour: "bg-hero-foreground/35" }].map((bar) => (
-            <div key={bar.name} className="flex items-center gap-2" aria-hidden="true">
-              <span className="w-10 shrink-0 text-micro text-hero-foreground">{bar.name}</span>
-              <div className="hero-track h-1.5 flex-1 rounded-lg"><AnimatedBar percent={bar.value / Math.max(total, usual, 1) * 100} className={bar.colour} /></div>
-            </div>
-          ))}
-        </div>
-        {overallBudget !== null && (
-          <div className="mt-3">
-            <div
-              className="hero-track h-1.5 rounded-lg"
-              role="img"
-              aria-label={`${gbp(total, false)} of ${gbp(overallBudget, false)} monthly budget${overBudget ? `; ${gbp(total - overallBudget, false)} over budget` : ""}`}
-            >
-              <AnimatedBar
-                percent={overallBudget > 0 ? (total / overallBudget) * 100 : total > 0 ? 100 : 0}
-                className={overBudget ? "" : "bg-accent"}
-                {...(overBudget ? { colour: "var(--danger-on-hero)" } : {})}
-              />
-            </div>
-            <p className="hero-comparison num mt-2 text-caption">
-              {gbp(total, false)} of {gbp(overallBudget, false)} budget
-              {overBudget && (
-                <>
-                  {" · "}
-                  <span className="hero-danger font-medium">
-                    {gbp(total - overallBudget, false)} over budget
-                  </span>
-                </>
+      <div className="flex flex-col gap-5 lg:gap-6">
+        <div className="contents order-1 lg:flex lg:gap-6">
+          <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+            <div className="hero-panel order-1 rounded-xl p-5">
+              <div className="hero-label mb-2 text-micro font-medium uppercase tracking-[0.08em]">
+                Spent in {currentMonthName()}
+              </div>
+              <div className="hero-number font-display num text-hero">
+                <CountUpMoney value={total} />
+              </div>
+              <p className="hero-comparison num mt-2 text-caption">
+                {gbp(Math.abs(diff), false)} {diff >= 0 ? "more" : "less"} than
+                a typical month ({gbp(usual, false)})
+              </p>
+              <div
+                className="mt-3 space-y-1.5"
+                role="img"
+                aria-label={`${currentMonthName()} ${gbp(total, false)}; typical month ${gbp(usual, false)}`}
+              >
+                {[
+                  {
+                    name: currentMonthName(),
+                    value: total,
+                    colour: "bg-accent",
+                  },
+                  {
+                    name: "Typical",
+                    value: usual,
+                    colour: "bg-hero-foreground/35",
+                  },
+                ].map((bar) => (
+                  <div
+                    key={bar.name}
+                    className="flex items-center gap-2"
+                    aria-hidden="true"
+                  >
+                    <span className="w-10 shrink-0 text-micro text-hero-foreground">
+                      {bar.name}
+                    </span>
+                    <div className="hero-track h-1.5 flex-1 rounded-lg">
+                      <AnimatedBar
+                        percent={(bar.value / Math.max(total, usual, 1)) * 100}
+                        className={bar.colour}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {overallBudget !== null && (
+                <div className="mt-3">
+                  <div
+                    className="hero-track h-1.5 rounded-lg"
+                    role="img"
+                    aria-label={`${gbp(total, false)} of ${gbp(overallBudget, false)} monthly budget${overBudget ? `; ${gbp(total - overallBudget, false)} over budget` : ""}`}
+                  >
+                    <AnimatedBar
+                      percent={
+                        overallBudget > 0
+                          ? (total / overallBudget) * 100
+                          : total > 0
+                            ? 100
+                            : 0
+                      }
+                      className={overBudget ? "" : "bg-accent"}
+                      {...(overBudget
+                        ? { colour: "var(--danger-on-hero)" }
+                        : {})}
+                    />
+                  </div>
+                  <p className="hero-comparison num mt-2 text-caption">
+                    {gbp(total, false)} of {gbp(overallBudget, false)} budget
+                    {overBudget && (
+                      <>
+                        {" · "}
+                        <span className="hero-danger font-medium">
+                          {gbp(total - overallBudget, false)} over budget
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
               )}
-            </p>
+            </div>
+
+            <Panel className="order-7">
+              <Label>Biggest changes</Label>
+              {biggestChanges(person).map((c) => (
+                <div
+                  key={c.category}
+                  className="ledger-row flex items-center justify-between py-3"
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: categoryColor(c.category) }}
+                    />
+                    {c.category}
+                  </span>
+                  <span className="num text-body text-foreground">
+                    {c.diff > 0 ? "+" : "−"}
+                    {gbp(Math.abs(c.diff), false)}
+                  </span>
+                </div>
+              ))}
+            </Panel>
           </div>
-        )}
-      </div>
 
-          <Panel className="order-7">
-            <Label>Biggest changes</Label>
-            {biggestChanges(person).map((c) => (
-              <div key={c.category} className="ledger-row flex items-center justify-between py-3">
-                <span className="flex items-center gap-2"><span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(c.category) }} />{c.category}</span>
-                <span className="num text-body text-foreground">
-                  {c.diff > 0 ? "+" : "−"}{gbp(Math.abs(c.diff), false)}
-                </span>
+          <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+            <AvailableCard
+              person={person}
+              onOpen={() => setAvailableOpen(true)}
+              className="order-2"
+            />
+            <ForecastCard person={person} className="order-3" />
+          </div>
+        </div>
+
+        <SpendTimelineSection
+          title="Spending trend"
+          surface="home"
+          monthly={monthly}
+          dailyPerson={person}
+          compact
+          className="order-4"
+        />
+
+        <IncomeSpendingCard person={person} className="order-5" />
+
+        <div className="contents order-6 lg:flex lg:gap-6">
+          <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+            <Panel className="order-6">
+              <Label>Coming up · {nextMonthName()}</Label>
+              <p className="text-heading font-semibold leading-relaxed">
+                <span className="num">{gbp(coming.total, false)}</span> of
+                regulars already known
+              </p>
+              <div className="mt-3">
+                {coming.visible.map((payment) => (
+                  <div
+                    key={payment.name}
+                    className="ledger-row flex items-center justify-between gap-3 py-2.5 text-body"
+                  >
+                    <div className="min-w-0">
+                      <div>{payment.name}</div>
+                      <div className="mt-0.5 text-caption text-muted-foreground">
+                        {upcomingDateLabel(payment.date)}
+                      </div>
+                    </div>
+                    <span className="num shrink-0">
+                      {gbp(upcomingShare(payment, person))}
+                    </span>
+                  </div>
+                ))}
+                {coming.restCount > 0 && (
+                  <div className="ledger-row py-2.5 text-body text-muted-foreground">
+                    and {coming.restCount} more ·{" "}
+                    <span className="num">{gbp(coming.restTotal)}</span>
+                  </div>
+                )}
               </div>
-            ))}
-          </Panel>
-        </div>
+              <p className="mt-3 text-caption leading-relaxed text-muted-foreground">
+                The regulars we already know about. One-offs and day-to-day
+                spending are on top.
+              </p>
+            </Panel>
 
-        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-          <AvailableCard person={person} onOpen={() => setAvailableOpen(true)} className="order-2" />
-          <ForecastCard person={person} className="order-3" />
-        </div>
-      </div>
-
-      <SpendTimelineSection
-        title="Spending trend"
-        surface="home"
-        monthly={monthly}
-        dailyPerson={person}
-        compact
-        className="order-4"
-      />
-
-      <IncomeSpendingCard person={person} className="order-5" />
-
-      <div className="contents order-6 lg:flex lg:gap-6">
-        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-      <Panel className="order-6">
-        <Label>Coming up · {nextMonthName()}</Label>
-        <p className="text-heading font-semibold leading-relaxed"><span className="num">{gbp(coming.total, false)}</span> of regulars already known</p>
-        <div className="mt-3">
-          {coming.visible.map((payment) => (
-            <div key={payment.name} className="ledger-row flex items-center justify-between gap-3 py-2.5 text-body">
-              <div className="min-w-0">
-                <div>{payment.name}</div>
-                <div className="mt-0.5 text-caption text-muted-foreground">{upcomingDateLabel(payment.date)}</div>
+            <Panel className="order-10">
+              <Label>Small spends</Label>
+              <p className="num text-body leading-relaxed">
+                Spends under £10 added up to {gbp(small.total)} this month
+                across {small.count} spends.
+                {small.total >= 40 && " That is roughly a family day out."}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5" aria-hidden="true">
+                {Array.from({ length: small.count }, (_, i) => (
+                  <span
+                    key={i}
+                    className="h-1.5 w-1.5 rounded-full bg-primary/60"
+                  />
+                ))}
               </div>
-              <span className="num shrink-0">{gbp(upcomingShare(payment, person))}</span>
-            </div>
-          ))}
-          {coming.restCount > 0 && (
-            <div className="ledger-row py-2.5 text-body text-muted-foreground">
-              and {coming.restCount} more · <span className="num">{gbp(coming.restTotal)}</span>
-            </div>
-          )}
-        </div>
-        <p className="mt-3 text-caption leading-relaxed text-muted-foreground">The regulars we already know about. One-offs and day-to-day spending are on top.</p>
-      </Panel>
+              <div
+                className="mt-2 h-1 rounded-lg bg-muted"
+                role="img"
+                aria-label={`${gbp(small.total)} in small spends out of ${gbp(total)} spent in ${currentMonthName()}`}
+              >
+                <AnimatedBar
+                  percent={total > 0 ? (small.total / total) * 100 : 0}
+                  className="bg-primary/60"
+                />
+              </div>
+            </Panel>
+          </div>
 
-      <Panel className="order-10">
-        <Label>Small spends</Label>
-        <p className="num text-body leading-relaxed">
-          Spends under £10 added up to {gbp(small.total)} this month across {small.count} spends.{small.total >= 40 && " That is roughly a family day out."}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-1.5" aria-hidden="true">
-          {Array.from({ length: small.count }, (_, i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-primary/60" />)}
-        </div>
-        <div className="mt-2 h-1 rounded-lg bg-muted" role="img" aria-label={`${gbp(small.total)} in small spends out of ${gbp(total)} spent in ${currentMonthName()}`}>
-          <AnimatedBar percent={total > 0 ? small.total / total * 100 : 0} className="bg-primary/60" />
-        </div>
-      </Panel>
+          <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+            <Link to="/coach" className="order-8 block">
+              <Panel className="bg-accent/8!">
+                <Label>Coach</Label>
+                <p className="num text-body leading-relaxed">
+                  {coachNote(person)}
+                </p>
+                <JevCoachOpinion person={person} />
+              </Panel>
+            </Link>
+
+            <Panel className="order-9">
+              <Label>Money in · {currentMonthName()}</Label>
+              <div className="num text-title font-semibold text-good">
+                <CountUpMoney value={incomeTotal(person)} />
+              </div>
+              <div className="mt-3">
+                {incomeFor(person).map((entry) => (
+                  <div
+                    key={incomeEntryKey(entry)}
+                    className="ledger-row flex items-center justify-between gap-3 py-2 text-body"
+                  >
+                    <span>
+                      {entry.type} · {personLabel(entry.owner)}
+                    </span>
+                    <span className="num shrink-0">
+                      {gbp(entry.amount, false)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {asideTotal(person) > 0 && (
+                <p className="num mt-3 text-caption text-muted-foreground">
+                  Of this, {gbp(asideTotal(person), false)} was moved aside.
+                </p>
+              )}
+            </Panel>
+          </div>
         </div>
 
-        <div className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-        <Link to="/coach" className="order-8 block">
-          <Panel className="bg-accent/8!">
-            <Label>Coach</Label>
-            <p className="num text-body leading-relaxed">{coachNote(person)}</p>
-            <JevCoachOpinion person={person} />
-          </Panel>
-        </Link>
-
-      <Panel className="order-9">
-        <Label>Money in · {currentMonthName()}</Label>
-        <div className="num text-title font-semibold text-good"><CountUpMoney value={incomeTotal(person)} /></div>
-        <div className="mt-3">
-          {incomeFor(person).map((entry) => (
-            <div key={incomeEntryKey(entry)} className="ledger-row flex items-center justify-between gap-3 py-2 text-body">
-              <span>{entry.type} · {personLabel(entry.owner)}</span>
-              <span className="num shrink-0">{gbp(entry.amount, false)}</span>
-            </div>
-          ))}
-        </div>
-        {asideTotal(person) > 0 && <p className="num mt-3 text-caption text-muted-foreground">Of this, {gbp(asideTotal(person), false)} was moved aside.</p>}
-      </Panel>
-
-        </div>
-      </div>
-
-      {/* Moved aside is context, not a headline: a slim one-line strip
+        {/* Moved aside is context, not a headline: a slim one-line strip
           (label, amount, what it is), not a full card. The label is a
           span here, not <Label>: the strip is a single flex line and
           Label's block margin would misalign it. */}
-      <Panel className="order-11 flex flex-wrap items-center gap-x-3 gap-y-1 py-3!">
-        <span className="text-micro font-medium uppercase tracking-[0.08em] text-muted-foreground">Moved aside</span>
-        <span className="num text-heading font-semibold text-aside">{gbp(asideTotal(person), false)}</span>
-        <span className="text-caption text-muted-foreground">Savings & investments, not spending</span>
-      </Panel>
-    </div>
-    <Sheet open={availableOpen} onClose={() => setAvailableOpen(false)}>
-      <AvailableBreakdown person={person} />
-    </Sheet>
+        <Panel className="order-11 flex flex-wrap items-center gap-x-3 gap-y-1 py-3!">
+          <span className="text-micro font-medium uppercase tracking-[0.08em] text-muted-foreground">
+            Moved aside
+          </span>
+          <span className="num text-heading font-semibold text-aside">
+            {gbp(asideTotal(person), false)}
+          </span>
+          <span className="text-caption text-muted-foreground">
+            Savings & investments, not spending
+          </span>
+        </Panel>
+      </div>
+      <Sheet open={availableOpen} onClose={() => setAvailableOpen(false)}>
+        <AvailableBreakdown person={person} />
+      </Sheet>
     </>
   );
 }

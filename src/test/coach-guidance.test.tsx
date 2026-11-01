@@ -26,8 +26,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -92,7 +102,8 @@ describe("Coach floor lines", () => {
   it("below the floor with nothing moved aside last month: no date is promised", () => {
     hydrateData({
       ...withSettings({ availableFloorMinor: 1100000 }),
-      asideMonthly: withAsideHousehold([1050, 1050, 1050, 1050, 0, 1050]).asideMonthly,
+      asideMonthly: withAsideHousehold([1050, 1050, 1050, 1050, 0, 1050])
+        .asideMonthly,
     });
     const lines = coachLines("household");
     expect(lines[0]).toBe(
@@ -259,10 +270,46 @@ describe("snapshot builder: aside series", () => {
     );
     // Zonito moved £200 aside in September, £50 in October; Nikhila
     // £300 in September. One spend row so October has spending too.
-    insert.run("a1", "zonito", "2026-09-10", "2026-09", "Revolut Savings", "Revolut Savings", -20000, "aside");
-    insert.run("a2", "zonito", "2026-10-10", "2026-10", "Revolut Savings", "Revolut Savings", -5000, "aside");
-    insert.run("a3", "nikhila", "2026-09-12", "2026-09", "Vanguard ISA", "Vanguard ISA", -30000, "aside");
-    insert.run("s1", "zonito", "2026-10-05", "2026-10", "Ocado", "Ocado", -4250, "spend");
+    insert.run(
+      "a1",
+      "zonito",
+      "2026-09-10",
+      "2026-09",
+      "Revolut Savings",
+      "Revolut Savings",
+      -20000,
+      "aside",
+    );
+    insert.run(
+      "a2",
+      "zonito",
+      "2026-10-10",
+      "2026-10",
+      "Revolut Savings",
+      "Revolut Savings",
+      -5000,
+      "aside",
+    );
+    insert.run(
+      "a3",
+      "nikhila",
+      "2026-09-12",
+      "2026-09",
+      "Vanguard ISA",
+      "Vanguard ISA",
+      -30000,
+      "aside",
+    );
+    insert.run(
+      "s1",
+      "zonito",
+      "2026-10-05",
+      "2026-10",
+      "Ocado",
+      "Ocado",
+      -4250,
+      "spend",
+    );
     recomputeAggregates(db, "zonito");
     recomputeAggregates(db, "nikhila");
     db.close();

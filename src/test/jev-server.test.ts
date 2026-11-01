@@ -146,7 +146,9 @@ function stubJev(mode: JevMode, captured: CapturedCall[]) {
       return new Response(
         JSON.stringify({
           ok: true,
-          data: { answers: { posture: "Banana", lever: "Banana", value: "Banana" } },
+          data: {
+            answers: { posture: "Banana", lever: "Banana", value: "Banana" },
+          },
         }),
         { status: 200 },
       );
@@ -167,7 +169,8 @@ function stubJev(mode: JevMode, captured: CapturedCall[]) {
       } else if (mode === "mixed") {
         answers[key] = i === 0 ? q.choices[0]! : asObject(q.choices[0]!);
       } else if (mode === "object-offlist") {
-        answers[key] = i === 0 ? asObject("Not offered") : asObject(q.choices[0]!);
+        answers[key] =
+          i === 0 ? asObject("Not offered") : asObject(q.choices[0]!);
       } else {
         answers[key] = q.choices[0]!;
       }
@@ -264,7 +267,11 @@ describe("jev coach endpoint", () => {
     const captured: CapturedCall[] = [];
     const stub = stubJev("ok", captured);
 
-    const first = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const first = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       ok: boolean;
       jev: { answers: Record<string, string>; cached: boolean } | null;
     };
@@ -277,7 +284,11 @@ describe("jev coach endpoint", () => {
     const call = captured[0]!;
     expect(call.url).toMatch(/\/v1\/varuna\/jev\/ask$/);
     expect(call.body.model).toBe("jev-latest");
-    expect(Object.keys(call.body).sort()).toEqual(["model", "questions", "state"]);
+    expect(Object.keys(call.body).sort()).toEqual([
+      "model",
+      "questions",
+      "state",
+    ]);
     // £1,682.50 (Main) + £200 (Pro) + £50 (Joint) + £100 + £50 (savings).
     expect(call.body.state["available_gbp"]).toBe(2082.5);
     expect(call.body.state["spent_this_month_gbp"]).toBe(157.5);
@@ -290,7 +301,11 @@ describe("jev coach endpoint", () => {
     ]);
 
     // Same facts, same day: served from cache, no second live call.
-    const second = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const second = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: { answers: Record<string, string>; cached: boolean } | null;
     };
     expect(second.jev?.answers).toEqual(first.jev?.answers);
@@ -298,8 +313,15 @@ describe("jev coach endpoint", () => {
     expect(stub).toHaveBeenCalledTimes(1);
 
     // The live call recorded its outcome for the Settings status line.
-    const settings = (await (await request(api, "GET", "/api/settings"))!.json()) as {
-      settings: { jevEnabled: boolean; jevLastOutcome: { status: string } | null };
+    const settings = (await (await request(
+      api,
+      "GET",
+      "/api/settings",
+    ))!.json()) as {
+      settings: {
+        jevEnabled: boolean;
+        jevLastOutcome: { status: string } | null;
+      };
     };
     expect(settings.settings.jevEnabled).toBe(true);
     expect(settings.settings.jevLastOutcome?.status).toBe("ok");
@@ -311,25 +333,43 @@ describe("jev coach endpoint", () => {
     const api = await freshApi();
     const captured: CapturedCall[] = [];
     stubJev("ok", captured);
-    const first = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const first = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: { answers: Record<string, string> } | null;
     };
     expect(first.jev).not.toBeNull();
 
     // Age the cache entry beyond today, then take Jev down.
     const db = openStore(storeDir);
-    db.prepare("UPDATE jev_cache SET fetched_at = '2020-01-01T00:00:00.000Z'").run();
+    db.prepare(
+      "UPDATE jev_cache SET fetched_at = '2020-01-01T00:00:00.000Z'",
+    ).run();
     db.close();
     stubJev("down", captured);
 
-    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
-      jev: { answers: Record<string, string>; cached: boolean; at: string } | null;
+    const res = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
+      jev: {
+        answers: Record<string, string>;
+        cached: boolean;
+        at: string;
+      } | null;
     };
     expect(res.jev?.answers).toEqual(first.jev?.answers);
     expect(res.jev?.cached).toBe(true);
     expect(res.jev?.at).toBe("2020-01-01T00:00:00.000Z");
 
-    const settings = (await (await request(api, "GET", "/api/settings"))!.json()) as {
+    const settings = (await (await request(
+      api,
+      "GET",
+      "/api/settings",
+    ))!.json()) as {
       settings: { jevLastOutcome: { status: string } | null };
     };
     expect(settings.settings.jevLastOutcome?.status).toBe("unavailable");
@@ -341,7 +381,11 @@ describe("jev coach endpoint", () => {
     const api = await freshApi();
     const captured: CapturedCall[] = [];
     stubJev("down", captured);
-    const down = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const down = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       ok: boolean;
       jev: unknown;
     };
@@ -349,7 +393,11 @@ describe("jev coach endpoint", () => {
     expect(down.jev).toBeNull();
 
     stubJev("rogue", captured);
-    const rogue = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const rogue = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: unknown;
     };
     expect(rogue.jev).toBeNull();
@@ -362,21 +410,31 @@ describe("jev coach endpoint", () => {
     const captured: CapturedCall[] = [];
     const stub = stubJev("ok", captured);
 
-    const bad = await request(api, "PUT", "/api/settings", { jevEnabled: "yes" });
+    const bad = await request(api, "PUT", "/api/settings", {
+      jevEnabled: "yes",
+    });
     expect(bad?.status).toBe(400);
 
-    const off = (await (await request(api, "PUT", "/api/settings", { jevEnabled: false }))!.json()) as {
+    const off = (await (await request(api, "PUT", "/api/settings", {
+      jevEnabled: false,
+    }))!.json()) as {
       settings: { jevEnabled: boolean };
     };
     expect(off.settings.jevEnabled).toBe(false);
 
-    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const res = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: unknown;
     };
     expect(res.jev).toBeNull();
     expect(stub).not.toHaveBeenCalled();
 
-    const on = (await (await request(api, "PUT", "/api/settings", { jevEnabled: true }))!.json()) as {
+    const on = (await (await request(api, "PUT", "/api/settings", {
+      jevEnabled: true,
+    }))!.json()) as {
       settings: { jevEnabled: boolean };
     };
     expect(on.settings.jevEnabled).toBe(true);
@@ -392,18 +450,27 @@ describe("jev subscription endpoint", () => {
     const stub = stubJev("ok", captured);
 
     // Nothing cached before the first ask.
-    const empty = (await (await request(api, "GET", "/api/jev/subscription?merchant=Netflix"))!.json()) as {
+    const empty = (await (await request(
+      api,
+      "GET",
+      "/api/jev/subscription?merchant=Netflix",
+    ))!.json()) as {
       jev: unknown;
     };
     expect(empty.jev).toBeNull();
     expect(stub).not.toHaveBeenCalled();
 
-    const asked = (await (await request(api, "POST", "/api/jev/subscription", { merchant: "Netflix" }))!.json()) as {
+    const asked = (await (await request(api, "POST", "/api/jev/subscription", {
+      merchant: "Netflix",
+    }))!.json()) as {
       ok: boolean;
       jev: { answers: Record<string, string> } | null;
     };
     expect(asked.ok).toBe(true);
-    expect(asked.jev?.answers).toEqual({ posture: "Keep", value: "Good value" });
+    expect(asked.jev?.answers).toEqual({
+      posture: "Keep",
+      value: "Good value",
+    });
     expect(stub).toHaveBeenCalledTimes(1);
 
     // The state Jev was offered: the sub's computed facts, nothing else.
@@ -420,25 +487,45 @@ describe("jev subscription endpoint", () => {
     });
 
     // The cached read renders the same opinion without a new call.
-    const cached = (await (await request(api, "GET", "/api/jev/subscription?merchant=Netflix"))!.json()) as {
+    const cached = (await (await request(
+      api,
+      "GET",
+      "/api/jev/subscription?merchant=Netflix",
+    ))!.json()) as {
       jev: { answers: Record<string, string> } | null;
     };
-    expect(cached.jev?.answers).toEqual({ posture: "Keep", value: "Good value" });
+    expect(cached.jev?.answers).toEqual({
+      posture: "Keep",
+      value: "Good value",
+    });
     expect(stub).toHaveBeenCalledTimes(1);
 
     // A fresh ask while Jev is down: 502 + the unavailable marker,
     // and the earlier opinion stays cached.
     stubJev("down", captured);
-    const downRes = await request(api, "POST", "/api/jev/subscription", { merchant: "Netflix" });
+    const downRes = await request(api, "POST", "/api/jev/subscription", {
+      merchant: "Netflix",
+    });
     expect(downRes?.status).toBe(502);
-    expect(((await downRes!.json()) as { jev?: string }).jev).toBe("unavailable");
-    const stillThere = (await (await request(api, "GET", "/api/jev/subscription?merchant=Netflix"))!.json()) as {
+    expect(((await downRes!.json()) as { jev?: string }).jev).toBe(
+      "unavailable",
+    );
+    const stillThere = (await (await request(
+      api,
+      "GET",
+      "/api/jev/subscription?merchant=Netflix",
+    ))!.json()) as {
       jev: { answers: Record<string, string> } | null;
     };
-    expect(stillThere.jev?.answers).toEqual({ posture: "Keep", value: "Good value" });
+    expect(stillThere.jev?.answers).toEqual({
+      posture: "Keep",
+      value: "Good value",
+    });
 
     // Unknown merchant is a plain 404, not a Jev call.
-    const missing = await request(api, "POST", "/api/jev/subscription", { merchant: "Nope" });
+    const missing = await request(api, "POST", "/api/jev/subscription", {
+      merchant: "Nope",
+    });
     expect(missing?.status).toBe(404);
     rmSync(storeDir, { recursive: true, force: true });
   });
@@ -451,7 +538,11 @@ describe("jev choice-object answers (Varuna's fixed shape)", () => {
     const captured: CapturedCall[] = [];
     stubJev("object", captured);
 
-    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const res = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: { answers: Record<string, string>; cached: boolean } | null;
     };
     expect(res.jev).not.toBeNull();
@@ -464,7 +555,11 @@ describe("jev choice-object answers (Varuna's fixed shape)", () => {
     expect(res.jev?.cached).toBe(false);
 
     // The Settings status line reads "Jev answered …" off this.
-    const settings = (await (await request(api, "GET", "/api/settings"))!.json()) as {
+    const settings = (await (await request(
+      api,
+      "GET",
+      "/api/settings",
+    ))!.json()) as {
       settings: { jevLastOutcome: { status: string } | null };
     };
     expect(settings.settings.jevLastOutcome?.status).toBe("ok");
@@ -477,7 +572,11 @@ describe("jev choice-object answers (Varuna's fixed shape)", () => {
     const captured: CapturedCall[] = [];
     stubJev("mixed", captured);
 
-    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const res = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: { answers: Record<string, string> } | null;
     };
     // Posture arrived as a bare string, lever as a choice object;
@@ -495,7 +594,11 @@ describe("jev choice-object answers (Varuna's fixed shape)", () => {
     const captured: CapturedCall[] = [];
     stubJev("object-offlist", captured);
 
-    const res = (await (await request(api, "GET", "/api/jev/coach?person=household"))!.json()) as {
+    const res = (await (await request(
+      api,
+      "GET",
+      "/api/jev/coach?person=household",
+    ))!.json()) as {
       jev: { answers: Record<string, string> } | null;
     };
     // Posture's object named "Not offered": dropped. The lever
@@ -513,10 +616,15 @@ describe("jev choice-object answers (Varuna's fixed shape)", () => {
     const captured: CapturedCall[] = [];
     stubJev("object", captured);
 
-    const asked = (await (await request(api, "POST", "/api/jev/subscription", { merchant: "Netflix" }))!.json()) as {
+    const asked = (await (await request(api, "POST", "/api/jev/subscription", {
+      merchant: "Netflix",
+    }))!.json()) as {
       jev: { answers: Record<string, string> } | null;
     };
-    expect(asked.jev?.answers).toEqual({ posture: "Keep", value: "Good value" });
+    expect(asked.jev?.answers).toEqual({
+      posture: "Keep",
+      value: "Good value",
+    });
     rmSync(storeDir, { recursive: true, force: true });
   });
 });

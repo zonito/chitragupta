@@ -28,16 +28,22 @@ let queueTotal = 0;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function installFetch() {
-  fetchMock = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
-    void init;
-    if (url === "/api/review-queue") {
-      return {
-        ok: true,
-        json: async () => ({ ok: true, queue: queueItems, total: queueTotal }),
-      };
-    }
-    return { ok: true, json: async () => ({ ok: true }) };
-  });
+  fetchMock = vi.fn(
+    async (url: string, init?: { method?: string; body?: string }) => {
+      void init;
+      if (url === "/api/review-queue") {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            queue: queueItems,
+            total: queueTotal,
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    },
+  );
   vi.stubGlobal("fetch", fetchMock);
 }
 
@@ -101,9 +107,9 @@ describe("Settings merchant review sheet", () => {
     ) as HTMLSelectElement;
     // No suggestion: neutral placeholder, nothing chosen.
     expect(fallbackSelect.value).toBe("");
-    expect(
-      [...fallbackSelect.options].map((o) => o.text),
-    ).toContain("Choose a category");
+    expect([...fallbackSelect.options].map((o) => o.text)).toContain(
+      "Choose a category",
+    );
     // Suggestion pre-fills the picker.
     expect(taggedSelect.value).toBe("Groceries");
 
@@ -168,7 +174,9 @@ describe("Settings merchant review sheet", () => {
     await openSheet();
     expect(await screen.findByText("Capped 1")).toBeTruthy();
     expect(
-      screen.getByText("572 more merchants are waiting beyond the 3 shown here."),
+      screen.getByText(
+        "572 more merchants are waiting beyond the 3 shown here.",
+      ),
     ).toBeTruthy();
   });
 });

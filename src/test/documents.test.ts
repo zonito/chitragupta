@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { DOCS, TXNS, attachReceipt, detachReceipt, docFor, isMatched, receiptForTransaction, shareOf } from "@/lib/data";
+import {
+  DOCS,
+  TXNS,
+  attachReceipt,
+  detachReceipt,
+  docFor,
+  isMatched,
+  receiptForTransaction,
+  shareOf,
+} from "@/lib/data";
 
 function transaction(id: string) {
   const txn = TXNS.find((t) => t.id === id);
@@ -11,15 +20,22 @@ describe("Transaction receipts and shares", () => {
   it("generates a matched Ocado receipt using the full transaction date and amount", () => {
     const receipt = receiptForTransaction(transaction("7"));
     const documents = attachReceipt(DOCS, receipt);
-    expect(docFor("7", documents)?.path).toBe("PersonalFinance/Documents/Receipts/2026/2026-10/2026-10-03_Ocado_£112.40.pdf");
+    expect(docFor("7", documents)?.path).toBe(
+      "PersonalFinance/Documents/Receipts/2026/2026-10/2026-10-03_Ocado_£112.40.pdf",
+    );
     expect(documents).toHaveLength(7);
     expect(isMatched(receipt)).toBe(true);
   });
   it("replaces the attachment without duplicating the matched document", () => {
-    const documents = attachReceipt(DOCS, receiptForTransaction(transaction("2"), "png"));
+    const documents = attachReceipt(
+      DOCS,
+      receiptForTransaction(transaction("2"), "png"),
+    );
     expect(documents).toHaveLength(6);
     expect(documents.filter((d) => d.txnId === "2")).toHaveLength(1);
-    expect(docFor("2", documents)?.path).toContain("2026-10-01_OctopusEnergy_£138.00.png");
+    expect(docFor("2", documents)?.path).toContain(
+      "2026-10-01_OctopusEnergy_£138.00.png",
+    );
   });
   it("removes the transaction link and retains the document as unmatched", () => {
     const documents = detachReceipt(DOCS, "2");

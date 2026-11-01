@@ -31,7 +31,9 @@ const LATEST = "2026-10-30";
 
 describe("canonicalMerchant", () => {
   it("merges a trailing-mobile name variant and keeps distinct merchants apart", () => {
-    expect(canonicalMerchant("Lebara mobile")).toBe(canonicalMerchant("Lebara"));
+    expect(canonicalMerchant("Lebara mobile")).toBe(
+      canonicalMerchant("Lebara"),
+    );
     expect(canonicalMerchant("Google Cloud")).not.toBe(
       canonicalMerchant("Google Endel Sound"),
     );
@@ -143,7 +145,11 @@ describe("detectSubscriptions", () => {
     ];
     const subs = detectSubscriptions(charges, LATEST, fmt);
     expect(subs).toHaveLength(1);
-    expect(subs[0]).toMatchObject({ amount: 10.1, freq: "Monthly", status: "Active" });
+    expect(subs[0]).toMatchObject({
+      amount: 10.1,
+      freq: "Monthly",
+      status: "Active",
+    });
     expect(subs[0]!.note).toBe("£10.00 → £10.10");
   });
 });

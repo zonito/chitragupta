@@ -29,9 +29,13 @@ function isCardLike(value: unknown): value is CardItem {
     typeof v["last4"] === "string" &&
     typeof v["account"] === "string" &&
     typeof v["issued"] === "string" &&
-    (v["owner"] === "zonito" || v["owner"] === "nikhila" || v["owner"] === "joint") &&
+    (v["owner"] === "zonito" ||
+      v["owner"] === "nikhila" ||
+      v["owner"] === "joint") &&
     (v["type"] === "Virtual" || v["type"] === "Physical") &&
-    (v["status"] === "Active" || v["status"] === "Frozen" || v["status"] === "Replaced")
+    (v["status"] === "Active" ||
+      v["status"] === "Frozen" ||
+      v["status"] === "Replaced")
   );
 }
 
@@ -48,7 +52,10 @@ export function migrateStoredCards(raw: unknown): StoredCard[] {
   raw.forEach((entry, index) => {
     if (!isCardLike(entry)) return;
     const existing = (entry as StoredCard).id;
-    let id = typeof existing === "string" && existing ? existing : `card-migrated-${index}`;
+    let id =
+      typeof existing === "string" && existing
+        ? existing
+        : `card-migrated-${index}`;
     while (seen.has(id)) id = `${id}-${index}`;
     seen.add(id);
     cards.push({ ...entry, id });

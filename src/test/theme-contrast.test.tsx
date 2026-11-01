@@ -32,7 +32,10 @@ function luminance([l, a, b]: Oklab): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
 }
 function contrast(fg: Oklab, bg: Oklab): number {
-  const [hi, lo] = [luminance(fg), luminance(bg)].sort((x, y) => y - x) as [number, number];
+  const [hi, lo] = [luminance(fg), luminance(bg)].sort((x, y) => y - x) as [
+    number,
+    number,
+  ];
   return (hi + 0.05) / (lo + 0.05);
 }
 const mix = (c: Oklab, base: Oklab, w: number): Oklab =>
@@ -45,7 +48,9 @@ function themeBlock(selector: string): string {
   return css.slice(start, end);
 }
 function token(block: string, name: string): Oklab {
-  const m = block.match(new RegExp(`--${name}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)\\)`));
+  const m = block.match(
+    new RegExp(`--${name}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)\\)`),
+  );
   if (!m) throw new Error(`token --${name} not found`);
   return oklch(Number(m[1]), Number(m[2]), Number(m[3]));
 }
@@ -65,27 +70,38 @@ const CAT_TOKEN: Record<string, string> = {
 };
 
 describe("chip contrast (computed from styles.css tokens)", () => {
-  it.each(["light", "dark"] as const)("%s: every category chip pair clears 4.5:1", (theme) => {
-    const block = theme === "light" ? light : dark;
-    const card = token(block, "card");
-    for (const cat of CATEGORIES) {
-      const base = CAT_TOKEN[cat]!;
-      const colour = token(block, base);
-      const ink = token(block, `${base}-ink`);
-      const tint = mix(colour, card, 0.12);
-      expect(contrast(ink, tint), `${theme} ${cat}`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
+  it.each(["light", "dark"] as const)(
+    "%s: every category chip pair clears 4.5:1",
+    (theme) => {
+      const block = theme === "light" ? light : dark;
+      const card = token(block, "card");
+      for (const cat of CATEGORIES) {
+        const base = CAT_TOKEN[cat]!;
+        const colour = token(block, base);
+        const ink = token(block, `${base}-ink`);
+        const tint = mix(colour, card, 0.12);
+        expect(contrast(ink, tint), `${theme} ${cat}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+    },
+  );
 
-  it.each(["light", "dark"] as const)("%s: warn and good chip pairs clear 4.5:1", (theme) => {
-    const block = theme === "light" ? light : dark;
-    const card = token(block, "card");
-    for (const name of ["warn", "good"] as const) {
-      const colour = token(block, name);
-      const tint = mix(colour, card, 0.15);
-      expect(contrast(colour, tint), `${theme} ${name}`).toBeGreaterThanOrEqual(4.5);
-    }
-  });
+  it.each(["light", "dark"] as const)(
+    "%s: warn and good chip pairs clear 4.5:1",
+    (theme) => {
+      const block = theme === "light" ? light : dark;
+      const card = token(block, "card");
+      for (const name of ["warn", "good"] as const) {
+        const colour = token(block, name);
+        const tint = mix(colour, card, 0.15);
+        expect(
+          contrast(colour, tint),
+          `${theme} ${name}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
 
   it("dark category inks equal the category colours (dark rendering unchanged)", () => {
     for (const cat of CATEGORIES) {
@@ -103,13 +119,18 @@ describe("CategoryChip rendering", () => {
     expect(screen.getByText("Holidays")).toBeTruthy();
     expect(CATEGORY_INK.Holidays).toBe("var(--cat-holidays-ink)");
     expect(CATEGORY_COLOR.Holidays).toBe("var(--cat-holidays)");
-    const shell = readFileSync(resolve(__dirname, "../components/shell.tsx"), "utf8");
+    const shell = readFileSync(
+      resolve(__dirname, "../components/shell.tsx"),
+      "utf8",
+    );
     const chipFn = shell.slice(shell.indexOf("export function CategoryChip"));
     // The chip text colour resolves through categoryInk() — the
     // snapshot-aware helper over CATEGORY_INK (customs fall back to
     // their own colour) — never the raw category colour.
     expect(chipFn.slice(0, 800)).toContain("categoryInk(category)");
-    expect(chipFn.slice(0, 800)).toContain("color-mix(in oklab, ${colour} 12%, transparent)");
+    expect(chipFn.slice(0, 800)).toContain(
+      "color-mix(in oklab, ${colour} 12%, transparent)",
+    );
   });
 });
 
@@ -126,7 +147,10 @@ describe("hover pairs", () => {
   });
 
   it("the error-page Go home anchor carries the intact accent pair", () => {
-    const root = readFileSync(resolve(__dirname, "../routes/__root.tsx"), "utf8");
+    const root = readFileSync(
+      resolve(__dirname, "../routes/__root.tsx"),
+      "utf8",
+    );
     const anchor = root.match(/<a\s+href="\/"[\s\S]*?Go home/);
     expect(anchor).toBeTruthy();
     expect(anchor![0]).toContain("hover:bg-accent");

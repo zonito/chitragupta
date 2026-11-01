@@ -14,12 +14,7 @@ import {
 import { render, screen } from "@testing-library/react";
 import type Database from "better-sqlite3";
 import { PersonProvider } from "@/components/shell";
-import {
-  hydrateData,
-  type DataSnapshot,
-  type Sub,
-  type Txn,
-} from "@/lib/data";
+import { hydrateData, type DataSnapshot, type Sub, type Txn } from "@/lib/data";
 import {
   detectIncomeRegulars,
   forecastEvents,
@@ -37,8 +32,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -162,7 +167,10 @@ describe("detectIncomeRegulars", () => {
     ];
     expect(detectIncomeRegulars(varying, "2026-10-31")).toEqual([]);
     expect(
-      detectIncomeRegulars([charge("Bonus", "2026-09-15", 900000)], "2026-10-15"),
+      detectIncomeRegulars(
+        [charge("Bonus", "2026-09-15", 900000)],
+        "2026-10-15",
+      ),
     ).toEqual([]);
     const weekly = [
       charge("Side Gig", "2026-09-07", 30000),
@@ -343,9 +351,18 @@ describe("paceFor", () => {
       spendRow("a", "2026-10", 2, 100),
       spendRow("b", "2026-10", 3, 500, { category: "One-off" }),
       spendRow("c", "2026-10", 4, 60), // a cluster charge
-      spendRow("d", "2026-10", 5, 40, { kind: "aside", category: "Moved aside" }),
+      spendRow("d", "2026-10", 5, 40, {
+        kind: "aside",
+        category: "Moved aside",
+      }),
     ];
-    const pace = paceFor("household", "2026-10", "2026-10-10", txns, new Set(["c"]));
+    const pace = paceFor(
+      "household",
+      "2026-10",
+      "2026-10-10",
+      txns,
+      new Set(["c"]),
+    );
     expect(pace.elapsedDays).toBe(10);
     expect(pace.remainingDays).toBe(21);
     expect(pace.dailyRate).toBeCloseTo(10, 6); // £100 of variable spend / 10 days
@@ -399,16 +416,41 @@ describe("forecastEvents", () => {
       "2026-10-10",
       "2026-10-31",
     );
-    expect(events.map((e) => e.date)).toEqual(["2026-10-12", "2026-10-19", "2026-10-26"]);
+    expect(events.map((e) => e.date)).toEqual([
+      "2026-10-12",
+      "2026-10-19",
+      "2026-10-26",
+    ]);
     expect(outTotal).toBe(75);
   });
 
   it("halves Joint regulars for a person view and drops the other person's", () => {
-    const joint = sub({ name: "Council Tax", amount: 200, owner: "joint", nextExpected: "2026-10-20", periodDays: 30 });
-    const hers = sub({ name: "PureGym", amount: 35, owner: "nikhila", nextExpected: "2026-10-21", periodDays: 30 });
-    expect(forecastEvents("zonito", [joint, hers], [], "2026-10-10", "2026-10-31").outTotal).toBe(100);
-    expect(forecastEvents("nikhila", [joint, hers], [], "2026-10-10", "2026-10-31").outTotal).toBe(135);
-    expect(forecastEvents("household", [joint, hers], [], "2026-10-10", "2026-10-31").outTotal).toBe(235);
+    const joint = sub({
+      name: "Council Tax",
+      amount: 200,
+      owner: "joint",
+      nextExpected: "2026-10-20",
+      periodDays: 30,
+    });
+    const hers = sub({
+      name: "PureGym",
+      amount: 35,
+      owner: "nikhila",
+      nextExpected: "2026-10-21",
+      periodDays: 30,
+    });
+    expect(
+      forecastEvents("zonito", [joint, hers], [], "2026-10-10", "2026-10-31")
+        .outTotal,
+    ).toBe(100);
+    expect(
+      forecastEvents("nikhila", [joint, hers], [], "2026-10-10", "2026-10-31")
+        .outTotal,
+    ).toBe(135);
+    expect(
+      forecastEvents("household", [joint, hers], [], "2026-10-10", "2026-10-31")
+        .outTotal,
+    ).toBe(235);
   });
 });
 
@@ -426,15 +468,19 @@ function midOctober(over: Partial<DataSnapshot>): DataSnapshot {
     latestDate: "2026-10-10",
     accounts: [
       {
-        name: "Revolut Main", owner: "zonito", last: "10 Oct", lastDate: "2026-10-10",
-        added: 3, stale: false, balanceMinor: 100000, currency: "GBP",
-        accountId: "Main", person: "zonito",
+        name: "Revolut Main",
+        owner: "zonito",
+        last: "10 Oct",
+        lastDate: "2026-10-10",
+        added: 3,
+        stale: false,
+        balanceMinor: 100000,
+        currency: "GBP",
+        accountId: "Main",
+        person: "zonito",
       },
     ],
-    txns: [
-      spendRow("p1", "2026-10", 3, 60),
-      spendRow("p2", "2026-10", 7, 40),
-    ],
+    txns: [spendRow("p1", "2026-10", 3, 60), spendRow("p2", "2026-10", 7, 40)],
     income: [],
     incomeRegulars: [],
     subs: [],
@@ -448,7 +494,14 @@ describe("forecastFor over synthetic snapshots", () => {
   it("a large late regular breaches the floor and is named as the culprit", () => {
     hydrateData(
       midOctober({
-        subs: [sub({ name: "Mortgage Co", amount: 400, nextExpected: "2026-10-31", periodDays: 30 })],
+        subs: [
+          sub({
+            name: "Mortgage Co",
+            amount: 400,
+            nextExpected: "2026-10-31",
+            periodDays: 30,
+          }),
+        ],
         settings: {
           ...SAMPLE_SNAPSHOT.settings,
           availableFloorMinor: 90000, // £900 floor
@@ -475,7 +528,14 @@ describe("forecastFor over synthetic snapshots", () => {
   it("renders the breach copy, the no-income label and the stamp", () => {
     hydrateData(
       midOctober({
-        subs: [sub({ name: "Mortgage Co", amount: 400, nextExpected: "2026-10-31", periodDays: 30 })],
+        subs: [
+          sub({
+            name: "Mortgage Co",
+            amount: 400,
+            nextExpected: "2026-10-31",
+            periodDays: 30,
+          }),
+        ],
         settings: {
           ...SAMPLE_SNAPSHOT.settings,
           availableFloorMinor: 90000,
@@ -492,14 +552,25 @@ describe("forecastFor over synthetic snapshots", () => {
     expect(card.textContent).toMatch(
       /Dips £510 below your £900 floor on 31 Oct 2026, the day Mortgage Co £400\.00 lands\./,
     );
-    expect(card.textContent).toMatch(/No regular income detected — outgoings and pace only\./);
-    expect(card.textContent).toMatch(/Projected from statements to 10 Oct 2026/);
+    expect(card.textContent).toMatch(
+      /No regular income detected — outgoings and pace only\./,
+    );
+    expect(card.textContent).toMatch(
+      /Projected from statements to 10 Oct 2026/,
+    );
   });
 
   it("above the floor: headroom and the per-week safe-to-spend figure", () => {
     hydrateData(
       midOctober({
-        subs: [sub({ name: "Netflix", amount: 20, nextExpected: "2026-10-20", periodDays: 30 })],
+        subs: [
+          sub({
+            name: "Netflix",
+            amount: 20,
+            nextExpected: "2026-10-20",
+            periodDays: 30,
+          }),
+        ],
         settings: {
           ...SAMPLE_SNAPSHOT.settings,
           availableFloorMinor: 10000, // £100 floor
@@ -532,22 +603,54 @@ describe("forecastFor over synthetic snapshots", () => {
       midOctober({
         accounts: [
           {
-            name: "Revolut Main", owner: "zonito", last: "10 Oct", lastDate: "2026-10-10",
-            added: 3, stale: false, balanceMinor: 100000, currency: "GBP",
-            accountId: "Main", person: "zonito",
+            name: "Revolut Main",
+            owner: "zonito",
+            last: "10 Oct",
+            lastDate: "2026-10-10",
+            added: 3,
+            stale: false,
+            balanceMinor: 100000,
+            currency: "GBP",
+            accountId: "Main",
+            person: "zonito",
           },
           {
-            name: "Monzo Current", owner: "nikhila", last: "10 Oct", lastDate: "2026-10-10",
-            added: 2, stale: false, balanceMinor: 50000, currency: "GBP",
-            accountId: "Current", person: "nikhila",
+            name: "Monzo Current",
+            owner: "nikhila",
+            last: "10 Oct",
+            lastDate: "2026-10-10",
+            added: 2,
+            stale: false,
+            balanceMinor: 50000,
+            currency: "GBP",
+            accountId: "Current",
+            person: "nikhila",
           },
         ],
         subs: [
-          sub({ name: "His Sub", amount: 100, owner: "zonito", nextExpected: "2026-10-21", periodDays: 30 }),
-          sub({ name: "Her Sub", amount: 300, owner: "nikhila", nextExpected: "2026-10-20", periodDays: 30 }),
+          sub({
+            name: "His Sub",
+            amount: 100,
+            owner: "zonito",
+            nextExpected: "2026-10-21",
+            periodDays: 30,
+          }),
+          sub({
+            name: "Her Sub",
+            amount: 300,
+            owner: "nikhila",
+            nextExpected: "2026-10-20",
+            periodDays: 30,
+          }),
         ],
         incomeRegulars: [
-          { name: "Her Employer", amount: 2000, owner: "nikhila", nextExpected: "2026-10-28", periodDays: 30 },
+          {
+            name: "Her Employer",
+            amount: 2000,
+            owner: "nikhila",
+            nextExpected: "2026-10-28",
+            periodDays: 30,
+          },
         ],
       }),
     );
@@ -605,63 +708,70 @@ const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"];
 const BOTH_PEOPLE =
   !!DATA_DIR &&
   existsSync(
-    join(DATA_DIR, "Originals", "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv"),
+    join(
+      DATA_DIR,
+      "Originals",
+      "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv",
+    ),
   );
 
-describe.runIf(BOTH_PEOPLE)("forecast on the repro fixture (SQL-derived)", () => {
-  let db: Database.Database;
-  let storeDir: string;
-  let fixtureSnap: DataSnapshot;
+describe.runIf(BOTH_PEOPLE)(
+  "forecast on the repro fixture (SQL-derived)",
+  () => {
+    let db: Database.Database;
+    let storeDir: string;
+    let fixtureSnap: DataSnapshot;
 
-  beforeAll(async () => {
-    const { openStore } = await import("@/lib/ingest/store");
-    const { ingestAll, recomputeAggregates } = await import("@/lib/ingest/ingest");
-    const { seedMerchantMemory } = await import("@/lib/ingest/merchants");
-    const { buildSnapshot } = await import("@/lib/snapshot.server");
-    storeDir = mkdtempSync(join(tmpdir(), "chitra-forecast-"));
-    db = openStore(storeDir);
-    ingestAll(db, DATA_DIR!);
-    seedMerchantMemory(db);
-    recomputeAggregates(db, "zonito");
-    recomputeAggregates(db, "nikhila");
-    recomputeAggregates(db, "household");
-    process.env["CHITRAGUPTA_STORE_DIR"] = storeDir;
-    fixtureSnap = buildSnapshot();
-  }, 180_000);
+    beforeAll(async () => {
+      const { openStore } = await import("@/lib/ingest/store");
+      const { ingestAll, recomputeAggregates } =
+        await import("@/lib/ingest/ingest");
+      const { seedMerchantMemory } = await import("@/lib/ingest/merchants");
+      const { buildSnapshot } = await import("@/lib/snapshot.server");
+      storeDir = mkdtempSync(join(tmpdir(), "chitra-forecast-"));
+      db = openStore(storeDir);
+      ingestAll(db, DATA_DIR!);
+      seedMerchantMemory(db);
+      recomputeAggregates(db, "zonito");
+      recomputeAggregates(db, "nikhila");
+      recomputeAggregates(db, "household");
+      process.env["CHITRAGUPTA_STORE_DIR"] = storeDir;
+      fixtureSnap = buildSnapshot();
+    }, 180_000);
 
-  // The file-level afterEach re-hydrates the sample snapshot, so each
-  // fixture test re-hydrates the real one first.
-  beforeEach(() => {
-    hydrateData(fixtureSnap);
-  });
+    // The file-level afterEach re-hydrates the sample snapshot, so each
+    // fixture test re-hydrates the real one first.
+    beforeEach(() => {
+      hydrateData(fixtureSnap);
+    });
 
-  afterAll(() => {
-    db.close();
-    rmSync(storeDir, { recursive: true, force: true });
-  });
+    afterAll(() => {
+      db.close();
+      rmSync(storeDir, { recursive: true, force: true });
+    });
 
-  /** Available per view from ingest_runs alone: each (person,
-   * account)'s latest content-bearing run's GBP balance; a person's
-   * view is their own accounts only (Joint is the household's). */
-  function sqlAvailable(person: "household" | "zonito" | "nikhila"): number {
-    const row = db
-      .prepare(
-        `SELECT SUM(balance_minor) AS total FROM ingest_runs
+    /** Available per view from ingest_runs alone: each (person,
+     * account)'s latest content-bearing run's GBP balance; a person's
+     * view is their own accounts only (Joint is the household's). */
+    function sqlAvailable(person: "household" | "zonito" | "nikhila"): number {
+      const row = db
+        .prepare(
+          `SELECT SUM(balance_minor) AS total FROM ingest_runs
          WHERE id IN (SELECT MAX(id) FROM ingest_runs WHERE rows_seen > 0 GROUP BY person, account)
            AND currency = 'GBP' AND balance_minor IS NOT NULL
            AND substr(account, 1, 2) <> '__'
            ${person === "household" ? "" : person === "zonito" ? "AND person = 'zonito' AND account <> 'Joint'" : "AND person = 'nikhila'"}`,
-      )
-      .get() as { total: number };
-    return row.total / 100;
-  }
+        )
+        .get() as { total: number };
+      return row.total / 100;
+    }
 
-  it("the pace equals the SQL non-regular, non-one-off October rate", () => {
-    const clusterIds = fixtureSnap.subs.flatMap((s) => s.chargeIds);
-    const marks = clusterIds.map(() => "?").join(",");
-    const row = db
-      .prepare(
-        `SELECT SUM(ABS(t.amount_minor)) AS total
+    it("the pace equals the SQL non-regular, non-one-off October rate", () => {
+      const clusterIds = fixtureSnap.subs.flatMap((s) => s.chargeIds);
+      const marks = clusterIds.map(() => "?").join(",");
+      const row = db
+        .prepare(
+          `SELECT SUM(ABS(t.amount_minor)) AS total
          FROM transactions t LEFT JOIN merchant_memory m ON m.merchant = t.merchant
          WHERE t.movement = 'spend' AND t.currency = 'GBP'
            AND t.year_month = '2026-10'
@@ -669,30 +779,31 @@ describe.runIf(BOTH_PEOPLE)("forecast on the repro fixture (SQL-derived)", () =>
                           OR COALESCE(t.category, m.category) IN ('Transfer', 'Moved aside')
                      THEN COALESCE(t.category, m.category) ELSE 'One-off' END) <> 'One-off'
            ${clusterIds.length ? `AND t.fingerprint NOT IN (${marks})` : ""}`,
-      )
-      .get(...clusterIds) as { total: number };
-    const f = forecastFor("household")!;
-    expect(f.paceDaily).toBeCloseTo(row.total / 100 / 31, 4);
-  });
+        )
+        .get(...clusterIds) as { total: number };
+      const f = forecastFor("household")!;
+      expect(f.paceDaily).toBeCloseTo(row.total / 100 / 31, 4);
+    });
 
-  it("start, projection and low point are the ended month's figures", () => {
-    for (const person of ["household", "zonito", "nikhila"] as const) {
-      const f = forecastFor(person)!;
-      expect(f.start).toBeCloseTo(sqlAvailable(person), 6);
-      expect(f.remainingDays).toBe(0);
-      expect(f.projectedEnd).toBeCloseTo(f.start, 6);
-      expect(f.lowPoint).toEqual({ date: "2026-10-31", amount: f.start });
-      expect(f.regularsOutTotal).toBe(0);
-      expect(f.regularsInTotal).toBe(0);
-    }
-  });
+    it("start, projection and low point are the ended month's figures", () => {
+      for (const person of ["household", "zonito", "nikhila"] as const) {
+        const f = forecastFor(person)!;
+        expect(f.start).toBeCloseTo(sqlAvailable(person), 6);
+        expect(f.remainingDays).toBe(0);
+        expect(f.projectedEnd).toBeCloseTo(f.start, 6);
+        expect(f.lowPoint).toEqual({ date: "2026-10-31", amount: f.start });
+        expect(f.regularsOutTotal).toBe(0);
+        expect(f.regularsInTotal).toBe(0);
+      }
+    });
 
-  it("detects no income stream: the fixture's frequent income amounts vary far beyond any monthly cluster", () => {
-    // SHARMA L alone spans £100–£15,000 across 104 landings and Pro
-    // Cashback £0.52–£69.17 across 55; no merchant holds a 7%-window
-    // amount cluster on a monthly cadence, so the honest answer is
-    // no detected stream (the detector is pinned synthetically above).
-    expect(fixtureSnap.incomeRegulars).toEqual([]);
-    expect(forecastFor("household")!.hasIncome).toBe(false);
-  });
-});
+    it("detects no income stream: the fixture's frequent income amounts vary far beyond any monthly cluster", () => {
+      // SHARMA L alone spans £100–£15,000 across 104 landings and Pro
+      // Cashback £0.52–£69.17 across 55; no merchant holds a 7%-window
+      // amount cluster on a monthly cadence, so the honest answer is
+      // no detected stream (the detector is pinned synthetically above).
+      expect(fixtureSnap.incomeRegulars).toEqual([]);
+      expect(forecastFor("household")!.hasIncome).toBe(false);
+    });
+  },
+);

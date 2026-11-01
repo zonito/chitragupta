@@ -140,7 +140,11 @@ export async function callJev(
           ok?: unknown;
           data?: { answers?: unknown };
         };
-        if (body.ok === true && typeof body.data?.answers === "object" && body.data.answers !== null) {
+        if (
+          body.ok === true &&
+          typeof body.data?.answers === "object" &&
+          body.data.answers !== null
+        ) {
           const raw = body.data.answers as Record<string, unknown>;
           const valid: JevAnswers = {};
           for (const [key, question] of Object.entries(payload.questions)) {
@@ -234,10 +238,18 @@ export function buildCoachJevPayload(
       const diff = (nowByCat.get(name) ?? 0) - usual;
       return { category: name, above_usual_by_gbp: round2(diff), usual };
     })
-    .filter((x) => x.usual > 0 && x.above_usual_by_gbp >= 50 && x.above_usual_by_gbp >= x.usual * 0.2)
+    .filter(
+      (x) =>
+        x.usual > 0 &&
+        x.above_usual_by_gbp >= 50 &&
+        x.above_usual_by_gbp >= x.usual * 0.2,
+    )
     .sort((a, b) => b.above_usual_by_gbp - a.above_usual_by_gbp)
     .slice(0, 3)
-    .map(({ category, above_usual_by_gbp }) => ({ category, above_usual_by_gbp }));
+    .map(({ category, above_usual_by_gbp }) => ({
+      category,
+      above_usual_by_gbp,
+    }));
 
   // The small-spends pile, with the same definition Coach uses.
   let smallCount = 0;
@@ -253,7 +265,8 @@ export function buildCoachJevPayload(
 
   const state: Record<string, unknown> = {
     view: person,
-    current_month: snap.months.find((m) => m.key === snap.monthKey)?.label ?? snap.monthKey,
+    current_month:
+      snap.months.find((m) => m.key === snap.monthKey)?.label ?? snap.monthKey,
     available_gbp: available === null ? null : round2(available),
     moved_aside_last_complete_month_gbp: round2(pace.total),
     moved_aside_month:
@@ -268,10 +281,14 @@ export function buildCoachJevPayload(
   };
   if (settings.availableFloorMinor !== null && available !== null) {
     state["floor_gbp"] = round2(settings.availableFloorMinor / 100);
-    state["floor_gap_gbp"] = round2(settings.availableFloorMinor / 100 - available);
+    state["floor_gap_gbp"] = round2(
+      settings.availableFloorMinor / 100 - available,
+    );
   }
   if (settings.overallMonthlyBudgetMinor !== null) {
-    state["overall_budget_gbp"] = round2(settings.overallMonthlyBudgetMinor / 100);
+    state["overall_budget_gbp"] = round2(
+      settings.overallMonthlyBudgetMinor / 100,
+    );
     state["over_overall_budget_by_gbp"] = round2(
       spent - settings.overallMonthlyBudgetMinor / 100,
     );
@@ -465,7 +482,11 @@ export function subJevCached(
   db: Database.Database,
   merchantName: string,
 ): JevOpinion | null {
-  const entry = latestJevCache(db, "subscription", canonicalMerchant(merchantName));
+  const entry = latestJevCache(
+    db,
+    "subscription",
+    canonicalMerchant(merchantName),
+  );
   if (!entry) return null;
   return { answers: entry.answers, at: entry.fetchedAt, cached: true };
 }

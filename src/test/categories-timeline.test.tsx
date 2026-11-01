@@ -1,7 +1,15 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { PersonProvider } from "@/components/shell";
 import { Categories } from "@/routes/categories";
@@ -36,7 +44,10 @@ import {
 
 const M = (months: string[], rows: Record<string, number[]>): MonthlyRows => ({
   months,
-  rows: Object.entries(rows).map(([category, series]) => ({ category, series })),
+  rows: Object.entries(rows).map(([category, series]) => ({
+    category,
+    series,
+  })),
 });
 
 const monthRange = (start: string, count: number): string[] => {
@@ -70,7 +81,11 @@ describe("timeline bucketing", () => {
     });
     const buckets = quarterlyBuckets(data, null);
     expect(buckets).toHaveLength(1);
-    expect(buckets[0]).toMatchObject({ key: "2026-Q1", label: "Q1 2026", total: 660 });
+    expect(buckets[0]).toMatchObject({
+      key: "2026-Q1",
+      label: "Q1 2026",
+      total: 660,
+    });
     expect(buckets[0]!.values).toEqual({ Groceries: 600, Home: 60 });
     expect(buckets[0]!.partial).toBeUndefined();
   });
@@ -107,7 +122,11 @@ describe("timeline bucketing", () => {
   });
 
   it("category totals order biggest first", () => {
-    const data = M(["2026-01"], { Home: [50], Groceries: [200], Transport: [200] });
+    const data = M(["2026-01"], {
+      Home: [50],
+      Groceries: [200],
+      Transport: [200],
+    });
     expect(categoryTotals(monthlyBuckets(data))).toEqual([
       { name: "Groceries", total: 200 },
       { name: "Transport", total: 200 },
@@ -151,7 +170,11 @@ describe("timeline bucketing", () => {
       end: "2026-10-31",
       dataStart: "2026-10-30",
       buckets: [
-        { date: "2026-10-30", total: 25, categories: { Groceries: 20, Fees: 5 } },
+        {
+          date: "2026-10-30",
+          total: 25,
+          categories: { Groceries: 20, Fees: 5 },
+        },
         { date: "2026-10-31", total: 40, categories: { Groceries: 40 } },
       ],
     };
@@ -172,18 +195,32 @@ describe("comparison line", () => {
 
   it("names the biggest riser in plain language", () => {
     expect(
-      comparisonText([bucket({ Groceries: 180, Home: 90 })], [bucket({ Groceries: 100, Home: 100 })], "previous 12 months"),
+      comparisonText(
+        [bucket({ Groceries: 180, Home: 90 })],
+        [bucket({ Groceries: 100, Home: 100 })],
+        "previous 12 months",
+      ),
     ).toBe("Groceries up £80 vs previous 12 months");
   });
 
   it("falls back to the biggest faller when nothing rose", () => {
     expect(
-      comparisonText([bucket({ Groceries: 40 })], [bucket({ Groceries: 100 })], "previous 30 days"),
+      comparisonText(
+        [bucket({ Groceries: 40 })],
+        [bucket({ Groceries: 100 })],
+        "previous 30 days",
+      ),
     ).toBe("Groceries down £60 vs previous 30 days");
   });
 
   it("omits the line for sub-£1 moves and missing windows", () => {
-    expect(comparisonText([bucket({ Groceries: 100.4 })], [bucket({ Groceries: 100 })], "x")).toBeNull();
+    expect(
+      comparisonText(
+        [bucket({ Groceries: 100.4 })],
+        [bucket({ Groceries: 100 })],
+        "x",
+      ),
+    ).toBeNull();
     expect(comparisonText([bucket({ Groceries: 100 })], null, "x")).toBeNull();
     expect(comparisonText([bucket({ Groceries: 100 })], [], "x")).toBeNull();
   });
@@ -207,7 +244,9 @@ describe("comparison line", () => {
       Groceries: [
         ...Array(12).fill(100), // all of 2025
         ...Array(7).fill(100), // Jan–Jul 2026
-        130, 130, 130, // Aug–Oct 2026: +30 in each of the last 3 months
+        130,
+        130,
+        130, // Aug–Oct 2026: +30 in each of the last 3 months
       ],
     });
     expect(presetComparison("ytd", clean, null)).toBe(
@@ -223,7 +262,9 @@ describe("comparison line", () => {
     expect(presetComparison("quarterly", data, null)).toBe(
       "Groceries up £1,800 vs previous 12 quarters",
     );
-    const short = M(monthRange("2022-01", 60), { Groceries: Array(60).fill(100) });
+    const short = M(monthRange("2022-01", 60), {
+      Groceries: Array(60).fill(100),
+    });
     expect(presetComparison("quarterly", short, null)).toBeNull();
   });
 
@@ -238,12 +279,16 @@ describe("comparison line", () => {
         categories: { Groceries: i < 30 ? 10 : 20 },
       })),
     });
-    expect(presetComparison("daily", M([], {}), mkDaily(60, "2026-09-02"))).toBe(
-      "Groceries up £300 vs previous 30 days",
-    );
+    expect(
+      presetComparison("daily", M([], {}), mkDaily(60, "2026-09-02")),
+    ).toBe("Groceries up £300 vs previous 30 days");
     // History starts inside the previous window: not fully covered.
-    expect(presetComparison("daily", M([], {}), mkDaily(60, "2026-09-15"))).toBeNull();
-    expect(presetComparison("daily", M([], {}), mkDaily(45, "2026-09-02"))).toBeNull();
+    expect(
+      presetComparison("daily", M([], {}), mkDaily(60, "2026-09-15")),
+    ).toBeNull();
+    expect(
+      presetComparison("daily", M([], {}), mkDaily(45, "2026-09-02")),
+    ).toBeNull();
     expect(presetComparison("daily", M([], {}), null)).toBeNull();
   });
 });
@@ -267,12 +312,20 @@ describe("Categories timeline section (sample data)", () => {
     expect(monthlyBtn.getAttribute("aria-pressed")).toBe("true");
     const monthly = monthlyHistoryFor("household");
     const octIdx = monthly.months.indexOf("2026-10");
-    const octTotal = monthly.rows.reduce((s, r) => s + (r.series[octIdx] ?? 0), 0);
-    expect(screen.getByText(new RegExp(`October 2026 — ${gbp(octTotal)}`))).toBeTruthy();
-    const groceriesTotal = monthly.rows.find((r) => r.category === "Groceries")!
+    const octTotal = monthly.rows.reduce(
+      (s, r) => s + (r.series[octIdx] ?? 0),
+      0,
+    );
+    expect(
+      screen.getByText(new RegExp(`October 2026 — ${gbp(octTotal)}`)),
+    ).toBeTruthy();
+    const groceriesTotal = monthly.rows
+      .find((r) => r.category === "Groceries")!
       .series.reduce((s, v) => s + v, 0);
     expect(
-      screen.getByRole("button", { name: `Groceries · ${gbp(groceriesTotal)}` }),
+      screen.getByRole("button", {
+        name: `Groceries · ${gbp(groceriesTotal)}`,
+      }),
     ).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -298,7 +351,9 @@ describe("Categories timeline section (sample data)", () => {
 
   it("Daily fetches 60 days from the daily endpoint and renders day buckets", async () => {
     const buckets = Array.from({ length: 60 }, (_, i) => {
-      const date = new Date(Date.UTC(2026, 8, 2 + i)).toISOString().slice(0, 10);
+      const date = new Date(Date.UTC(2026, 8, 2 + i))
+        .toISOString()
+        .slice(0, 10);
       return {
         date,
         total_minor: i >= 30 ? 2000 : 1000,
@@ -325,7 +380,9 @@ describe("Categories timeline section (sample data)", () => {
       .map((c) => String(c[0]))
       .find((u) => u.includes("/api/aggregates/daily"));
     expect(dailyCall).toContain("days=60");
-    expect(await screen.findByText("Groceries up £300 vs previous 30 days")).toBeTruthy();
+    expect(
+      await screen.findByText("Groceries up £300 vs previous 30 days"),
+    ).toBeTruthy();
   });
 
   it("empty history renders the honest empty state", () => {
@@ -354,7 +411,9 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
   let db: import("better-sqlite3").Database;
 
   const apiJson = async (path: string) => {
-    const res = await api.handleChitraguptaApi(new Request(`http://test${path}`));
+    const res = await api.handleChitraguptaApi(
+      new Request(`http://test${path}`),
+    );
     return res!.json() as Promise<Record<string, unknown>>;
   };
 
@@ -398,7 +457,9 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
   });
 
   it("monthly buckets equal the aggregates rows for the same month and person", async () => {
-    const body = (await apiJson("/api/aggregates?person=household&month=2026-10")) as {
+    const body = (await apiJson(
+      "/api/aggregates?person=household&month=2026-10",
+    )) as {
       rows: { category: string; spend_minor: number }[];
     };
     const idx = built.monthly.months.indexOf("2026-10");
@@ -434,7 +495,9 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
     const known = new Set(built.categories.map((c) => c.name));
     let q3Minor = 0;
     for (const month of ["2026-07", "2026-08", "2026-09"]) {
-      const body = (await apiJson(`/api/aggregates?person=household&month=${month}`)) as {
+      const body = (await apiJson(
+        `/api/aggregates?person=household&month=${month}`,
+      )) as {
         rows: { category: string; spend_minor: number }[];
       };
       for (const r of body.rows) {
@@ -444,11 +507,19 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
     }
     hydrateData(built);
     const monthly = monthlyHistoryFor("household");
-    const q3 = quarterlyBuckets(monthly, null).find((b) => b.key === "2026-Q3")!;
+    const q3 = quarterlyBuckets(monthly, null).find(
+      (b) => b.key === "2026-Q3",
+    )!;
     expect(Math.round(q3.total * 100)).toBe(q3Minor);
     expect(q3Minor).toBeGreaterThan(0);
     // And no bucket on any preset carries a system category.
-    for (const preset of ["monthly", "quarterly", "ytd", "oneyear", "all"] as const) {
+    for (const preset of [
+      "monthly",
+      "quarterly",
+      "ytd",
+      "oneyear",
+      "all",
+    ] as const) {
       for (const b of presetBuckets(preset, monthly, null)) {
         for (const name of Object.keys(b.values)) {
           expect(CHART_EXCLUDED_CATEGORIES.has(name)).toBe(false);
@@ -461,14 +532,15 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
     const idx = built.monthly.months.indexOf("2026-09");
     expect(idx).toBeGreaterThanOrEqual(0);
     for (const [category, per] of Object.entries(built.monthly.series)) {
-      const sum =
-        (per.zonito?.[idx] ?? 0) + (per.nikhila?.[idx] ?? 0);
+      const sum = (per.zonito?.[idx] ?? 0) + (per.nikhila?.[idx] ?? 0);
       expect(per.household?.[idx] ?? 0, category).toBeCloseTo(sum, 6);
     }
   });
 
   it("daily endpoint totals equal a direct transactions computation", async () => {
-    const body = (await apiJson("/api/aggregates/daily?person=household&days=31")) as {
+    const body = (await apiJson(
+      "/api/aggregates/daily?person=household&days=31",
+    )) as {
       start: string;
       end: string;
       buckets: { date: string; total_minor: number }[];
@@ -489,12 +561,16 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
     expect(endpointTotal).toBe(sqlTotal);
     // The 31-day window IS October 2026, so it also equals the month's
     // aggregates total.
-    const agg = (await apiJson("/api/aggregates?person=household&month=2026-10")) as {
+    const agg = (await apiJson(
+      "/api/aggregates?person=household&month=2026-10",
+    )) as {
       rows: { spend_minor: number }[];
     };
     expect(endpointTotal).toBe(agg.rows.reduce((s, r) => s + r.spend_minor, 0));
 
-    const hers = (await apiJson("/api/aggregates/daily?person=nikhila&days=31")) as {
+    const hers = (await apiJson(
+      "/api/aggregates/daily?person=nikhila&days=31",
+    )) as {
       buckets: { total_minor: number }[];
     };
     const sqlHers = (
@@ -512,7 +588,9 @@ describeRepro2("Timeline figures on the real two-person store (repro2)", () => {
   });
 
   it("daily buckets are continuous and zero-filled over 60 days", async () => {
-    const body = (await apiJson("/api/aggregates/daily?person=zonito&days=60")) as {
+    const body = (await apiJson(
+      "/api/aggregates/daily?person=zonito&days=60",
+    )) as {
       buckets: { date: string; total_minor: number }[];
     };
     expect(body.buckets).toHaveLength(60);

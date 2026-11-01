@@ -33,7 +33,11 @@ interface CacheRow {
 function toEntry(row: CacheRow): JevCacheEntry | null {
   try {
     const answers = JSON.parse(row.answers) as unknown;
-    if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
+    if (
+      typeof answers !== "object" ||
+      answers === null ||
+      Array.isArray(answers)
+    ) {
       return null;
     }
     return {

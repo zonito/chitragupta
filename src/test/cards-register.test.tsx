@@ -5,7 +5,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 // Link as a plain anchor (same pattern as home-available.test.tsx) so
 // the screen renders without a RouterProvider.
 vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  const actual =
+    await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
     Link: ({
@@ -18,7 +19,10 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       search?: Record<string, string>;
       children: React.ReactNode;
     } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-      <a href={`${to}?${new URLSearchParams(search ?? {}).toString()}`} {...rest}>
+      <a
+        href={`${to}?${new URLSearchParams(search ?? {}).toString()}`}
+        {...rest}
+      >
         {children}
       </a>
     ),
@@ -71,13 +75,20 @@ function PersonSwitch() {
 }
 
 function addCard(label: string, last4: string, account: string) {
-  fireEvent.change(screen.getByPlaceholderText("Online spending"), { target: { value: label } });
-  fireEvent.change(screen.getByPlaceholderText("1234"), { target: { value: last4 } });
-  fireEvent.change(screen.getByPlaceholderText("Revolut Main"), { target: { value: account } });
+  fireEvent.change(screen.getByPlaceholderText("Online spending"), {
+    target: { value: label },
+  });
+  fireEvent.change(screen.getByPlaceholderText("1234"), {
+    target: { value: last4 },
+  });
+  fireEvent.change(screen.getByPlaceholderText("Revolut Main"), {
+    target: { value: account },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Add card" }));
 }
 
-const stored = () => JSON.parse(localStorage.getItem(KEY) ?? "null") as unknown[];
+const stored = () =>
+  JSON.parse(localStorage.getItem(KEY) ?? "null") as unknown[];
 
 beforeEach(() => {
   localStorage.clear();
@@ -114,7 +125,9 @@ describe("Cards register (G19)", () => {
     expect(screen.getByText(/Virtual ending/)).toBeTruthy();
     expect(stored()).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete Everyday ending 1234" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete Everyday ending 1234" }),
+    );
     expect(screen.queryByText(/Virtual ending/)).toBeNull();
     expect(stored()).toEqual([]);
 
@@ -136,12 +149,14 @@ describe("Cards register (G19)", () => {
     expect(stored()).toHaveLength(2);
     const ids = (stored() as { id: string }[]).map((c) => c.id);
     expect(new Set(ids).size).toBe(2);
-    expect(
-      errors.flat().join(" "),
-    ).not.toMatch(/same key|duplicate key/i);
+    expect(errors.flat().join(" ")).not.toMatch(/same key|duplicate key/i);
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete First ending 1234" }));
-    expect(screen.getByRole("button", { name: "Delete Second ending 1234" })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete First ending 1234" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete Second ending 1234" }),
+    ).toBeTruthy();
     expect(stored()).toHaveLength(1);
     expect((stored()[0] as { label: string }).label).toBe("Second");
   });
@@ -155,7 +170,9 @@ describe("Cards register (G19)", () => {
     expect(typeof after[0]!.id).toBe("string");
     expect(after[0]!.id).toBeTruthy();
     // The migrated card is deletable like any stored card.
-    fireEvent.click(screen.getByRole("button", { name: "Delete Everyday ending 1234" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete Everyday ending 1234" }),
+    );
     expect(stored()).toEqual([]);
   });
 

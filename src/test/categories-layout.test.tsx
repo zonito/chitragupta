@@ -35,8 +35,7 @@ function categoryRow(name: string): HTMLElement {
     .getAllByRole("button")
     .find(
       (b) =>
-        b.classList.contains("panel-enter") &&
-        b.textContent?.includes(name),
+        b.classList.contains("panel-enter") && b.textContent?.includes(name),
     );
   if (!el) throw new Error(`no category row for ${name}`);
   return el;

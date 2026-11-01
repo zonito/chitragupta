@@ -124,7 +124,9 @@ describe("POST /api/review-queue/dismiss (B4)", () => {
     expect(await res!.json()).toEqual({ ok: true });
 
     const after = openStore(STORE_DIR);
-    expect(reviewQueue(after).map((q) => q.merchant)).not.toContain("Dismiss Me");
+    expect(reviewQueue(after).map((q) => q.merchant)).not.toContain(
+      "Dismiss Me",
+    );
     expect(reviewQueue(after).map((q) => q.merchant)).toContain("Keep Me");
     expect(reviewQueueCount(after)).toBe(countBefore - 1);
     // The dismissal is recorded in its own table only.

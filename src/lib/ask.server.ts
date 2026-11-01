@@ -330,9 +330,7 @@ function pullComplete(
 }
 
 function toTxns(rows: ApiTxnRow[]): Txn[] {
-  return rows
-    .map(apiTxnToTxn)
-    .filter((t): t is Txn => t !== null);
+  return rows.map(apiTxnToTxn).filter((t): t is Txn => t !== null);
 }
 
 function currentMonthKey(db: Database.Database): string {
@@ -484,7 +482,8 @@ function directComputation(
   const total = spend.reduce((s, t) => s + shareOf(t, person), 0);
   if (kind === "latest") {
     const latest = latestOf(spend.length > 0 ? spend : visible, person);
-    if (!latest) return { spend, matched: visible, deterministic: noRecordsText(person) };
+    if (!latest)
+      return { spend, matched: visible, deterministic: noRecordsText(person) };
     let deterministic = `The latest matching record is ${latest.merchant}, dated ${latest.date} — ${gbp(latest.amount)}.`;
     if (spend.length > 1) {
       deterministic += ` Total across ${spend.length} matching transactions: ${gbp(total)}.`;
@@ -631,7 +630,8 @@ export async function answerAsk(
     }
   };
   const gateway = (): GatewayStatus =>
-    gatewayFailure ?? gatewayLast ?? { attempted: false, ok: false, provider: null };
+    gatewayFailure ??
+    gatewayLast ?? { attempted: false, ok: false, provider: null };
 
   // 0. Plan: the model planner runs first when a key is configured; a
   // reply that fails strict validation is discarded wholesale.
@@ -685,7 +685,11 @@ export async function answerAsk(
   let scopeFrom: string | null = null;
   let scopeTo: string | null = null;
 
-  const periodPhrase = (month: string | null, from: string | null, to: string | null) =>
+  const periodPhrase = (
+    month: string | null,
+    from: string | null,
+    to: string | null,
+  ) =>
     month
       ? ` in ${monthName(month)}`
       : from && to
@@ -735,7 +739,13 @@ export async function answerAsk(
       const scoped =
         modelPlan.query ??
         (det.terms.length > 0 ? det.terms.join(" ") : question);
-      const computed = recordsComputation(question, scoped, computePerson, txns, truncated);
+      const computed = recordsComputation(
+        question,
+        scoped,
+        computePerson,
+        txns,
+        truncated,
+      );
       spend = computed.spend;
       matched = computed.matched;
       deterministic = computed.deterministic;
@@ -743,7 +753,9 @@ export async function answerAsk(
       shape = modelPlan.kind === "latest" ? "latest" : "total";
       const label =
         modelPlan.category ??
-        (modelPlan.query ? `Spending matching "${modelPlan.query}"` : "Total spend");
+        (modelPlan.query
+          ? `Spending matching "${modelPlan.query}"`
+          : "Total spend");
       const computed = directComputation(
         txns,
         computePerson,
@@ -774,7 +786,11 @@ export async function answerAsk(
     const txns = toTxns(pull.rows);
     truncated = pull.truncated;
     figuresMonth = det.month ?? null;
-    const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
+    const phrase = periodPhrase(
+      det.month ?? null,
+      det.from ?? null,
+      det.to ?? null,
+    );
     if (phrase) scopeLine = `The figures cover${phrase}.`;
     const computed = topComputation(txns, computePerson, topN, phrase);
     spend = computed.set.spend;
@@ -839,9 +855,20 @@ export async function answerAsk(
       scopeMonth = det.month ?? null;
       scopeFrom = det.from ?? null;
       scopeTo = det.to ?? null;
-      const phrase = periodPhrase(det.month ?? null, det.from ?? null, det.to ?? null);
+      const phrase = periodPhrase(
+        det.month ?? null,
+        det.from ?? null,
+        det.to ?? null,
+      );
       if (phrase) scopeLine = `The figures cover${phrase}.`;
-      const computed = directComputation(txns, computePerson, "total", det.category, phrase, truncated);
+      const computed = directComputation(
+        txns,
+        computePerson,
+        "total",
+        det.category,
+        phrase,
+        truncated,
+      );
       spend = computed.spend;
       matched = computed.matched;
       deterministic = computed.deterministic;
@@ -856,7 +883,14 @@ export async function answerAsk(
       scopeTo = det.to;
       const phrase = periodPhrase(null, det.from, det.to);
       if (phrase) scopeLine = `The figures cover${phrase}.`;
-      const computed = directComputation(txns, computePerson, "total", "Total spend", phrase, truncated);
+      const computed = directComputation(
+        txns,
+        computePerson,
+        "total",
+        "Total spend",
+        phrase,
+        truncated,
+      );
       spend = computed.spend;
       matched = computed.matched;
       deterministic = computed.deterministic;
@@ -873,7 +907,9 @@ export async function answerAsk(
       const txns = toTxns(pull.rows);
       truncated = pull.truncated;
       figuresMonth = det.month ?? null;
-      const monthOnly = Boolean(det.month && det.terms.length === 0 && !det.category);
+      const monthOnly = Boolean(
+        det.month && det.terms.length === 0 && !det.category,
+      );
       shape = monthOnly ? "total" : "records";
       scopeMonth = det.month ?? null;
       scopeFrom = det.from ?? null;

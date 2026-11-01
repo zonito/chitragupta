@@ -13,8 +13,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -45,7 +55,9 @@ afterEach(() => {
 /** Class tokens of an element (className is a plain string on the
  *  HTML elements these helpers walk). */
 const tokens = (el: Element | null): string[] =>
-  typeof el?.className === "string" ? el.className.split(/\s+/).filter(Boolean) : [];
+  typeof el?.className === "string"
+    ? el.className.split(/\s+/).filter(Boolean)
+    : [];
 
 /** The order-N value a card carries (walking up from a text node to
  *  the card element that carries the class). */
@@ -276,9 +288,27 @@ describe("Home banded stacks", () => {
 
 describe("SpendChart rendering fixes", () => {
   const buckets: ChartBucket[] = [
-    { key: "2026-08", label: "August 2026", short: "Aug", total: 20000, values: { Groceries: 20000 } },
-    { key: "2026-09", label: "September 2026", short: "Sep", total: 5000, values: { Groceries: 5000 } },
-    { key: "2026-10", label: "October 2026", short: "Oct", total: 8000, values: { Groceries: 8000 } },
+    {
+      key: "2026-08",
+      label: "August 2026",
+      short: "Aug",
+      total: 20000,
+      values: { Groceries: 20000 },
+    },
+    {
+      key: "2026-09",
+      label: "September 2026",
+      short: "Sep",
+      total: 5000,
+      values: { Groceries: 5000 },
+    },
+    {
+      key: "2026-10",
+      label: "October 2026",
+      short: "Oct",
+      total: 8000,
+      values: { Groceries: 8000 },
+    },
   ];
 
   it("the £20,000 axis label is fully present with room at the left edge", () => {

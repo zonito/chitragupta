@@ -68,7 +68,8 @@ function renderActivity() {
 }
 
 const picker = () => screen.getByLabelText("Account") as HTMLSelectElement;
-const summaryText = () => screen.getByTestId("listed-summary").textContent ?? "";
+const summaryText = () =>
+  screen.getByTestId("listed-summary").textContent ?? "";
 
 beforeEach(() => {
   window.history.pushState({}, "", "/activity");

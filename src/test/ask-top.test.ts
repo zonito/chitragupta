@@ -41,7 +41,15 @@ function topDb() {
     ["s3", "2026-09-18", "Theta Gym", "Shopping", -4999],
   ];
   for (const [fp, date, merchant, category, amount] of rows) {
-    insert.run(fp, date, date.slice(0, 7), merchant, merchant, amount, category);
+    insert.run(
+      fp,
+      date,
+      date.slice(0, 7),
+      merchant,
+      merchant,
+      amount,
+      category,
+    );
   }
   // The guard reads month_aggregates; build them as ingest would.
   recomputeAggregates(db, "zonito");
@@ -82,53 +90,99 @@ function gatewayFetch(planText: string, prose: string) {
 
 describe("parseAskQuery list shapes", () => {
   it("routes 'Top 5 transactions for this month' to a top plan", () => {
-    const plan = parseAskQuery("Top 5 transactions for this month", "2026-10", TODAY);
+    const plan = parseAskQuery(
+      "Top 5 transactions for this month",
+      "2026-10",
+      TODAY,
+    );
     expect(plan.top).toBe(5);
     expect(plan.month).toBe("2026-10");
   });
 
   it("routes 'Biggest 3 payments in September' to a top plan for that month", () => {
-    const plan = parseAskQuery("Biggest 3 payments in September", "2026-10", TODAY);
+    const plan = parseAskQuery(
+      "Biggest 3 payments in September",
+      "2026-10",
+      TODAY,
+    );
     expect(plan.top).toBe(3);
     expect(plan.month).toBe("2026-09");
   });
 
   it("keeps a count stated before the ranking word", () => {
-    const plan = parseAskQuery("Show me 3 biggest transactions this month", "2026-10", TODAY);
+    const plan = parseAskQuery(
+      "Show me 3 biggest transactions this month",
+      "2026-10",
+      TODAY,
+    );
     expect(plan.top).toBe(3);
     expect(plan.month).toBe("2026-10");
   });
 
   it("understands a number word and defaults a plural noun to 5", () => {
-    expect(parseAskQuery("Top five transactions this month", "2026-10", TODAY).top).toBe(5);
-    expect(parseAskQuery("Show my top transactions", "2026-10", TODAY).top).toBe(5);
-    expect(parseAskQuery("What was my biggest payment in September?", "2026-10", TODAY).top).toBe(1);
+    expect(
+      parseAskQuery("Top five transactions this month", "2026-10", TODAY).top,
+    ).toBe(5);
+    expect(
+      parseAskQuery("Show my top transactions", "2026-10", TODAY).top,
+    ).toBe(5);
+    expect(
+      parseAskQuery(
+        "What was my biggest payment in September?",
+        "2026-10",
+        TODAY,
+      ).top,
+    ).toBe(1);
   });
 
   it("does not mistake 'top up' or an ordinary total for a list", () => {
-    expect(parseAskQuery("How much did I top up this month?", "2026-10", TODAY).top).toBeUndefined();
-    expect(parseAskQuery("What did we spend in August?", "2026-10", TODAY).top).toBeUndefined();
-    expect(parseAskQuery("What is my biggest spending category?", "2026-10", TODAY).top).toBeUndefined();
+    expect(
+      parseAskQuery("How much did I top up this month?", "2026-10", TODAY).top,
+    ).toBeUndefined();
+    expect(
+      parseAskQuery("What did we spend in August?", "2026-10", TODAY).top,
+    ).toBeUndefined();
+    expect(
+      parseAskQuery("What is my biggest spending category?", "2026-10", TODAY)
+        .top,
+    ).toBeUndefined();
   });
 });
 
 describe("parseAskPlan top kind", () => {
-  const base = { category: null, query: null, from: null, to: null, month: "2026-10" };
+  const base = {
+    category: null,
+    query: null,
+    from: null,
+    to: null,
+    month: "2026-10",
+  };
 
   it("accepts a top plan with a limit", () => {
-    const plan = parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: 3 }));
+    const plan = parseAskPlan(
+      JSON.stringify({ ...base, kind: "top", limit: 3 }),
+    );
     expect(plan?.kind).toBe("top");
     expect(plan?.limit).toBe(3);
   });
 
   it("defaults an absent limit to 5 and clamps an oversized one to 25", () => {
-    expect(parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: null }))?.limit).toBe(5);
-    expect(parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: 100 }))?.limit).toBe(25);
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: null }))
+        ?.limit,
+    ).toBe(5);
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: 100 }))?.limit,
+    ).toBe(25);
   });
 
   it("rejects a non-numeric or fractional limit", () => {
-    expect(parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: "3" }))).toBeNull();
-    expect(parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: 2.5 }))).toBeNull();
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: "3" })),
+    ).toBeNull();
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, kind: "top", limit: 2.5 })),
+    ).toBeNull();
   });
 
   it("keeps non-top plans free of any limit field", () => {
@@ -197,7 +251,10 @@ describe("top-N answers", () => {
       question: "Biggest 3 payments in September",
       today: TODAY,
       env: { MUSE_API_KEY: "LLM_test" },
-      fetchImpl: gatewayFetch(plan, "Your biggest September payment was Zeta Travel at £600.00."),
+      fetchImpl: gatewayFetch(
+        plan,
+        "Your biggest September payment was Zeta Travel at £600.00.",
+      ),
     });
     expect(result.ai).toBe(true);
     expect(result.figures.top).toEqual(SEP_TOP3);
@@ -217,7 +274,9 @@ describe("zero-match guard", () => {
     expect(result.ai).toBe(false);
     expect(result.figures.total).toBe(OCT_TOTAL);
     expect(result.figures.count).toBe(6);
-    expect(result.answer).toContain("Nothing matched that specific search in October 2026.");
+    expect(result.answer).toContain(
+      "Nothing matched that specific search in October 2026.",
+    );
     expect(result.answer).toContain("£1,969.50");
     expect(result.answer).not.toContain("£0.00");
     db.close();
@@ -285,7 +344,10 @@ describe("zero-match guard", () => {
       question: "How much on transport in August?",
       today: TODAY,
       env: { MUSE_API_KEY: "LLM_test" },
-      fetchImpl: gatewayFetch(plan, "No Transport spending in August 2026 — the total is £0.00."),
+      fetchImpl: gatewayFetch(
+        plan,
+        "No Transport spending in August 2026 — the total is £0.00.",
+      ),
     });
     // August has no rows and no aggregates: the zero is true and stands.
     expect(result.figures.total).toBe(0);
@@ -307,8 +369,7 @@ describeRepro("top-N answers on the repro fixture", () => {
     year: "numeric",
     timeZone: "UTC",
   });
-  const dayName = (ymd: string) =>
-    dayFmt.format(new Date(`${ymd}T00:00:00Z`));
+  const dayName = (ymd: string) => dayFmt.format(new Date(`${ymd}T00:00:00Z`));
 
   /**
    * The expected ranking, derived straight from the store with plain

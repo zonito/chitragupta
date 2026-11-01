@@ -21,15 +21,18 @@ describe("November known regular payments", () => {
     ["Thames Water", 15, 42, "joint"],
     ["PureGym", 21, 34.99, "nikhila"],
     ["The Times", 14, 26, "zonito"],
-  ])("keeps %s on the supplied November date and amount", (name, day, amount, owner) => {
-    expect(UPCOMING.find((p) => p.name === name)).toEqual({
-      name,
-      day,
-      date: `2026-11-${String(day).padStart(2, "0")}`,
-      amount,
-      owner,
-    });
-  });
+  ])(
+    "keeps %s on the supplied November date and amount",
+    (name, day, amount, owner) => {
+      expect(UPCOMING.find((p) => p.name === name)).toEqual({
+        name,
+        day,
+        date: `2026-11-${String(day).padStart(2, "0")}`,
+        amount,
+        owner,
+      });
+    },
+  );
   it("splits joint payments 50/50 and excludes the other person's payments", () => {
     const bill = UPCOMING.find((p) => p.name === "Octopus Energy");
     const netflix = UPCOMING.find((p) => p.name === "Netflix");
@@ -40,18 +43,52 @@ describe("November known regular payments", () => {
     expect(upcomingShare(netflix, "nikhila")).toBe(0);
     expect(upcomingShare(netflix, "zonito")).toBe(18.99);
   });
-  it.each<[Person, number]>([["household", 582.95], ["zonito", 262.98], ["nikhila", 319.97]])("sums known commitments for %s", (person, total) => {
+  it.each<[Person, number]>([
+    ["household", 582.95],
+    ["zonito", 262.98],
+    ["nikhila", 319.97],
+  ])("sums known commitments for %s", (person, total) => {
     expect(upcomingTotal(person)).toBeCloseTo(total, 2);
   });
   it.each<[Person, string[]]>([
-    ["household", ["Enfield Council Tax", "Octopus Energy", "Spotify Family", "Hyperoptic", "Netflix"]],
-    ["zonito", ["Enfield Council Tax", "Octopus Energy", "Spotify Family", "Hyperoptic", "Netflix"]],
-    ["nikhila", ["Enfield Council Tax", "Octopus Energy", "Hyperoptic", "ParentPay school lunches", "iCloud+"]],
-  ])("shows the next five regulars by date for %s in the panel", (person, names) => {
-    expect(upcomingPanel(person).visible.map((p) => p.name)).toEqual(names);
-    const dates = upcomingFor(person).map((p) => p.date);
-    expect(dates).toEqual([...dates].sort());
-  });
+    [
+      "household",
+      [
+        "Enfield Council Tax",
+        "Octopus Energy",
+        "Spotify Family",
+        "Hyperoptic",
+        "Netflix",
+      ],
+    ],
+    [
+      "zonito",
+      [
+        "Enfield Council Tax",
+        "Octopus Energy",
+        "Spotify Family",
+        "Hyperoptic",
+        "Netflix",
+      ],
+    ],
+    [
+      "nikhila",
+      [
+        "Enfield Council Tax",
+        "Octopus Energy",
+        "Hyperoptic",
+        "ParentPay school lunches",
+        "iCloud+",
+      ],
+    ],
+  ])(
+    "shows the next five regulars by date for %s in the panel",
+    (person, names) => {
+      expect(upcomingPanel(person).visible.map((p) => p.name)).toEqual(names);
+      const dates = upcomingFor(person).map((p) => p.date);
+      expect(dates).toEqual([...dates].sort());
+    },
+  );
   it.each<[Person]>([["household"], ["zonito"], ["nikhila"]])(
     "panel accounts for the headline total exactly for %s: visible rows plus the 'and N more' remainder",
     (person) => {

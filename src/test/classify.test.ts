@@ -2,10 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  classifyUnknownMerchants,
-  claudeConfig,
-} from "@/lib/ingest/classify";
+import { classifyUnknownMerchants, claudeConfig } from "@/lib/ingest/classify";
 import { reviewQueue, reviewQueueCount } from "@/lib/ingest/merchants";
 import { openStore } from "@/lib/ingest/store";
 
@@ -58,7 +55,12 @@ describe("Muse classification client (Fix 5)", () => {
       env: { MUSE_API_KEY: TEST_KEY },
       fetchImpl: okFetch(seen) as typeof fetch,
     });
-    expect(summary).toMatchObject({ ran: true, classified: 1, failed: 0, remaining: 0 });
+    expect(summary).toMatchObject({
+      ran: true,
+      classified: 1,
+      failed: 0,
+      remaining: 0,
+    });
     expect(seen.url).toBe("https://api.meta.ai/v1/messages");
     const headers = seen.init?.headers as Record<string, string>;
     expect(headers["authorization"]).toBe(`Bearer ${TEST_KEY}`);
@@ -76,7 +78,12 @@ describe("Muse classification client (Fix 5)", () => {
       .prepare(
         "SELECT category, colour, icon, source FROM merchant_memory WHERE merchant = 'Mystery Shop'",
       )
-      .get() as { category: string; colour: string; icon: string; source: string };
+      .get() as {
+      category: string;
+      colour: string;
+      icon: string;
+      source: string;
+    };
     expect(memory).toEqual({
       category: "Shopping",
       colour: "#3b82f6",
@@ -95,7 +102,12 @@ describe("Muse classification client (Fix 5)", () => {
         throw new Error("network down");
       }) as typeof fetch,
     });
-    expect(summary).toMatchObject({ ran: true, classified: 0, failed: 1, remaining: 1 });
+    expect(summary).toMatchObject({
+      ran: true,
+      classified: 0,
+      failed: 1,
+      remaining: 1,
+    });
     expect(reviewQueue(db)).toHaveLength(1);
     db.close();
   });
@@ -149,7 +161,11 @@ describe("Muse classification client (Fix 5)", () => {
   it("reports no gateway attempt when no key is configured", async () => {
     const db = seededDb();
     const summary = await classifyUnknownMerchants(db, { env: {} });
-    expect(summary.gateway).toEqual({ attempted: false, ok: false, provider: null });
+    expect(summary.gateway).toEqual({
+      attempted: false,
+      ok: false,
+      provider: null,
+    });
     db.close();
   });
 
@@ -291,7 +307,11 @@ describe("Muse classification client (Fix 5)", () => {
     );
     db.transaction(() => {
       for (let i = 0; i < 250; i++) {
-        insert.run(`bulk-${i}`, `Unknown Merchant ${i}`, `Unknown Merchant ${i}`);
+        insert.run(
+          `bulk-${i}`,
+          `Unknown Merchant ${i}`,
+          `Unknown Merchant ${i}`,
+        );
       }
     })();
     expect(reviewQueue(db)).toHaveLength(200);
@@ -307,7 +327,12 @@ describe("Muse classification client (Fix 5)", () => {
       fetchImpl: okFetch(seen) as typeof fetch,
       limit: 10,
     });
-    expect(ran).toMatchObject({ ran: true, classified: 10, failed: 0, remaining: 240 });
+    expect(ran).toMatchObject({
+      ran: true,
+      classified: 10,
+      failed: 0,
+      remaining: 240,
+    });
     expect(reviewQueueCount(db)).toBe(240);
     db.close();
   });

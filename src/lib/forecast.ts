@@ -187,9 +187,9 @@ export function detectIncomeRegulars(
 
   const regulars: IncomeRegular[] = [];
   for (const group of groups.values()) {
-    const amounts = [...new Set(group.map((c) => Math.abs(c.amountMinor)))].sort(
-      (a, b) => a - b,
-    );
+    const amounts = [
+      ...new Set(group.map((c) => Math.abs(c.amountMinor))),
+    ].sort((a, b) => a - b);
     let best: { charges: IncomeCharge[]; medianGap: number } | null = null;
     for (const low of amounts) {
       const members = group
@@ -201,10 +201,13 @@ export function detectIncomeRegulars(
       if (members.length < 2) continue;
       const gaps: number[] = [];
       for (let i = 1; i < members.length; i++) {
-        gaps.push((dayMs(members[i]!.date) - dayMs(members[i - 1]!.date)) / DAY);
+        gaps.push(
+          (dayMs(members[i]!.date) - dayMs(members[i - 1]!.date)) / DAY,
+        );
       }
       const medianGap = medianOf(gaps);
-      if (medianGap < MONTHLY_BAND.min || medianGap > MONTHLY_BAND.max) continue;
+      if (medianGap < MONTHLY_BAND.min || medianGap > MONTHLY_BAND.max)
+        continue;
       const inBand = gaps.filter(
         (g) => g >= MONTHLY_BAND.min && g <= MONTHLY_BAND.max,
       ).length;
@@ -436,10 +439,14 @@ export function forecastEvents(
     if (sub.status !== "Active" || sub.nextExpected === null) continue;
     const share = shareOfRegular(sub.amount, sub.owner, person);
     if (share <= 0) continue;
-    step(sub.nextExpected, sub.periodDays ?? FREQ_PERIOD_DAYS[sub.freq], (date) => {
-      events.push({ date, name: sub.name, amount: -share });
-      outTotal += share;
-    });
+    step(
+      sub.nextExpected,
+      sub.periodDays ?? FREQ_PERIOD_DAYS[sub.freq],
+      (date) => {
+        events.push({ date, name: sub.name, amount: -share });
+        outTotal += share;
+      },
+    );
   }
   let hasIncome = false;
   for (const regular of incomeRegulars) {
@@ -592,7 +599,13 @@ export function forecastFor(person: Person): MonthForecast | null {
   const start = availableFor(person).gbpTotal;
   if (start === null) return null;
   const monthEnd = monthEndOf(monthKey);
-  const pace = paceFor(person, monthKey, asOf, ALL_TXNS, regularChargeIds(SUBS));
+  const pace = paceFor(
+    person,
+    monthKey,
+    asOf,
+    ALL_TXNS,
+    regularChargeIds(SUBS),
+  );
   const { events, outTotal, inTotal, hasIncome } = forecastEvents(
     person,
     SUBS,

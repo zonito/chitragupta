@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +18,9 @@ import type Database from "better-sqlite3";
 // October row (same fingerprint) to prove the merge dedupes.
 const mocks = vi.hoisted(() => ({
   fetchTxns: vi.fn(
-    async (_params: Record<string, string>): Promise<import("@/lib/data").Txn[]> => [],
+    async (
+      _params: Record<string, string>,
+    ): Promise<import("@/lib/data").Txn[]> => [],
   ),
 }));
 vi.mock("@/lib/txn-map", async (importOriginal) => {
@@ -51,7 +61,10 @@ describe("rangeForPreset", () => {
   });
 
   it("handles a mid-year anchor: quarter boundaries and year crossing", () => {
-    expect(rangeForPreset("quarter", "2026-05").months).toEqual(["2026-04", "2026-05"]);
+    expect(rangeForPreset("quarter", "2026-05").months).toEqual([
+      "2026-04",
+      "2026-05",
+    ]);
     expect(rangeForPreset("quarter", "2026-03").months).toEqual([
       "2026-01",
       "2026-02",
@@ -109,7 +122,8 @@ beforeEach(() => {
         (t) => t.monthKey >= params["from"]! && t.monthKey <= params["to"]!,
       );
     }
-    if (params["month"]) return CANNED.filter((t) => t.monthKey === params["month"]);
+    if (params["month"])
+      return CANNED.filter((t) => t.monthKey === params["month"]);
     return [];
   });
 });
@@ -127,7 +141,9 @@ function renderActivity() {
 describe("Activity period presets", () => {
   it("Last 12 months merges snapshot + fetched months without duplicates and sums the range", async () => {
     renderActivity();
-    fireEvent.change(screen.getByLabelText("Period"), { target: { value: "preset:last12" } });
+    fireEvent.change(screen.getByLabelText("Period"), {
+      target: { value: "preset:last12" },
+    });
     await waitFor(() =>
       expect(mocks.fetchTxns).toHaveBeenCalledWith({
         from: "2025-11",
@@ -146,7 +162,9 @@ describe("Activity period presets", () => {
 
   it("This quarter for an October anchor covers October only", async () => {
     renderActivity();
-    fireEvent.change(screen.getByLabelText("Period"), { target: { value: "preset:quarter" } });
+    fireEvent.change(screen.getByLabelText("Period"), {
+      target: { value: "preset:quarter" },
+    });
     await waitFor(() =>
       expect(mocks.fetchTxns).toHaveBeenCalledWith({
         from: "2026-10",
@@ -172,7 +190,11 @@ const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"];
 const BOTH_PEOPLE =
   !!DATA_DIR &&
   existsSync(
-    join(DATA_DIR, "Originals", "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv"),
+    join(
+      DATA_DIR,
+      "Originals",
+      "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv",
+    ),
   );
 
 describe.runIf(BOTH_PEOPLE)("Activity presets (repro2, API totals)", () => {
@@ -217,7 +239,10 @@ describe.runIf(BOTH_PEOPLE)("Activity presets (repro2, API totals)", () => {
     for (const person of ["household", "zonito"] as const) {
       let monthlySum = 0;
       for (const m of months) {
-        monthlySum += listedTotal(await fetchRows(`month=${m}&limit=1000`), person);
+        monthlySum += listedTotal(
+          await fetchRows(`month=${m}&limit=1000`),
+          person,
+        );
       }
       const rangeTotal = listedTotal(rangeRows, person);
       expect(rangeTotal).toBeGreaterThan(0);

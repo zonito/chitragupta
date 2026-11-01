@@ -23,12 +23,12 @@ import { displayMonthKey } from "./calendar.server";
 import { listCategories } from "./ingest/categories";
 import { getSettings } from "./ingest/settings";
 import { deriveBalance } from "./ingest/balance-anchors";
-import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
-import { detectIncomeRegulars } from "./forecast";
 import {
-  documentRowToDoc,
-  type DocumentRow,
-} from "./documents.server";
+  applySubscriptionOverrides,
+  detectSubscriptions,
+} from "./subscriptions";
+import { detectIncomeRegulars } from "./forecast";
+import { documentRowToDoc, type DocumentRow } from "./documents.server";
 import type { Doc } from "./data";
 
 /**
@@ -97,14 +97,22 @@ function resolveCategory(row: Row, memory: Map<string, string>): string {
 
 function monthLabel(key: string): string {
   const d = new Date(`${key}-02T00:00:00Z`);
-  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
 }
 /** Store effective_date is usually YYYY-MM-DD but some rows carry a full
  * "YYYY-MM-DD HH:MM:SS" timestamp; consumers here only ever need the day. */
 const day10 = (iso: string) => iso.slice(0, 10);
 function shortDayLabel(iso: string): string {
   const d = new Date(`${day10(iso)}T00:00:00Z`);
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(d);
 }
 function shiftMonth(key: string, delta: number): string {
   const [y, m] = key.split("-").map(Number) as [number, number];
@@ -153,8 +161,12 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       ? name
       : "One-off") as Txn["category"];
   const memory = new Map<string, string>(
-    (db.prepare("SELECT merchant, category FROM merchant_memory").all() as { merchant: string; category: string }[])
-      .map((r) => [r.merchant, r.category]),
+    (
+      db.prepare("SELECT merchant, category FROM merchant_memory").all() as {
+        merchant: string;
+        category: string;
+      }[]
+    ).map((r) => [r.merchant, r.category]),
   );
   // Filed documents, from the documents table (files under the data
   // dir's Documents/ tree). An empty table is honestly docs: [].
@@ -176,7 +188,8 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       "SELECT DISTINCT year_month FROM transactions ORDER BY year_month DESC",
     )
     .all() as { year_month: string }[];
-  if (monthRows.length === 0) return { ...EMPTY_SNAPSHOT, configured: true, docs, settings };
+  if (monthRows.length === 0)
+    return { ...EMPTY_SNAPSHOT, configured: true, docs, settings };
   const current = monthRows[0]!.year_month;
   // The display month: the Europe/London calendar month once it has
   // begun, even when no statement has landed in it yet — the app's
@@ -210,7 +223,8 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const txns: Txn[] = [];
   const income: IncomeEntry[] = [];
   for (const row of rawRows) {
-    const owner: Owner = row.account === "Joint" ? "joint" : (row.person as Owner);
+    const owner: Owner =
+      row.account === "Joint" ? "joint" : (row.person as Owner);
     const amount = Math.abs(row.amount_minor) / 100;
     const day = Number(day10(row.effective_date).slice(8, 10));
     if (row.movement === "income") {
@@ -224,11 +238,20 @@ function buildFromDb(db: Database.Database): DataSnapshot {
           day,
           amount,
           owner: owner === "joint" ? "zonito" : owner,
-          type: /salary|payroll|wages/i.test(row.description) ? "Salary" : row.merchant,
+          type: /salary|payroll|wages/i.test(row.description)
+            ? "Salary"
+            : row.merchant,
         });
       }
     }
-    const kind = row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : row.movement === "income" ? "income" : "transfer";
+    const kind =
+      row.movement === "spend"
+        ? "spend"
+        : row.movement === "aside"
+          ? "aside"
+          : row.movement === "income"
+            ? "income"
+            : "transfer";
     const time = timeOfDay(row.effective_date);
     const timeFull = timeOfDayFull(row.effective_date);
     txns.push({
@@ -267,13 +290,24 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     .prepare(
       `SELECT person, year_month, category, spend_minor, income_minor, aside_minor FROM month_aggregates WHERE currency = 'GBP'`,
     )
-    .all() as { person: string; year_month: string; category: string; spend_minor: number; income_minor: number; aside_minor: number }[];
+    .all() as {
+    person: string;
+    year_month: string;
+    category: string;
+    spend_minor: number;
+    income_minor: number;
+    aside_minor: number;
+  }[];
   // Household reads the stored 'household' aggregate rows (true
   // both-people sums). A store that predates them has none, so fall
   // back to summing the per-person rows — and never both, or every
   // household figure would double.
   const hasHouseholdRows = aggRows.some((r) => r.person === "household");
-  const aggGet = (person: string | null, month: string, category: string): number =>
+  const aggGet = (
+    person: string | null,
+    month: string,
+    category: string,
+  ): number =>
     aggRows
       .filter(
         (r) =>
@@ -289,7 +323,8 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const prev6 = [1, 2, 3, 4, 5, 6].map((d) => shiftMonth(current, -d));
   const sparkMonths = [5, 4, 3, 2, 1, 0].map((d) => shiftMonth(current, -d));
   const persons: Person[] = ["household", "zonito", "nikhila"];
-  const personKey = (p: Person): string | null => (p === "household" ? null : p);
+  const personKey = (p: Person): string | null =>
+    p === "household" ? null : p;
   const typical: DataSnapshot["typical"] = {};
   const sparks: DataSnapshot["sparks"] = {};
   const categories = new Set(aggRows.map((r) => r.category));
@@ -298,12 +333,19 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     typical[category] = {};
     sparks[category] = {};
     for (const p of persons) {
-      typical[category]![p] = median(prev6.map((m) => aggGet(personKey(p), m, category)));
-      sparks[category]![p] = sparkMonths.map((m) => aggGet(personKey(p), m, category));
+      typical[category]![p] = median(
+        prev6.map((m) => aggGet(personKey(p), m, category)),
+      );
+      sparks[category]![p] = sparkMonths.map((m) =>
+        aggGet(personKey(p), m, category),
+      );
     }
   }
   const months6 = sparkMonths.map((key) =>
-    new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${key}-02T00:00:00Z`)),
+    new Intl.DateTimeFormat("en-GB", {
+      month: "short",
+      timeZone: "UTC",
+    }).format(new Date(`${key}-02T00:00:00Z`)),
   );
 
   // Full monthly history for the timeline charts, from the same GBP
@@ -465,17 +507,23 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     // Full dateLabel ("5 Oct 2026"), so a card's last-charged date is
     // in the same format as the next-expected date it renders beside.
     dateLabel,
-    accountLabel: (account: string, person: string) => accountTxnLabel(person, account),
+    accountLabel: (account: string, person: string) =>
+      accountTxnLabel(person, account),
   };
   // Human overrides on the detector (subscription_overrides): applied
   // HERE, at the one place subscriptions are computed, so the
   // Subscriptions screen, Coach and Home's Coming up — all snapshot
   // readers — honour every correction at once.
   const overrideRows = db
-    .prepare("SELECT merchant, label, mode FROM subscription_overrides ORDER BY label")
+    .prepare(
+      "SELECT merchant, label, mode FROM subscription_overrides ORDER BY label",
+    )
     .all() as { merchant: string; label: string; mode: string }[];
   const subOverrides: SubOverride[] = overrideRows
-    .filter((r) => r.mode === "force" || r.mode === "suppress" || r.mode === "cancelled")
+    .filter(
+      (r) =>
+        r.mode === "force" || r.mode === "suppress" || r.mode === "cancelled",
+    )
     .map((r) => ({
       merchant: r.merchant,
       label: r.label,
@@ -501,12 +549,12 @@ function buildFromDb(db: Database.Database): DataSnapshot {
        ORDER BY effective_date`,
     )
     .all() as {
-      person: string;
-      account: string;
-      effective_date: string;
-      merchant: string;
-      amount_minor: number;
-    }[];
+    person: string;
+    account: string;
+    effective_date: string;
+    merchant: string;
+    amount_minor: number;
+  }[];
   const incomeRegulars: IncomeRegular[] = detectIncomeRegulars(
     incomeRows.map((r) => ({
       merchant: r.merchant,
@@ -548,8 +596,13 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   // account → "joint", else that charge's person). A yearly sub due
   // next month appears here exactly like a monthly one.
   const nextMonthKey = shiftMonth(display, 1);
-  const [nextYear, nextMonth] = nextMonthKey.split("-").map(Number) as [number, number];
-  const windowEnd = new Date(Date.UTC(nextYear, nextMonth, 0)).toISOString().slice(0, 10);
+  const [nextYear, nextMonth] = nextMonthKey.split("-").map(Number) as [
+    number,
+    number,
+  ];
+  const windowEnd = new Date(Date.UTC(nextYear, nextMonth, 0))
+    .toISOString()
+    .slice(0, 10);
   const upcoming: UpcomingPayment[] = subs
     .filter(
       (s) =>
@@ -577,10 +630,17 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     .all(current) as { merchant: string; first_seen: string }[];
   const newMerchants: NewMerchant[] = firstSeen
     .map(({ merchant }) => {
-      const rows = txns.filter((t) => t.merchant === merchant && t.kind === "spend");
+      const rows = txns.filter(
+        (t) => t.merchant === merchant && t.kind === "spend",
+      );
       const biggest = rows.sort((a, b) => b.amount - a.amount)[0];
       return biggest
-        ? { merchant, category: biggest.category, amount: biggest.amount, date: biggest.date }
+        ? {
+            merchant,
+            category: biggest.category,
+            amount: biggest.amount,
+            date: biggest.date,
+          }
         : null;
     })
     .filter((x): x is NewMerchant => x !== null)
@@ -590,8 +650,17 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const biggestOneOff: DataSnapshot["biggestOneOff"] = {};
   for (const p of persons) {
     const best = txns
-      .filter((t) => t.kind === "spend" && t.category === "One-off" && t.monthKey === current)
-      .map((t) => ({ merchant: t.merchant, amount: shareOf(t, p), date: t.date }))
+      .filter(
+        (t) =>
+          t.kind === "spend" &&
+          t.category === "One-off" &&
+          t.monthKey === current,
+      )
+      .map((t) => ({
+        merchant: t.merchant,
+        amount: shareOf(t, p),
+        date: t.date,
+      }))
       .filter((x) => x.amount > 0)
       .sort((a, b) => b.amount - a.amount)[0];
     if (best) biggestOneOff[p] = best;
@@ -632,7 +701,10 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const contentByAccount = new Map(
     contentRows.map((r) => [`${r.person}|${r.account}`, r]),
   );
-  const maxStarted = runRows.reduce((m, r) => (r.started_at > m ? r.started_at : m), "");
+  const maxStarted = runRows.reduce(
+    (m, r) => (r.started_at > m ? r.started_at : m),
+    "",
+  );
   const accounts: AccountInfo[] = runRows.map((r) => {
     const chosen = contentByAccount.get(`${r.person}|${r.account}`) ?? r;
     // The balance rides the SAME selected run as last/added: a later
@@ -696,7 +768,10 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       ...(display !== current
         ? [{ key: display, label: monthLabel(display) }]
         : []),
-      ...monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),
+      ...monthRows.map((r) => ({
+        key: r.year_month,
+        label: monthLabel(r.year_month),
+      })),
     ],
     txns,
     income,

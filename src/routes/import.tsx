@@ -6,7 +6,11 @@ import { ACCOUNTS, gbp, personLabel } from "@/lib/data";
 import { AccountTile } from "@/components/tiles";
 
 export const Route = createFileRoute("/import")({
-  head: () => meta("Import", "Statement status for each account and a place to drop new statements."),
+  head: () =>
+    meta(
+      "Import",
+      "Statement status for each account and a place to drop new statements.",
+    ),
   component: Import,
 });
 
@@ -74,8 +78,12 @@ export function Import() {
   const [file, setFile] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [statusAccounts, setStatusAccounts] = useState<IngestStatusAccount[]>([]);
-  const list = ACCOUNTS.filter((a) => person === "household" || a.owner === person || a.owner === "joint");
+  const [statusAccounts, setStatusAccounts] = useState<IngestStatusAccount[]>(
+    [],
+  );
+  const list = ACCOUNTS.filter(
+    (a) => person === "household" || a.owner === person || a.owner === "joint",
+  );
   const stale = list.find((a) => a.stale);
 
   // Per-account balance and discrepancy come from the ingest status
@@ -117,7 +125,11 @@ export function Import() {
     setResult(null);
     try {
       const res = await fetch("/api/ingest/run", { method: "POST" });
-      const body = (await res.json()) as { ok: boolean; error?: string; results?: IngestResult[] };
+      const body = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        results?: IngestResult[];
+      };
       const results = body.results ?? [];
       const failed = results.filter((r) => r.ok === false);
       if (results.length > 0 && (failed.length > 0 || !body.ok)) {
@@ -141,7 +153,9 @@ export function Import() {
         await loadStatus();
       } else if (body.ok) {
         const added = results.reduce((s, r) => s + (r.rowsAdded ?? 0), 0);
-        setResult(`Import finished — ${added} new rows across ${results.length} accounts.`);
+        setResult(
+          `Import finished — ${added} new rows across ${results.length} accounts.`,
+        );
         await router?.invalidate().catch(() => {});
         await loadStatus();
       } else {
@@ -159,47 +173,86 @@ export function Import() {
       <PageTitle>Import</PageTitle>
       <label
         onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); void runImport(e.dataTransfer.files[0]?.name ?? null); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          void runImport(e.dataTransfer.files[0]?.name ?? null);
+        }}
         className="mb-6 flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed bg-card px-6 py-10 text-center"
       >
         <Upload className="mb-3 h-6 w-6 text-primary" />
-        <div className="text-body">{running ? "Importing…" : file ? `Last file: ${file}` : "Drop a statement here to import"}</div>
-        <div className="mt-1 text-caption text-muted-foreground">Statements are read from the synced PersonalFinance folder; duplicates are skipped</div>
-        <input type="file" className="hidden" onChange={(e) => { void runImport(e.target.files?.[0]?.name ?? null); }} />
+        <div className="text-body">
+          {running
+            ? "Importing…"
+            : file
+              ? `Last file: ${file}`
+              : "Drop a statement here to import"}
+        </div>
+        <div className="mt-1 text-caption text-muted-foreground">
+          Statements are read from the synced PersonalFinance folder; duplicates
+          are skipped
+        </div>
+        <input
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            void runImport(e.target.files?.[0]?.name ?? null);
+          }}
+        />
       </label>
       {result && (
-        <Panel className="mb-6 bg-secondary p-4 text-body" aria-live="polite">{result}</Panel>
+        <Panel className="mb-6 bg-secondary p-4 text-body" aria-live="polite">
+          {result}
+        </Panel>
       )}
 
       {stale && (
         <Panel className="mb-6 bg-secondary p-4 text-body">
-          {stale.name} hasn't had a statement since {stale.last}. Whenever you have a minute.
+          {stale.name} hasn't had a statement since {stale.last}. Whenever you
+          have a minute.
         </Panel>
       )}
 
       <div className="rounded-xl border bg-card px-4">
         {list.length === 0 && (
-          <p className="py-6 text-center text-body text-muted-foreground">No accounts yet — accounts appear here once statements have been imported.</p>
+          <p className="py-6 text-center text-body text-muted-foreground">
+            No accounts yet — accounts appear here once statements have been
+            imported.
+          </p>
         )}
         {list.map((a) => {
           const statusPerson = a.owner === "joint" ? "zonito" : a.owner;
           const status = statusByKey.get(`${statusPerson}|${a.name}`);
           return (
-            <div key={`${a.owner}:${a.name}`} className="ledger-row flex items-center justify-between gap-2 py-3.5">
+            <div
+              key={`${a.owner}:${a.name}`}
+              className="ledger-row flex items-center justify-between gap-2 py-3.5"
+            >
               <div className="flex min-w-0 items-center gap-2">
                 <AccountTile account={a.name} />
                 <div className="min-w-0">
-                <div className="text-body">{a.name}</div>
-                <div className="text-caption text-muted-foreground">{personLabel(a.owner)} · last upload {a.last} · {a.added} added</div>
-                {status && status.balanceMinor !== null && status.balanceMinor !== undefined && (
-                  <div className="num text-caption text-muted-foreground">Balance {formatBalance(status.balanceMinor, status.currency)}</div>
-                )}
-                {status?.discrepancy && (
-                  <div className="text-caption text-warn">{status.discrepancy}</div>
-                )}
+                  <div className="text-body">{a.name}</div>
+                  <div className="text-caption text-muted-foreground">
+                    {personLabel(a.owner)} · last upload {a.last} · {a.added}{" "}
+                    added
+                  </div>
+                  {status &&
+                    status.balanceMinor !== null &&
+                    status.balanceMinor !== undefined && (
+                      <div className="num text-caption text-muted-foreground">
+                        Balance{" "}
+                        {formatBalance(status.balanceMinor, status.currency)}
+                      </div>
+                    )}
+                  {status?.discrepancy && (
+                    <div className="text-caption text-warn">
+                      {status.discrepancy}
+                    </div>
+                  )}
                 </div>
               </div>
-              <Chip tone={a.stale ? "warn" : "good"}>{a.stale ? "Stale" : "Up to date"}</Chip>
+              <Chip tone={a.stale ? "warn" : "good"}>
+                {a.stale ? "Stale" : "Up to date"}
+              </Chip>
             </div>
           );
         })}

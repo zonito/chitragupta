@@ -88,7 +88,9 @@ function readOriginals(
     : join(dataDir, "Originals", name);
   const text = readFileSync(path, "utf8");
   return {
-    rows: isSavingsAccount(account) ? parseSavingsCsv(text) : parseAccountCsv(text),
+    rows: isSavingsAccount(account)
+      ? parseSavingsCsv(text)
+      : parseAccountCsv(text),
     file: name,
   };
 }
@@ -664,7 +666,8 @@ export function matchInternalTransfers(
  * identity), where it lives under the data dir, and the two accounts
  * its Product column distinguishes. */
 const BARCLAYS_FILE = "barclaycard-full-history.csv";
-const BARCLAYS_REL_PATH = "Zonito/Barclay/Barclaycard/barclaycard-full-history.csv";
+const BARCLAYS_REL_PATH =
+  "Zonito/Barclay/Barclaycard/barclaycard-full-history.csv";
 const BARCLAYS_PRODUCTS: { product: string; account: string }[] = [
   { product: "Current", account: "Barclays Current" },
   { product: "Barclaycard", account: "Barclaycard" },
@@ -710,7 +713,10 @@ function persistedAssignments(
         relPath?: unknown;
         product?: unknown;
       };
-      if (typeof parsed.person === "string" && typeof parsed.account === "string") {
+      if (
+        typeof parsed.person === "string" &&
+        typeof parsed.account === "string"
+      ) {
         const key = row.key.slice(ASSIGNMENT_KEY_PREFIX.length);
         map.set(key, {
           file: key.split("#")[0]!,
@@ -887,9 +893,7 @@ export function discoverFiles(
         if (top && rows.length > 0 && top[1] / rows.length >= 0.9) {
           account = top[0];
         } else {
-          const split = ranked
-            .map(([p, n]) => `${p} ${n}`)
-            .join(", ");
+          const split = ranked.map(([p, n]) => `${p} ${n}`).join(", ");
           failure = `${file}: ambiguous statement — its rows split across Products (${split}) with no single account holding 90%; refusing to guess whose account it is`;
         }
       } catch (error) {
@@ -1055,7 +1059,13 @@ function carrySubscriptionOverrides(
   );
   const copy = to.transaction((items: Record<string, unknown>[]) => {
     for (const r of items) {
-      insert.run(r["merchant"], r["label"], r["mode"], r["source"], r["updated_at"]);
+      insert.run(
+        r["merchant"],
+        r["label"],
+        r["mode"],
+        r["source"],
+        r["updated_at"],
+      );
     }
   });
   copy(rows);

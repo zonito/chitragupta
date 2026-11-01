@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
  */
 export function loadEnvFile(): void {
   try {
-    for (const line of readFileSync(process.cwd() + "/.env", "utf8").split("\n")) {
+    for (const line of readFileSync(process.cwd() + "/.env", "utf8").split(
+      "\n",
+    )) {
       const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
       if (m && !process.env[m[1]!]) process.env[m[1]!] = m[2]!.trim();
     }

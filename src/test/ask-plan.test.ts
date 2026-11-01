@@ -34,7 +34,15 @@ function transportDb() {
     ["g1", "2026-10-28", "Ocado", "Groceries", -3000],
   ];
   for (const [fp, date, merchant, category, amount] of rows) {
-    insert.run(fp, date, date.slice(0, 7), merchant, merchant, amount, category);
+    insert.run(
+      fp,
+      date,
+      date.slice(0, 7),
+      merchant,
+      merchant,
+      amount,
+      category,
+    );
   }
   return db;
 }
@@ -46,8 +54,24 @@ function mahavirDb() {
       description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
      VALUES (?, 'zonito', 'Pro', ?, ?, ?, ?, ?, 0, 'GBP', 100000, 'spend', ?)`,
   );
-  insert.run("m1", "2026-08-03", "2026-08", "Mahavir Sweet Mart", "Mahavir Sweet Mart", -2710, "Groceries");
-  insert.run("m2", "2026-05-17", "2026-05", "Mahavir Sweet Mart", "Mahavir Sweet Mart", -2660, "Groceries");
+  insert.run(
+    "m1",
+    "2026-08-03",
+    "2026-08",
+    "Mahavir Sweet Mart",
+    "Mahavir Sweet Mart",
+    -2710,
+    "Groceries",
+  );
+  insert.run(
+    "m2",
+    "2026-05-17",
+    "2026-05",
+    "Mahavir Sweet Mart",
+    "Mahavir Sweet Mart",
+    -2660,
+    "Groceries",
+  );
   return db;
 }
 
@@ -103,25 +127,53 @@ describe("parseAskPlan validation", () => {
 
   it("rejects an unknown kind and an unknown category", () => {
     expect(
-      parseAskPlan('{"kind":"banana","category":null,"query":null,"from":null,"to":null,"month":null}'),
+      parseAskPlan(
+        '{"kind":"banana","category":null,"query":null,"from":null,"to":null,"month":null}',
+      ),
     ).toBeNull();
     expect(
-      parseAskPlan('{"kind":"total","category":"Travel","query":null,"from":null,"to":null,"month":null}'),
+      parseAskPlan(
+        '{"kind":"total","category":"Travel","query":null,"from":null,"to":null,"month":null}',
+      ),
     ).toBeNull();
   });
 
   it("rejects malformed, impossible and backwards dates", () => {
     const base = { kind: "total", category: null, query: null, month: null };
-    expect(parseAskPlan(JSON.stringify({ ...base, from: "26 Oct 2026", to: "2026-11-01" }))).toBeNull();
-    expect(parseAskPlan(JSON.stringify({ ...base, from: "2026-02-30", to: "2026-03-01" }))).toBeNull();
-    expect(parseAskPlan(JSON.stringify({ ...base, from: "2026-11-01", to: "2026-10-26" }))).toBeNull();
-    expect(parseAskPlan(JSON.stringify({ ...base, from: "2026-10-26", to: null }))).toBeNull();
+    expect(
+      parseAskPlan(
+        JSON.stringify({ ...base, from: "26 Oct 2026", to: "2026-11-01" }),
+      ),
+    ).toBeNull();
+    expect(
+      parseAskPlan(
+        JSON.stringify({ ...base, from: "2026-02-30", to: "2026-03-01" }),
+      ),
+    ).toBeNull();
+    expect(
+      parseAskPlan(
+        JSON.stringify({ ...base, from: "2026-11-01", to: "2026-10-26" }),
+      ),
+    ).toBeNull();
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, from: "2026-10-26", to: null })),
+    ).toBeNull();
   });
 
   it("rejects a malformed month and non-JSON replies", () => {
-    const base = { kind: "records", category: null, query: "x", from: null, to: null };
-    expect(parseAskPlan(JSON.stringify({ ...base, month: "2026-8" }))).toBeNull();
-    expect(parseAskPlan(JSON.stringify({ ...base, month: "2026-13" }))).toBeNull();
+    const base = {
+      kind: "records",
+      category: null,
+      query: "x",
+      from: null,
+      to: null,
+    };
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, month: "2026-8" })),
+    ).toBeNull();
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, month: "2026-13" })),
+    ).toBeNull();
     expect(parseAskPlan("The total is £19.65.")).toBeNull();
     expect(parseAskPlan("")).toBeNull();
   });
@@ -132,11 +184,15 @@ describe("planner-driven Ask", () => {
     const db: Database.Database = transportDb();
     // Go-shaped mock: the planner is the call whose system MESSAGE (the
     // first chat message) names the query planner.
-    const goFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const goFetch = (async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
       const body = JSON.parse(String(init?.body)) as {
         messages: { role: string; content: string }[];
       };
-      const system = body.messages.find((m) => m.role === "system")?.content ?? "";
+      const system =
+        body.messages.find((m) => m.role === "system")?.content ?? "";
       const isPlanner = system.includes("query planner");
       return {
         ok: true,
@@ -180,12 +236,22 @@ describe("planner-driven Ask", () => {
       question: "Total transport expense this week",
       today: TODAY,
       env: { MUSE_API_KEY: "LLM_test" },
-      fetchImpl: gatewayFetch(WEEK_PLAN, "Transport this week came to £19.65 across 2 transactions.", seen),
+      fetchImpl: gatewayFetch(
+        WEEK_PLAN,
+        "Transport this week came to £19.65 across 2 transactions.",
+        seen,
+      ),
     });
     expect(result.ai).toBe(true);
-    expect(result.answer).toBe("Transport this week came to £19.65 across 2 transactions.");
+    expect(result.answer).toBe(
+      "Transport this week came to £19.65 across 2 transactions.",
+    );
     expect(result.figures).toMatchObject({ total: 19.65, count: 2 });
-    expect(result.gateway).toMatchObject({ attempted: true, ok: true, status: 200 });
+    expect(result.gateway).toMatchObject({
+      attempted: true,
+      ok: true,
+      status: 200,
+    });
     // The planner ran first, with today's date in its prompt context.
     expect(seen.systems[0]).toContain("query planner");
     db.close();
@@ -205,13 +271,20 @@ describe("planner-driven Ask", () => {
       question: "When did we last pay Mahavir Sweet Mart?",
       today: TODAY,
       env: { MUSE_API_KEY: "LLM_test" },
-      fetchImpl: gatewayFetch(plan, "You last paid Mahavir Sweet Mart on 3 Aug 2026 — £27.10."),
+      fetchImpl: gatewayFetch(
+        plan,
+        "You last paid Mahavir Sweet Mart on 3 Aug 2026 — £27.10.",
+      ),
     });
     expect(result.ai).toBe(true);
     expect(result.figures).toMatchObject({
       total: 53.7,
       count: 2,
-      latest: { merchant: "Mahavir Sweet Mart", date: "3 Aug 2026", amount: 27.1 },
+      latest: {
+        merchant: "Mahavir Sweet Mart",
+        date: "3 Aug 2026",
+        amount: 27.1,
+      },
     });
     db.close();
   });
@@ -269,7 +342,10 @@ describe("planner-driven Ask", () => {
       question: "Total transport expense this week",
       today: TODAY,
       env: { MUSE_API_KEY: "LLM_test" },
-      fetchImpl: gatewayFetch("I cannot plan that.", "Transport this week: £19.65."),
+      fetchImpl: gatewayFetch(
+        "I cannot plan that.",
+        "Transport this week: £19.65.",
+      ),
     });
     expect(result.figures).toMatchObject({ total: 19.65, count: 2 });
     db.close();
@@ -285,7 +361,11 @@ describe("deterministic relative periods", () => {
       env: {},
     });
     expect(result.ai).toBe(false);
-    expect(result.gateway).toEqual({ attempted: false, ok: false, provider: null });
+    expect(result.gateway).toEqual({
+      attempted: false,
+      ok: false,
+      provider: null,
+    });
     expect(result.figures).toMatchObject({ total: 19.65, count: 2 });
     expect(result.answer).toContain("Transport");
     expect(result.answer).toContain("£19.65");
@@ -326,7 +406,9 @@ describe("Ask gateway diagnostics", () => {
         }) as unknown as Response) as typeof fetch,
     });
     expect(result.ai).toBe(false);
-    expect(result.answer).toContain("Mahavir Sweet Mart, dated 3 Aug 2026 — £27.10");
+    expect(result.answer).toContain(
+      "Mahavir Sweet Mart, dated 3 Aug 2026 — £27.10",
+    );
     expect(result.gateway).toMatchObject({
       attempted: true,
       ok: false,

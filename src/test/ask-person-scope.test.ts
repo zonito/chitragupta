@@ -38,13 +38,39 @@ function twoPersonDb() {
     ["z3", "zonito", "Pro", "2026-10-14", "Adyen N.v.", -47623, "Transport"],
     // Nikhila's October.
     ["n1", "nikhila", "Pro", "2026-10-26", "UNIQLO", -4990, "Shopping"],
-    ["n2", "nikhila", "Pro", "2026-10-11", "The Kati Roll Company", -2435, "Eating out"],
-    ["n3", "nikhila", "Pro", "2026-10-30", "Transport for London", -1245, "Transport"],
+    [
+      "n2",
+      "nikhila",
+      "Pro",
+      "2026-10-11",
+      "The Kati Roll Company",
+      -2435,
+      "Eating out",
+    ],
+    [
+      "n3",
+      "nikhila",
+      "Pro",
+      "2026-10-30",
+      "Transport for London",
+      -1245,
+      "Transport",
+    ],
     // A joint October row: the household counts £100, each person £50.
     ["j1", "zonito", "Joint", "2026-10-02", "Joint Merchant", -10000, "Home"],
   ];
   for (const [fp, person, account, date, merchant, amount, category] of rows) {
-    insert.run(fp, person, account, date, date.slice(0, 7), merchant, merchant, amount, category);
+    insert.run(
+      fp,
+      person,
+      account,
+      date,
+      date.slice(0, 7),
+      merchant,
+      merchant,
+      amount,
+      category,
+    );
   }
   // The guard reads month_aggregates; build them as ingest would.
   recomputeAggregates(db, "zonito");
@@ -79,27 +105,41 @@ function gatewayFetch(planText: string, prose: string) {
 
 describe("personFromQuestion", () => {
   it("recognises the named forms for both people", () => {
-    expect(personFromQuestion("Top 5 transactions from nikhila for this month")).toBe("nikhila");
+    expect(
+      personFromQuestion("Top 5 transactions from nikhila for this month"),
+    ).toBe("nikhila");
     expect(personFromQuestion("Nikhila's biggest payments")).toBe("nikhila");
     expect(personFromQuestion("Nikhila’s biggest payments")).toBe("nikhila");
     expect(personFromQuestion("How much did Zonito spend?")).toBe("zonito");
-    expect(personFromQuestion("spending for nikhila in October")).toBe("nikhila");
-    expect(personFromQuestion("Show me Nikhila spending in October")).toBe("nikhila");
+    expect(personFromQuestion("spending for nikhila in October")).toBe(
+      "nikhila",
+    );
+    expect(personFromQuestion("Show me Nikhila spending in October")).toBe(
+      "nikhila",
+    );
     expect(personFromQuestion("What did we buy for Zonito?")).toBe("zonito");
   });
 
   it("names nobody for first person or for both names together", () => {
-    expect(personFromQuestion("How much did we spend in October?")).toBeUndefined();
+    expect(
+      personFromQuestion("How much did we spend in October?"),
+    ).toBeUndefined();
     expect(personFromQuestion("What was my biggest payment?")).toBeUndefined();
     expect(personFromQuestion("What is our total spend?")).toBeUndefined();
     expect(personFromQuestion("Did Nikhila pay Zonito back?")).toBeUndefined();
-    expect(personFromQuestion("Top 5 transactions for this month")).toBeUndefined();
+    expect(
+      personFromQuestion("Top 5 transactions for this month"),
+    ).toBeUndefined();
   });
 });
 
 describe("parseAskQuery person extraction", () => {
   it("scopes the repro question and strips the name from the terms", () => {
-    const plan = parseAskQuery("Top 5 transactions from nikhila for this month", "2026-10", TODAY);
+    const plan = parseAskQuery(
+      "Top 5 transactions from nikhila for this month",
+      "2026-10",
+      TODAY,
+    );
     expect(plan.person).toBe("nikhila");
     expect(plan.top).toBe(5);
     expect(plan.month).toBe("2026-10");
@@ -107,30 +147,54 @@ describe("parseAskQuery person extraction", () => {
   });
 
   it("strips a possessive name and its stray 's' from the terms", () => {
-    const plan = parseAskQuery("Nikhila's spending in October 2026", "2026-10", TODAY);
+    const plan = parseAskQuery(
+      "Nikhila's spending in October 2026",
+      "2026-10",
+      TODAY,
+    );
     expect(plan.person).toBe("nikhila");
     expect(plan.month).toBe("2026-10");
     expect(plan.terms).toEqual([]);
   });
 
   it("leaves no-person questions without a person field", () => {
-    const plan = parseAskQuery("How much did we spend in October 2026?", "2026-10", TODAY);
+    const plan = parseAskQuery(
+      "How much did we spend in October 2026?",
+      "2026-10",
+      TODAY,
+    );
     expect(plan.person).toBeUndefined();
     expect(plan).not.toHaveProperty("person");
   });
 });
 
 describe("parseAskPlan person validation", () => {
-  const base = { kind: "top", category: null, query: null, from: null, to: null, month: "2026-10", limit: 5 };
+  const base = {
+    kind: "top",
+    category: null,
+    query: null,
+    from: null,
+    to: null,
+    month: "2026-10",
+    limit: 5,
+  };
 
   it("accepts and canonicalises a known person", () => {
-    expect(parseAskPlan(JSON.stringify({ ...base, person: "Nikhila" }))?.person).toBe("nikhila");
-    expect(parseAskPlan(JSON.stringify({ ...base, person: "household" }))?.person).toBe("household");
-    expect(parseAskPlan(JSON.stringify({ ...base, person: null }))).not.toHaveProperty("person");
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, person: "Nikhila" }))?.person,
+    ).toBe("nikhila");
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, person: "household" }))?.person,
+    ).toBe("household");
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, person: null })),
+    ).not.toHaveProperty("person");
   });
 
   it("rejects a person outside the known set, invalidating the plan", () => {
-    expect(parseAskPlan(JSON.stringify({ ...base, person: "dhyani" }))).toBeNull();
+    expect(
+      parseAskPlan(JSON.stringify({ ...base, person: "dhyani" })),
+    ).toBeNull();
     expect(parseAskPlan(JSON.stringify({ ...base, person: 42 }))).toBeNull();
     expect(parseAskPlan(JSON.stringify({ ...base, person: "" }))).toBeNull();
   });
@@ -150,7 +214,9 @@ describe("person-scoped answers", () => {
     expect(result.figures.count).toBe(4);
     // The regression guard for the reported bug: her name, her rows —
     // and none of Zonito's merchants under her name.
-    expect(result.answer).toContain("Figures for Nikhila, as your question asked:");
+    expect(result.answer).toContain(
+      "Figures for Nikhila, as your question asked:",
+    );
     expect(result.answer).toContain("UNIQLO");
     expect(result.answer).not.toContain("Ocado");
     expect(result.answer).not.toContain("Penny Caulfield");
@@ -168,8 +234,12 @@ describe("person-scoped answers", () => {
     expect(result.ai).toBe(false);
     expect(result.figures.total).toBe(NIK_TOTAL);
     expect(result.figures.count).toBe(4);
-    expect(result.answer).toContain("Figures for Nikhila, as your question asked:");
-    expect(result.answer).toContain("£136.70 spent in October 2026 across 4 transactions.");
+    expect(result.answer).toContain(
+      "Figures for Nikhila, as your question asked:",
+    );
+    expect(result.answer).toContain(
+      "£136.70 spent in October 2026 across 4 transactions.",
+    );
     db.close();
   });
 
@@ -187,7 +257,9 @@ describe("person-scoped answers", () => {
       { merchant: "Penny Caulfield", date: "9 Oct 2026", amount: 148 },
     ]);
     expect(result.figures.total).toBe(924.23);
-    expect(result.answer).toContain("Figures for Zonito, as your question asked:");
+    expect(result.answer).toContain(
+      "Figures for Zonito, as your question asked:",
+    );
     db.close();
   });
 
@@ -215,7 +287,9 @@ describe("person-scoped answers", () => {
     });
     expect(total.figures.total).toBe(1110.93);
     expect(total.figures.count).toBe(7);
-    expect(total.answer).toBe("£1,110.93 spent in October 2026 across 7 transactions.");
+    expect(total.answer).toBe(
+      "£1,110.93 spent in October 2026 across 7 transactions.",
+    );
     db.close();
   });
 
@@ -232,8 +306,12 @@ describe("person-scoped answers", () => {
     expect(result.ai).toBe(false);
     expect(result.figures.total).toBe(NIK_TOTAL);
     expect(result.figures.count).toBe(4);
-    expect(result.answer).toContain("Figures for Nikhila, as your question asked:");
-    expect(result.answer).toContain("Nothing matched that specific search in October 2026.");
+    expect(result.answer).toContain(
+      "Figures for Nikhila, as your question asked:",
+    );
+    expect(result.answer).toContain(
+      "Nothing matched that specific search in October 2026.",
+    );
     expect(result.answer).toContain("£136.70");
     expect(result.answer).not.toContain("£1,110.93");
     db.close();
@@ -255,7 +333,10 @@ describe("person-scoped answers", () => {
       question: "Top 2 transactions for this month",
       today: TODAY,
       env: { MUSE_API_KEY: "LLM_test" },
-      fetchImpl: gatewayFetch(plan, "Nikhila's biggest was the joint merchant at £50.00."),
+      fetchImpl: gatewayFetch(
+        plan,
+        "Nikhila's biggest was the joint merchant at £50.00.",
+      ),
     });
     expect(result.ai).toBe(true);
     expect(result.figures.top).toEqual(NIK_TOP.slice(0, 2));
@@ -325,8 +406,7 @@ describeRepro("person-scoped answers on the repro fixture", () => {
     year: "numeric",
     timeZone: "UTC",
   });
-  const dayName = (ymd: string) =>
-    dayFmt.format(new Date(`${ymd}T00:00:00Z`));
+  const dayName = (ymd: string) => dayFmt.format(new Date(`${ymd}T00:00:00Z`));
 
   /**
    * The expected ranking for one person, derived straight from the
@@ -346,7 +426,11 @@ describeRepro("person-scoped answers on the repro fixture", () => {
          ORDER BY share DESC, substr(effective_date, 1, 10) DESC, merchant ASC, fingerprint ASC
          LIMIT ?`,
       )
-      .all(month, person, n) as { merchant: string; date: string; share: number }[];
+      .all(month, person, n) as {
+      merchant: string;
+      date: string;
+      share: number;
+    }[];
     return {
       top: rows.map((r) => ({
         merchant: r.merchant,
@@ -381,7 +465,10 @@ describeRepro("person-scoped answers on the repro fixture", () => {
   it("answers the repro question with Nikhila's own October ranking", async () => {
     const expected = expectedTop("nikhila", "2026-10", 5);
     expect(expected.top.length).toBe(5);
-    expect(expected.top[0]).toMatchObject({ merchant: "UNIQLO", date: "26 Oct 2026" });
+    expect(expected.top[0]).toMatchObject({
+      merchant: "UNIQLO",
+      date: "26 Oct 2026",
+    });
 
     const result = await answerAsk(db, {
       question: "Top 5 transactions from nikhila for this month",
@@ -392,7 +479,9 @@ describeRepro("person-scoped answers on the repro fixture", () => {
     expect(result.figures.top).toEqual(expected.top);
     expect(result.figures.total).toBe(expected.total);
     expect(result.figures.count).toBe(5);
-    expect(result.answer).toContain("Figures for Nikhila, as your question asked:");
+    expect(result.answer).toContain(
+      "Figures for Nikhila, as your question asked:",
+    );
     expect(result.answer).toContain("UNIQLO");
     // The household ranking's merchants must not appear under her name.
     expect(result.answer).not.toContain("The London Eye");
@@ -411,7 +500,9 @@ describeRepro("person-scoped answers on the repro fixture", () => {
     });
     expect(result.ai).toBe(false);
     expect(result.figures.total).toBe(expected);
-    expect(result.answer).toContain("Figures for Nikhila, as your question asked:");
+    expect(result.answer).toContain(
+      "Figures for Nikhila, as your question asked:",
+    );
   }, 60_000);
 
   it("scopes a Zonito-named question asked from Nikhila's view to Zonito", async () => {
@@ -427,7 +518,9 @@ describeRepro("person-scoped answers on the repro fixture", () => {
     expect(result.ai).toBe(false);
     expect(result.figures.top).toEqual(expected.top);
     expect(result.figures.total).toBe(expected.total);
-    expect(result.answer).toContain("Figures for Zonito, as your question asked:");
+    expect(result.answer).toContain(
+      "Figures for Zonito, as your question asked:",
+    );
   }, 60_000);
 
   it("keeps the no-person October total on the household aggregate", async () => {

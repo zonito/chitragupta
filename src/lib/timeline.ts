@@ -16,7 +16,8 @@ import { gbp, SUBS, type Person } from "./data";
  * raw wall-clock month beyond it.
  */
 
-export type ChartPreset = "daily" | "monthly" | "quarterly" | "ytd" | "oneyear" | "all";
+export type ChartPreset =
+  "daily" | "monthly" | "quarterly" | "ytd" | "oneyear" | "all";
 
 export const CHART_PRESETS: { id: ChartPreset; label: string }[] = [
   { id: "daily", label: "Daily" },
@@ -87,7 +88,13 @@ function bucketsFromMonths(data: MonthlyRows, keys: string[]): ChartBucket[] {
         }
       }
     }
-    return { key, label: monthYear(key), short: monthName(key, "short"), total, values };
+    return {
+      key,
+      label: monthYear(key),
+      short: monthName(key, "short"),
+      total,
+      values,
+    };
   });
 }
 
@@ -124,7 +131,10 @@ function quartersOf(months: string[]): Quarter[] {
   return out;
 }
 
-function bucketsFromQuarters(data: MonthlyRows, quarters: Quarter[]): ChartBucket[] {
+function bucketsFromQuarters(
+  data: MonthlyRows,
+  quarters: Quarter[],
+): ChartBucket[] {
   return quarters.map((q) => {
     const monthBuckets = bucketsFromMonths(data, q.months);
     const values: Record<string, number> = {};
@@ -147,9 +157,15 @@ function bucketsFromQuarters(data: MonthlyRows, quarters: Quarter[]): ChartBucke
 }
 
 /** Calendar quarters over the history: the last `count`, or all. */
-export function quarterlyBuckets(data: MonthlyRows, count: number | null = 12): ChartBucket[] {
+export function quarterlyBuckets(
+  data: MonthlyRows,
+  count: number | null = 12,
+): ChartBucket[] {
   const quarters = quartersOf(data.months);
-  return bucketsFromQuarters(data, count === null ? quarters : quarters.slice(-count));
+  return bucketsFromQuarters(
+    data,
+    count === null ? quarters : quarters.slice(-count),
+  );
 }
 
 /** Current calendar year by month, Jan → the history's last month.
@@ -160,7 +176,10 @@ export function ytdBuckets(data: MonthlyRows): ChartBucket[] {
   const latest = data.months[data.months.length - 1];
   if (!latest) return [];
   const year = latest.slice(0, 4);
-  return bucketsFromMonths(data, data.months.filter((m) => m.startsWith(`${year}-`)));
+  return bucketsFromMonths(
+    data,
+    data.months.filter((m) => m.startsWith(`${year}-`)),
+  );
 }
 
 /** Running totals across buckets (the 1Y pace-of-spend view). */
@@ -181,7 +200,9 @@ export function cumulativeBuckets(buckets: ChartBucket[]): ChartBucket[] {
 }
 
 /** Per-category totals over a bucket window, biggest first. */
-export function categoryTotals(buckets: ChartBucket[]): { name: string; total: number }[] {
+export function categoryTotals(
+  buckets: ChartBucket[],
+): { name: string; total: number }[] {
   const totals = new Map<string, number>();
   for (const b of buckets) {
     for (const [cat, v] of Object.entries(b.values)) {
@@ -202,7 +223,9 @@ export function continuousMonths(first: string, last: string): string[] {
   const total = (ly - fy) * 12 + (lm - fm);
   for (let i = 0; i <= total; i++) {
     const d = new Date(Date.UTC(fy, fm - 1 + i, 1));
-    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+    out.push(
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+    );
   }
   return out;
 }
@@ -218,7 +241,8 @@ export function continuousMonths(first: string, last: string): string[] {
  */
 export function subscriptionMonthlyRows(person: Person): MonthlyRows {
   const visible = SUBS.filter(
-    (s) => s.status === "Active" && (person === "household" || s.owner === person),
+    (s) =>
+      s.status === "Active" && (person === "household" || s.owner === person),
   );
   const perMonth = new Map<string, number>();
   for (const s of visible) {
@@ -248,7 +272,11 @@ export interface DailyData {
   /** The store's earliest transaction date: a comparison window that
    * starts before this is not fully covered and must be omitted. */
   dataStart: string | null;
-  buckets: { date: string; total: number; categories: Record<string, number> }[]; // pounds
+  buckets: {
+    date: string;
+    total: number;
+    categories: Record<string, number>;
+  }[]; // pounds
 }
 
 interface DailyApiBody {
@@ -256,12 +284,22 @@ interface DailyApiBody {
   start: string | null;
   end: string | null;
   dataStart: string | null;
-  buckets: { date: string; total_minor: number; categories: Record<string, number> }[];
+  buckets: {
+    date: string;
+    total_minor: number;
+    categories: Record<string, number>;
+  }[];
 }
 
-export async function fetchDaily(person: Person, days: number): Promise<DailyData> {
-  const res = await fetch(`/api/aggregates/daily?person=${person}&days=${days}`);
-  if (!res.ok) throw new Error(`daily aggregates request failed: ${res.status}`);
+export async function fetchDaily(
+  person: Person,
+  days: number,
+): Promise<DailyData> {
+  const res = await fetch(
+    `/api/aggregates/daily?person=${person}&days=${days}`,
+  );
+  if (!res.ok)
+    throw new Error(`daily aggregates request failed: ${res.status}`);
   const body = (await res.json()) as DailyApiBody;
   if (!body.ok) throw new Error("daily aggregates request failed");
   return {
@@ -293,7 +331,9 @@ const dayLabelOf = (iso: string) =>
 export function dailyBuckets(daily: DailyData, count = 30): ChartBucket[] {
   return daily.buckets.slice(-count).map((b) => {
     const values = Object.fromEntries(
-      Object.entries(b.categories).filter(([name]) => !CHART_EXCLUDED_CATEGORIES.has(name)),
+      Object.entries(b.categories).filter(
+        ([name]) => !CHART_EXCLUDED_CATEGORIES.has(name),
+      ),
     );
     return {
       key: b.date,
@@ -363,7 +403,8 @@ export function comparisonText(
   for (const name of names) {
     const delta = (cur.get(name) ?? 0) - (prev.get(name) ?? 0);
     if (delta > 0 && (!riser || delta > riser.delta)) riser = { name, delta };
-    if (delta < 0 && (!faller || delta < faller.delta)) faller = { name, delta };
+    if (delta < 0 && (!faller || delta < faller.delta))
+      faller = { name, delta };
   }
   // Whole pounds: the line is a headline ("Groceries up £84 vs
   // previous 30 days"); the chart itself carries the exact figures.
@@ -387,7 +428,10 @@ export function presetComparison(
 ): string | null {
   if (preset === "daily") {
     if (!daily || !daily.dataStart || daily.buckets.length < 60) return null;
-    const prev = dailyBuckets({ ...daily, buckets: daily.buckets.slice(0, -30) }, 30);
+    const prev = dailyBuckets(
+      { ...daily, buckets: daily.buckets.slice(0, -30) },
+      30,
+    );
     if (prev.length < 30 || prev[0]!.key < daily.dataStart) return null;
     return comparisonText(dailyBuckets(daily, 30), prev, "previous 30 days");
   }
@@ -405,7 +449,11 @@ export function presetComparison(
     const prevYear = String(Number(latest.slice(0, 4)) - 1);
     const prevKeys = cur.map((b) => `${prevYear}${b.key.slice(4)}`);
     if (!monthly.months.includes(prevKeys[0]!)) return null;
-    return comparisonText(cur, bucketsFromMonths(monthly, prevKeys), "the same months last year");
+    return comparisonText(
+      cur,
+      bucketsFromMonths(monthly, prevKeys),
+      "the same months last year",
+    );
   }
   // monthly, oneyear and all compare the trailing 12 months with the
   // 12 before them (for the cumulative and all-history views that is
@@ -413,6 +461,7 @@ export function presetComparison(
   if (monthly.months.length < 24) return null;
   const cur = monthlyBuckets(monthly, 12);
   const prev = bucketsFromMonths(monthly, monthly.months.slice(-24, -12));
-  const phrase = preset === "monthly" ? "previous 12 months" : "the year before";
+  const phrase =
+    preset === "monthly" ? "previous 12 months" : "the year before";
   return comparisonText(cur, prev, phrase);
 }

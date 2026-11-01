@@ -50,9 +50,7 @@ describe("Activity person dropdown", () => {
   it("shows in Household view with the Anyone / Zonito / Nikhila / Joint options", () => {
     renderActivity();
     const select = screen.getByLabelText("Person") as HTMLSelectElement;
-    expect(
-      [...select.options].map((o) => [o.value, o.textContent]),
-    ).toEqual([
+    expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
       ["all", "Anyone"],
       ["zonito", "Zonito"],
       ["nikhila", "Nikhila"],

@@ -9,7 +9,10 @@ import {
 
 const TEST_KEY = "LLM_test_key";
 
-function capturingFetch(seen: { url?: string; init?: RequestInit | undefined }) {
+function capturingFetch(seen: {
+  url?: string;
+  init?: RequestInit | undefined;
+}) {
   return (async (url: string | URL | Request, init?: RequestInit) => {
     seen.url = String(url);
     seen.init = init;
@@ -77,7 +80,11 @@ describe("Meta Model API gateway client", () => {
 
   it("returns null on an HTTP error", async () => {
     const fetchImpl = (async () =>
-      ({ ok: false, status: 401, json: async () => ({}) }) as Response) as typeof fetch;
+      ({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      }) as Response) as typeof fetch;
     const text = await museComplete({
       prompt: "hi",
       env: { MUSE_API_KEY: TEST_KEY },

@@ -73,7 +73,9 @@ function stamp(db: ReturnType<typeof openStore>): string | null {
 
 function rebuildMarkers(db: ReturnType<typeof openStore>): number {
   const row = db
-    .prepare("SELECT COUNT(*) AS n FROM ingest_runs WHERE account = '__rebuild__'")
+    .prepare(
+      "SELECT COUNT(*) AS n FROM ingest_runs WHERE account = '__rebuild__'",
+    )
     .get() as { n: number };
   return row.n;
 }
@@ -150,9 +152,9 @@ describe("atomic store rebuild (rules-version change)", () => {
     expect(pro.file).toBe("account-statement_2022_01cac2.csv");
     expect(pro.error).toBeTruthy();
     // Every other account was still attempted (into the temp store).
-    expect(
-      results.filter((r) => r.account !== "Pro").every((r) => r.ok),
-    ).toBe(true);
+    expect(results.filter((r) => r.account !== "Pro").every((r) => r.ok)).toBe(
+      true,
+    );
 
     // The live store is exactly as it was: same rows, still stamped with
     // the old version so the next ingest retries the rebuild, and no new
@@ -168,9 +170,9 @@ describe("per-file fault tolerance (normal ingest)", () => {
   it("ingests the good accounts and names the bad account's file", () => {
     const db = openStore(mkdtempSync(join(tmpdir(), "chitra-store-")));
     // A current-version store: this ingest takes the normal path.
-    db.prepare(
-      "INSERT INTO meta (key, value) VALUES ('rules_version', ?)",
-    ).run(String(RULES_VERSION));
+    db.prepare("INSERT INTO meta (key, value) VALUES ('rules_version', ?)").run(
+      String(RULES_VERSION),
+    );
 
     const results = ingestAll(db, brokenDataDir());
     const map = byAccount(results);

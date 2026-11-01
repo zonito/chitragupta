@@ -51,7 +51,9 @@ describeRepro("subscriptions from the real Originals", () => {
       status: "Ended",
     });
     for (const noise of ["Mahavir Sweet Mart", "BP", "Greggs", "Esso"]) {
-      expect(byName.has(noise), `${noise} must not be a subscription`).toBe(false);
+      expect(byName.has(noise), `${noise} must not be a subscription`).toBe(
+        false,
+      );
     }
   }, 120_000);
 

@@ -31,7 +31,16 @@ function seededDb() {
     ["j1", "Joint", "2026-09-15", "Council Tax", "Home", -10000],
   ];
   for (const [fp, account, date, merchant, category, amount] of rows) {
-    insert.run(fp, account, date, date.slice(0, 7), merchant, merchant, amount, category);
+    insert.run(
+      fp,
+      account,
+      date,
+      date.slice(0, 7),
+      merchant,
+      merchant,
+      amount,
+      category,
+    );
   }
   return db;
 }
@@ -66,11 +75,17 @@ describe("Ask server pipeline", () => {
     expect(result.answer).toContain(
       "The latest matching record is Mahavir Sweet Mart, dated 3 Aug 2026 — £27.10.",
     );
-    expect(result.answer).toContain("Total across 2 matching transactions: £53.70.");
+    expect(result.answer).toContain(
+      "Total across 2 matching transactions: £53.70.",
+    );
     expect(result.figures).toMatchObject({
       total: 53.7,
       count: 2,
-      latest: { merchant: "Mahavir Sweet Mart", date: "3 Aug 2026", amount: 27.1 },
+      latest: {
+        merchant: "Mahavir Sweet Mart",
+        date: "3 Aug 2026",
+        amount: 27.1,
+      },
       month: null,
       truncated: false,
     });
@@ -120,7 +135,9 @@ describe("Ask server pipeline", () => {
       }) as typeof fetch,
     });
     expect(result.ai).toBe(false);
-    expect(result.answer).toContain("Mahavir Sweet Mart, dated 3 Aug 2026 — £27.10");
+    expect(result.answer).toContain(
+      "Mahavir Sweet Mart, dated 3 Aug 2026 — £27.10",
+    );
     db.close();
   });
 
@@ -131,7 +148,11 @@ describe("Ask server pipeline", () => {
       env: {},
     });
     expect(result.ai).toBe(false);
-    expect(result.figures).toMatchObject({ total: 600.4, count: 2, month: "2026-08" });
+    expect(result.figures).toMatchObject({
+      total: 600.4,
+      count: 2,
+      month: "2026-08",
+    });
     expect(result.answer).toContain("£600.40");
     db.close();
   });
@@ -143,8 +164,14 @@ describe("Ask server pipeline", () => {
       env: {},
     });
     expect(result.ai).toBe(false);
-    expect(result.answer).toBe("£627.50 spent in August 2026 across 3 transactions.");
-    expect(result.figures).toMatchObject({ total: 627.5, count: 3, month: "2026-08" });
+    expect(result.answer).toBe(
+      "£627.50 spent in August 2026 across 3 transactions.",
+    );
+    expect(result.figures).toMatchObject({
+      total: 627.5,
+      count: 3,
+      month: "2026-08",
+    });
     db.close();
   });
 

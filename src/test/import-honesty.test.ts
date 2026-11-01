@@ -132,10 +132,7 @@ describe("ingest guards (B7)", () => {
 
   it("a header-valid statement with no rows fails naming the file (0-row guard)", () => {
     const db = currentStore();
-    const results = ingestAll(
-      db,
-      fixtureDataDir({ Pro: ACCOUNT_HEADER }),
-    );
+    const results = ingestAll(db, fixtureDataDir({ Pro: ACCOUNT_HEADER }));
     const pro = byAccount(results).get("Pro")!;
     expect(pro.ok).toBe(false);
     expect(pro.file).toBe(FILES.Pro);

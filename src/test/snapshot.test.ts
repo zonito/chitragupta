@@ -32,10 +32,26 @@ describe("snapshot builder", () => {
          description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
        VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, 'GBP', 0, ?, NULL)`,
     );
-    insert.run("a", "2026-10-05 13:58:16", "2026-10", "Ocado", "Ocado", -4250, "spend");
+    insert.run(
+      "a",
+      "2026-10-05 13:58:16",
+      "2026-10",
+      "Ocado",
+      "Ocado",
+      -4250,
+      "spend",
+    );
     insert.run("b", "2026-10-06", "2026-10", "Ocado", "Ocado", -1000, "spend");
     // Income-only merchant: present in the store with no spend rows.
-    insert.run("c", "2026-10-07", "2026-10", "Mystery Sender", "Mystery Sender", 5000, "income");
+    insert.run(
+      "c",
+      "2026-10-07",
+      "2026-10",
+      "Mystery Sender",
+      "Mystery Sender",
+      5000,
+      "income",
+    );
     db.prepare(
       `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added) VALUES ('Main', '2026-10-30T09:00:00.000Z', 3, 3)`,
     ).run();
@@ -64,9 +80,30 @@ describe("snapshot builder", () => {
          description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
        VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, 'GBP', 0, 'spend', NULL)`,
     );
-    insert.run("r1", "2026-10-05", "2026-10", "Alpha Unknown", "Alpha Unknown", -1000);
-    insert.run("r2", "2026-10-06", "2026-10", "Beta Unknown", "Beta Unknown", -2000);
-    insert.run("r3", "2026-10-07", "2026-10", "Beta Unknown", "Beta Unknown", -500);
+    insert.run(
+      "r1",
+      "2026-10-05",
+      "2026-10",
+      "Alpha Unknown",
+      "Alpha Unknown",
+      -1000,
+    );
+    insert.run(
+      "r2",
+      "2026-10-06",
+      "2026-10",
+      "Beta Unknown",
+      "Beta Unknown",
+      -2000,
+    );
+    insert.run(
+      "r3",
+      "2026-10-07",
+      "2026-10",
+      "Beta Unknown",
+      "Beta Unknown",
+      -500,
+    );
     const expected = reviewQueueCount(db);
     db.close();
 
@@ -91,18 +128,42 @@ describe("snapshot builder", () => {
     insert.run("m1", "2022-08-15", "2022-08", "Old Shop", "Old Shop", -1000);
     insert.run("m2", "2023-01-15", "2023-01", "Old Shop", "Old Shop", -1100);
     insert.run("m3", "2025-06-15", "2025-06", "Old Shop", "Old Shop", -1200);
-    insert.run("m4", "2026-09-15", "2026-09", "Recent Shop", "Recent Shop", -1300);
-    insert.run("m5", "2026-10-15", "2026-10", "Recent Shop", "Recent Shop", -1400);
+    insert.run(
+      "m4",
+      "2026-09-15",
+      "2026-09",
+      "Recent Shop",
+      "Recent Shop",
+      -1300,
+    );
+    insert.run(
+      "m5",
+      "2026-10-15",
+      "2026-10",
+      "Recent Shop",
+      "Recent Shop",
+      -1400,
+    );
     db.close();
 
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;
     const snap = buildSnapshot();
     expect(snap.months.map((m) => m.key)).toEqual([
-      "2026-10", "2026-09", "2025-06", "2023-01", "2022-08",
+      "2026-10",
+      "2026-09",
+      "2025-06",
+      "2023-01",
+      "2022-08",
     ]);
-    expect(snap.months.at(-1)).toEqual({ key: "2022-08", label: "August 2022" });
+    expect(snap.months.at(-1)).toEqual({
+      key: "2022-08",
+      label: "August 2022",
+    });
     // Instant first paint is unchanged: only the two newest months of rows.
-    expect([...new Set(snap.txns.map((t) => t.monthKey))].sort()).toEqual(["2026-09", "2026-10"]);
+    expect([...new Set(snap.txns.map((t) => t.monthKey))].sort()).toEqual([
+      "2026-09",
+      "2026-10",
+    ]);
   });
 
   it("mirrors the API mapper: description becomes the note, no fx is invented, same-day rows are newest first", () => {
@@ -113,7 +174,13 @@ describe("snapshot builder", () => {
          description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
        VALUES (?, 'zonito', 'Main', ?, '2026-10', ?, 'Trainline', ?, 0, ?, 0, 'spend', 'Transport')`,
     );
-    insert.run("n1", "2026-10-05 09:00:00", "Train ticket to Edinburgh", -1000, "GBP");
+    insert.run(
+      "n1",
+      "2026-10-05 09:00:00",
+      "Train ticket to Edinburgh",
+      -1000,
+      "GBP",
+    );
     insert.run("n2", "2026-10-05 17:30:00", "Trainline", -2000, "GBP");
     // A foreign-currency row: the snapshot selection is GBP-only, exactly
     // as the API mapper drops non-GBP rows instead of decorating them.
@@ -132,10 +199,17 @@ describe("snapshot builder", () => {
 
     // The same rows through the API mapper carry the same note/fx shape.
     const apiEarlier = apiTxnToTxn({
-      id: "n1", person: "zonito", account: "Main", date: "2026-10-05 09:00:00",
-      month: "2026-10", description: "Train ticket to Edinburgh",
-      merchant: "Trainline", amountMinor: -1000, currency: "GBP",
-      movement: "spend", category: "Transport",
+      id: "n1",
+      person: "zonito",
+      account: "Main",
+      date: "2026-10-05 09:00:00",
+      month: "2026-10",
+      description: "Train ticket to Edinburgh",
+      merchant: "Trainline",
+      amountMinor: -1000,
+      currency: "GBP",
+      movement: "spend",
+      category: "Transport",
     });
     expect(apiEarlier!.note).toBe(earlier!.note);
     expect(apiEarlier!.fx).toBe(earlier!.fx);
@@ -151,10 +225,42 @@ describe("snapshot builder", () => {
     );
     // Salary in the current month and the previous month, plus a spend
     // row each month so both months are real snapshot months.
-    insert.run("sal-oct", "2026-10-28", "2026-10", "ACME PAYROLL", "ACME PAYROLL", 300000, "income");
-    insert.run("sal-sep", "2026-09-28", "2026-09", "ACME PAYROLL", "ACME PAYROLL", 295000, "income");
-    insert.run("sp-oct", "2026-10-05", "2026-10", "Corner Shop", "Corner Shop", -1500, "spend");
-    insert.run("sp-sep", "2026-09-05", "2026-09", "Corner Shop", "Corner Shop", -1200, "spend");
+    insert.run(
+      "sal-oct",
+      "2026-10-28",
+      "2026-10",
+      "ACME PAYROLL",
+      "ACME PAYROLL",
+      300000,
+      "income",
+    );
+    insert.run(
+      "sal-sep",
+      "2026-09-28",
+      "2026-09",
+      "ACME PAYROLL",
+      "ACME PAYROLL",
+      295000,
+      "income",
+    );
+    insert.run(
+      "sp-oct",
+      "2026-10-05",
+      "2026-10",
+      "Corner Shop",
+      "Corner Shop",
+      -1500,
+      "spend",
+    );
+    insert.run(
+      "sp-sep",
+      "2026-09-05",
+      "2026-09",
+      "Corner Shop",
+      "Corner Shop",
+      -1200,
+      "spend",
+    );
     db.close();
 
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;
@@ -170,14 +276,30 @@ describe("snapshot builder", () => {
     // (the API's category for an uncategorised income row is One-off,
     // per CATEGORY_SQL — the same fallback resolveCategory gives).
     const apiOct = apiTxnToTxn({
-      id: "sal-oct", person: "zonito", account: "Main", date: "2026-10-28",
-      month: "2026-10", description: "ACME PAYROLL", merchant: "ACME PAYROLL",
-      amountMinor: 300000, currency: "GBP", movement: "income", category: "One-off",
+      id: "sal-oct",
+      person: "zonito",
+      account: "Main",
+      date: "2026-10-28",
+      month: "2026-10",
+      description: "ACME PAYROLL",
+      merchant: "ACME PAYROLL",
+      amountMinor: 300000,
+      currency: "GBP",
+      movement: "income",
+      category: "One-off",
     });
     const apiSep = apiTxnToTxn({
-      id: "sal-sep", person: "zonito", account: "Main", date: "2026-09-28",
-      month: "2026-09", description: "ACME PAYROLL", merchant: "ACME PAYROLL",
-      amountMinor: 295000, currency: "GBP", movement: "income", category: "One-off",
+      id: "sal-sep",
+      person: "zonito",
+      account: "Main",
+      date: "2026-09-28",
+      month: "2026-09",
+      description: "ACME PAYROLL",
+      merchant: "ACME PAYROLL",
+      amountMinor: 295000,
+      currency: "GBP",
+      movement: "income",
+      category: "One-off",
     });
     expect(oct).toEqual(apiOct);
     expect(sep).toEqual(apiSep);

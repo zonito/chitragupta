@@ -170,8 +170,7 @@ export interface SettingsPatch {
 }
 
 export type SettingsResult =
-  | { ok: true; settings: AppSettings }
-  | { ok: false; error: string };
+  { ok: true; settings: AppSettings } | { ok: false; error: string };
 
 const isValidAmount = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= 0;
@@ -209,10 +208,7 @@ export function updateSettings(
       error: "overall budget must be a whole number of pence, £0 or more",
     };
   }
-  if (
-    patch.jevEnabled !== undefined &&
-    typeof patch.jevEnabled !== "boolean"
-  ) {
+  if (patch.jevEnabled !== undefined && typeof patch.jevEnabled !== "boolean") {
     return { ok: false, error: "jevEnabled must be true or false" };
   }
   if (patch.categoryBudgets !== undefined) {

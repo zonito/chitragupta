@@ -16,7 +16,9 @@ export const PERIOD_PRESETS: { id: PeriodPreset; label: string }[] = [
   { id: "last12", label: "Last 12 months" },
 ];
 
-const PRESET_IDS: ReadonlySet<string> = new Set(PERIOD_PRESETS.map((p) => p.id));
+const PRESET_IDS: ReadonlySet<string> = new Set(
+  PERIOD_PRESETS.map((p) => p.id),
+);
 
 /** Select value for a preset ("preset:last12"), distinct from month keys. */
 export const presetValue = (id: PeriodPreset): string => `preset:${id}`;
@@ -61,7 +63,10 @@ export interface PeriodRange {
  * Short histories simply yield the months that exist; the caller
  * lists whatever the range returns.
  */
-export function rangeForPreset(preset: PeriodPreset, anchor: string): PeriodRange {
+export function rangeForPreset(
+  preset: PeriodPreset,
+  anchor: string,
+): PeriodRange {
   const [year, month] = anchor.split("-").map(Number);
   const y = year ?? 2026;
   const m = month ?? 1;

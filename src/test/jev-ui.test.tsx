@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PersonProvider, ThemeProvider } from "@/components/shell";
-import {
-  hydrateData,
-  type AppSettings,
-  type DataSnapshot,
-} from "@/lib/data";
+import { hydrateData, type AppSettings, type DataSnapshot } from "@/lib/data";
 import { SAMPLE_SNAPSHOT } from "@/test/fixtures";
 
 vi.mock("@tanstack/react-router", async () => {
@@ -15,8 +11,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -108,7 +114,8 @@ const withSettings = (settings: Partial<AppSettings>): DataSnapshot => ({
   settings: { ...SAMPLE_SNAPSHOT.settings, ...settings },
 });
 
-const coachCalls = () => net.calls.filter((c) => c.url.startsWith("/api/jev/coach"));
+const coachCalls = () =>
+  net.calls.filter((c) => c.url.startsWith("/api/jev/coach"));
 
 describe("Home Coach: Jev's second opinion", () => {
   it("renders Jev's two choices verbatim in a labelled block", async () => {
@@ -164,7 +171,9 @@ describe("Subscription detail: Jev's opinion", () => {
         <Subs />
       </PersonProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Netflix transactions/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Netflix transactions/ }),
+    );
     await waitFor(() => {
       expect(screen.getByText("Your correction")).toBeTruthy();
     });
@@ -243,7 +252,10 @@ describe("Settings: Jev section", () => {
 
     hydrateData(
       withSettings({
-        jevLastOutcome: { status: "unavailable", at: "2026-10-30T08:15:00.000Z" },
+        jevLastOutcome: {
+          status: "unavailable",
+          at: "2026-10-30T08:15:00.000Z",
+        },
       }),
     );
     renderSettings();

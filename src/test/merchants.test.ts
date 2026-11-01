@@ -16,38 +16,20 @@ describe("merchant rules", () => {
   it("classifies obvious UK merchants without an API", () => {
     expect(ruleCategory("Ocado")).toBe("Groceries");
     expect(ruleCategory("Tesco")).toBe("Groceries");
-    expect(
-      ruleCategory("Waitrose & Partners"),
-    ).toBe("Groceries");
-    expect(ruleCategory("Transport for London")).toBe(
-      "Transport",
-    );
-    expect(ruleCategory("Octopus Energy")).toBe(
-      "Home",
-    );
-    expect(ruleCategory("Netflix")).toBe(
-      "Subscriptions",
-    );
-    expect(ruleCategory("Spotify Family")).toBe(
-      "Subscriptions",
-    );
+    expect(ruleCategory("Waitrose & Partners")).toBe("Groceries");
+    expect(ruleCategory("Transport for London")).toBe("Transport");
+    expect(ruleCategory("Octopus Energy")).toBe("Home");
+    expect(ruleCategory("Netflix")).toBe("Subscriptions");
+    expect(ruleCategory("Spotify Family")).toBe("Subscriptions");
     expect(ruleCategory("Amazon")).toBe("Shopping");
     expect(ruleCategory("Ikea")).toBe("Shopping");
-    expect(ruleCategory("Pret A Manger")).toBe(
-      "Eating out",
-    );
-    expect(ruleCategory("ParentPay")).toBe(
-      "School",
-    );
+    expect(ruleCategory("Pret A Manger")).toBe("Eating out");
+    expect(ruleCategory("ParentPay")).toBe("School");
   });
 
   it("leaves unknown merchants for the review queue", () => {
-    expect(
-      ruleCategory("Infinite Clarity"),
-    ).toBeNull();
-    expect(
-      ruleCategory("Mahavir Sweet Mart"),
-    ).toBe("Groceries");
+    expect(ruleCategory("Infinite Clarity")).toBeNull();
+    expect(ruleCategory("Mahavir Sweet Mart")).toBe("Groceries");
   });
 });
 
@@ -135,8 +117,12 @@ describe("review queue composition (B2/G12)", () => {
     expect(names).toContain("Please Connect Me");
     expect(names).toContain("Mixed Income Spend Shop");
     // The reported count stays the spend+income row count.
-    expect(queue.find((q) => q.merchant === "Mixed Income Spend Shop")?.count).toBe(5);
-    expect(queue.find((q) => q.merchant === "Please Connect Me")?.count).toBe(3);
+    expect(
+      queue.find((q) => q.merchant === "Mixed Income Spend Shop")?.count,
+    ).toBe(5);
+    expect(queue.find((q) => q.merchant === "Please Connect Me")?.count).toBe(
+      3,
+    );
     // Count and capped list share the same filter.
     expect(reviewQueueCount(db)).toBe(2);
     expect(reviewQueueCount(db)).toBe(queue.length);

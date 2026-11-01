@@ -2,10 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  ingestAccounts,
-  type IngestResult,
-} from "@/lib/ingest/ingest";
+import { ingestAccounts, type IngestResult } from "@/lib/ingest/ingest";
 import {
   parseAccountCsv,
   statementFingerprint,
@@ -44,8 +41,22 @@ const row = (
  * August dates, so September aggregates below are Barclays-only. */
 const REVOLUT_MAIN = [
   HEADER,
-  row("Deposit", "Main", "2026-08-10", "Bank transfer deposit", "500.00", "500.00"),
-  row("Card Payment", "Main", "2026-08-06", "EXAMPLE COFFEE", "-4.50", "495.50"),
+  row(
+    "Deposit",
+    "Main",
+    "2026-08-10",
+    "Bank transfer deposit",
+    "500.00",
+    "500.00",
+  ),
+  row(
+    "Card Payment",
+    "Main",
+    "2026-08-06",
+    "EXAMPLE COFFEE",
+    "-4.50",
+    "495.50",
+  ),
 ].join("\n");
 
 const ATM_LINE = row(
@@ -59,9 +70,21 @@ const ATM_LINE = row(
 const barclaysFile = (atmCopies: number): string =>
   [
     HEADER,
-    row("Transfer", "Current", "2026-09-28", "EXAMPLE EMPLOYER LTD BGC", "4500.00"),
+    row(
+      "Transfer",
+      "Current",
+      "2026-09-28",
+      "EXAMPLE EMPLOYER LTD BGC",
+      "4500.00",
+    ),
     ...Array.from({ length: atmCopies }, () => ATM_LINE),
-    row("Direct Debit", "Current", "2026-09-15", "EXAMPLE UTILITIES LTD DDR", "-100.00"),
+    row(
+      "Direct Debit",
+      "Current",
+      "2026-09-15",
+      "EXAMPLE UTILITIES LTD DDR",
+      "-100.00",
+    ),
   ].join("\n");
 
 const BARCLAYS_PATH = "Zonito/Barclay/Barclaycard/barclaycard-full-history.csv";

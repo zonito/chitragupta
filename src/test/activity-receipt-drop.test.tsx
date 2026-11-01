@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { Activity } from "@/routes/activity";
 import { PersonProvider } from "@/components/shell";
 import { DocumentsProvider } from "@/components/documents";
@@ -73,29 +79,42 @@ describe("Activity receipt drag-and-drop", () => {
     const fetchMock = stubDocuments();
     const zone = await openOcadoSheet();
 
-    const file = new File(["pdf-bytes"], "ocado-receipt.pdf", { type: "application/pdf" });
+    const file = new File(["pdf-bytes"], "ocado-receipt.pdf", {
+      type: "application/pdf",
+    });
     fireEvent.drop(zone, { dataTransfer: { files: [file] } });
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const post = fetchMock.mock.calls.find(([url]) => String(url).includes("/api/documents"))!;
-    const [url, init] = post as unknown as [string, { method: string; body: string }];
+    const post = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/api/documents"),
+    )!;
+    const [url, init] = post as unknown as [
+      string,
+      { method: string; body: string },
+    ];
     expect(url).toBe("/api/documents");
     expect(init.method).toBe("POST");
     const payload = JSON.parse(init.body) as Record<string, unknown>;
     expect(payload["filename"]).toBe("ocado-receipt.pdf");
-    expect(payload["contentBase64"]).toBe(Buffer.from("pdf-bytes").toString("base64"));
+    expect(payload["contentBase64"]).toBe(
+      Buffer.from("pdf-bytes").toString("base64"),
+    );
     expect(typeof payload["txnId"]).toBe("string");
     expect(payload["txnId"]).not.toBe("");
     // The attached receipt shows in the section without a reload:
     // the filed path appears and the section offers Remove.
-    expect((await screen.findAllByText(/Ocado_£112\.40\.pdf/)).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText(/Ocado_£112\.40\.pdf/)).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
   });
 
   it("dragging over the section highlights it; the Add receipt button stays", async () => {
     stubDocuments();
     const zone = await openOcadoSheet();
-    expect(within(zone as HTMLElement).getByRole("button", { name: /Add receipt/ })).toBeTruthy();
+    expect(
+      within(zone as HTMLElement).getByRole("button", { name: /Add receipt/ }),
+    ).toBeTruthy();
     expect(zone.className).not.toContain("ring-primary/60");
     fireEvent.dragOver(zone, { dataTransfer: { files: [] } });
     expect(zone.className).toContain("bg-primary/10");
@@ -107,12 +126,18 @@ describe("Activity receipt drag-and-drop", () => {
   it("the button path still attaches (the drop did not replace it)", async () => {
     const fetchMock = stubDocuments();
     const zone = await openOcadoSheet();
-    const file = new File(["btn-bytes"], "button.pdf", { type: "application/pdf" });
+    const file = new File(["btn-bytes"], "button.pdf", {
+      type: "application/pdf",
+    });
     const input = zone.querySelector('input[type="file"]')!;
     fireEvent.change(input, { target: { files: [file] } });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const post = fetchMock.mock.calls.find(([url]) => String(url).includes("/api/documents"))!;
-    const payload = JSON.parse((post as unknown as [string, { body: string }])[1].body) as Record<string, unknown>;
+    const post = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/api/documents"),
+    )!;
+    const payload = JSON.parse(
+      (post as unknown as [string, { body: string }])[1].body,
+    ) as Record<string, unknown>;
     expect(payload["filename"]).toBe("button.pdf");
     expect(typeof payload["txnId"]).toBe("string");
     expect(payload["txnId"]).not.toBe("");

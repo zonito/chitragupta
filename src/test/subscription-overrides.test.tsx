@@ -1,4 +1,13 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +18,13 @@ import { Subs } from "@/routes/subscriptions";
 import { Activity } from "@/routes/activity";
 import { PersonProvider } from "@/components/shell";
 import { DocumentsProvider } from "@/components/documents";
-import { hydrateData, monthlyOf, type DataSnapshot, type Sub, type Txn } from "@/lib/data";
+import {
+  hydrateData,
+  monthlyOf,
+  type DataSnapshot,
+  type Sub,
+  type Txn,
+} from "@/lib/data";
 import { SAMPLE_SNAPSHOT } from "@/test/fixtures";
 
 /**
@@ -34,10 +49,17 @@ beforeEach(() => {
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       fetchCalls.push({ url: String(url), body });
       if (String(url).includes("/api/subscriptions/override")) {
-        return new Response(JSON.stringify({ ok: true, merchant: body?.merchant, mode: body?.mode ?? null }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            merchant: body?.merchant,
+            mode: body?.mode ?? null,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       }
       return new Response(JSON.stringify({ ok: true, transactions: [] }), {
         status: 200,
@@ -54,7 +76,9 @@ afterEach(() => {
 describe("Subscription override controls", () => {
   it("a suppressed merchant appears under Removed by you in the Ended area, with Restore", async () => {
     const snap = structuredClone(SAMPLE_SNAPSHOT) as DataSnapshot;
-    snap.subOverrides = [{ merchant: "oldshop", label: "Old Shop", mode: "suppress" }];
+    snap.subOverrides = [
+      { merchant: "oldshop", label: "Old Shop", mode: "suppress" },
+    ];
     hydrateData(snap);
     render(
       <PersonProvider>
@@ -81,7 +105,9 @@ describe("Subscription override controls", () => {
         <Subs />
       </PersonProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Netflix transactions/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Netflix transactions/ }),
+    );
     expect(await screen.findByText("Your correction")).toBeTruthy();
     expect(screen.getByText(/Applies to all Netflix payments/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Mark cancelled" }));
@@ -120,8 +146,12 @@ describe("Subscription override controls", () => {
       </PersonProvider>,
     );
     fireEvent.click(screen.getByText("Corner Shop"));
-    expect(await screen.findByText(/Applies to all Corner Shop payments/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Mark as subscription" }));
+    expect(
+      await screen.findByText(/Applies to all Corner Shop payments/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mark as subscription" }),
+    );
     await waitFor(() =>
       expect(fetchCalls).toContainEqual({
         url: "/api/subscriptions/override",
@@ -141,7 +171,11 @@ const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"];
 const BOTH_PEOPLE =
   !!DATA_DIR &&
   existsSync(
-    join(DATA_DIR, "Originals", "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv"),
+    join(
+      DATA_DIR,
+      "Originals",
+      "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv",
+    ),
   );
 
 describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
@@ -171,7 +205,9 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
       nextExpected: s.nextExpected,
     }));
   const activeMonthlyTotal = (subs: Sub[]) =>
-    subs.filter((s) => s.status === "Active").reduce((a, s) => a + monthlyOf(s), 0);
+    subs
+      .filter((s) => s.status === "Active")
+      .reduce((a, s) => a + monthlyOf(s), 0);
 
   beforeAll(async () => {
     const { openStore } = await import("@/lib/ingest/store");
@@ -195,10 +231,13 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
   it("baseline: the detector's output is untouched with no overrides (Costco present)", () => {
     expect(baseline.length).toBeGreaterThan(20);
     expect(baseline.some((s) => s.name === "Costco")).toBe(true);
-    expect(baseline.some((s) => s.name === "Tesla" && s.status === "Active")).toBe(true);
+    expect(
+      baseline.some((s) => s.name === "Tesla" && s.status === "Active"),
+    ).toBe(true);
     // Independent detector run over the store's charges agrees.
     return (async () => {
-      const { detectSubscriptions, canonicalMerchant } = await import("@/lib/subscriptions");
+      const { detectSubscriptions, canonicalMerchant } =
+        await import("@/lib/subscriptions");
       const { accountTxnLabel } = await import("@/lib/txn-map");
       const { dateLabel } = await import("@/lib/data");
       const rows = db
@@ -234,7 +273,9 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
 
   it("force: a non-pattern merchant appears Active with figures derived from its charges", async () => {
     const { canonicalMerchant } = await import("@/lib/subscriptions");
-    const detectedKeys = new Set(baseline.map((s) => canonicalMerchant(s.name)));
+    const detectedKeys = new Set(
+      baseline.map((s) => canonicalMerchant(s.name)),
+    );
     const groups = db
       .prepare(
         `SELECT merchant, COUNT(*) AS n, MAX(effective_date) AS last_date
@@ -242,7 +283,9 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
          GROUP BY merchant HAVING n >= 2 ORDER BY merchant`,
       )
       .all() as { merchant: string; n: number; last_date: string }[];
-    const candidate = groups.find((g) => !detectedKeys.has(canonicalMerchant(g.merchant)));
+    const candidate = groups.find(
+      (g) => !detectedKeys.has(canonicalMerchant(g.merchant)),
+    );
     expect(candidate).toBeTruthy();
     const latest = db
       .prepare(
@@ -254,7 +297,10 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
 
     await post(candidate!.merchant, "force");
     const subs = buildSnapshot().subs;
-    const forced = subs.find((s) => canonicalMerchant(s.name) === canonicalMerchant(candidate!.merchant));
+    const forced = subs.find(
+      (s) =>
+        canonicalMerchant(s.name) === canonicalMerchant(candidate!.merchant),
+    );
     expect(forced).toBeTruthy();
     expect(forced!.status).toBe("Active");
     expect(forced!.amount).toBe(Math.abs(latest.amount_minor) / 100);
@@ -268,7 +314,10 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
     await post("Costco", "suppress");
     const snap = buildSnapshot();
     expect(snap.subs.some((s) => s.name === "Costco")).toBe(false);
-    expect(activeMonthlyTotal(snap.subs)).toBeCloseTo(beforeTotal - monthlyOf(costco), 6);
+    expect(activeMonthlyTotal(snap.subs)).toBeCloseTo(
+      beforeTotal - monthlyOf(costco),
+      6,
+    );
     expect(snap.subOverrides).toContainEqual({
       merchant: "costco",
       label: "Costco",
@@ -285,7 +334,10 @@ describe.runIf(BOTH_PEOPLE)("Subscription overrides (repro2)", () => {
     expect(after.status).toBe("Cancelled");
     expect(after.nextExpected).toBeNull();
     expect(snap.upcoming.some((u) => u.name === "Tesla")).toBe(false);
-    expect(activeMonthlyTotal(snap.subs)).toBeCloseTo(beforeTotal - monthlyOf(tesla), 6);
+    expect(activeMonthlyTotal(snap.subs)).toBeCloseTo(
+      beforeTotal - monthlyOf(tesla),
+      6,
+    );
   });
 
   it("undo restores the detector's original output exactly, and overrides survive a rebuild", async () => {

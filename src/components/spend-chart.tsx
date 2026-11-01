@@ -79,7 +79,10 @@ export function SpendTimelineSection({
     : (presetIds[0] ?? "monthly");
   const [preset, setPreset] = useState<ChartPreset>(defaultPreset);
   const [selected, setSelected] = useState<string | null>(null);
-  const [daily, setDaily] = useState<{ person: Person; data: DailyData } | null>(null);
+  const [daily, setDaily] = useState<{
+    person: Person;
+    data: DailyData;
+  } | null>(null);
   const [dailyFailed, setDailyFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -130,7 +133,13 @@ export function SpendTimelineSection({
   }, [loaded, preset, selected, surface]);
 
   useEffect(() => {
-    if (preset !== "daily" || !dailyPerson || daily?.person === dailyPerson || dailyFailed) return;
+    if (
+      preset !== "daily" ||
+      !dailyPerson ||
+      daily?.person === dailyPerson ||
+      dailyFailed
+    )
+      return;
     let cancelled = false;
     fetchDaily(dailyPerson, 60)
       .then((data) => {
@@ -144,7 +153,8 @@ export function SpendTimelineSection({
     };
   }, [preset, dailyPerson, daily, dailyFailed]);
 
-  const dailyData = dailyPerson && daily?.person === dailyPerson ? daily.data : null;
+  const dailyData =
+    dailyPerson && daily?.person === dailyPerson ? daily.data : null;
   const buckets = useMemo(
     () => presetBuckets(preset, monthly, dailyData),
     [preset, monthly, dailyData],
@@ -163,7 +173,11 @@ export function SpendTimelineSection({
             never wrap into a blob — if a very narrow screen cannot
             fit them, the row scrolls with no visible scrollbar (the
             app's no-scrollbar utility, as on the Activity filters). */}
-        <div className="no-scrollbar flex flex-nowrap gap-0.5 overflow-x-auto rounded-full bg-muted p-0.5" role="group" aria-label="Chart period">
+        <div
+          className="no-scrollbar flex flex-nowrap gap-0.5 overflow-x-auto rounded-full bg-muted p-0.5"
+          role="group"
+          aria-label="Chart period"
+        >
           {CHART_PRESETS.filter((p) => presetIds.includes(p.id)).map((p) => (
             <button
               key={p.id}
@@ -179,12 +193,15 @@ export function SpendTimelineSection({
       </div>
       {monthly.months.length === 0 ? (
         <p className="mt-3 text-body text-muted-foreground">
-          Not enough history yet — the chart appears once statements cover a few months.
+          Not enough history yet — the chart appears once statements cover a few
+          months.
         </p>
       ) : dailyPending ? (
         <p className="mt-3 text-body text-muted-foreground">Loading…</p>
       ) : preset === "daily" && dailyFailed ? (
-        <p className="mt-3 text-body text-muted-foreground">Could not load daily spending just now.</p>
+        <p className="mt-3 text-body text-muted-foreground">
+          Could not load daily spending just now.
+        </p>
       ) : (
         <>
           <div className="mt-3">
@@ -266,8 +283,14 @@ function mergeBuckets(
     }
     out.push({
       key: `${first.key}~${last.key}`,
-      label: first.label === last.label ? first.label : `${first.label} – ${last.label}`,
-      short: first.short === last.short ? first.short : `${first.short}–${last.short}`,
+      label:
+        first.label === last.label
+          ? first.label
+          : `${first.label} – ${last.label}`,
+      short:
+        first.short === last.short
+          ? first.short
+          : `${first.short}–${last.short}`,
       total: cumulative ? last.total : group.reduce((s, b) => s + b.total, 0),
       values,
       ...(last.partial ? { partial: true } : {}),
@@ -348,7 +371,8 @@ export function SpendChart({
 
   const H = compact ? 176 : 248;
   const padB = 22;
-  const plottedOf = (b: ChartBucket) => (shown ? (b.values[shown] ?? 0) : b.total);
+  const plottedOf = (b: ChartBucket) =>
+    shown ? (b.values[shown] ?? 0) : b.total;
   const maxValue = Math.max(0, ...view.map(plottedOf));
   // Outlier cap, narrow only: when one bucket towers over the rest
   // (a £3.9k mortgage day among £50 days), the axis stops just above
@@ -363,7 +387,12 @@ export function SpendChart({
     .filter((v) => v > 0)
     .sort((a, b) => b - a);
   let cap = Number.POSITIVE_INFINITY;
-  if (narrow && !cumulative && descending.length >= 2 && descending[0]! > 2.5 * descending[1]!) {
+  if (
+    narrow &&
+    !cumulative &&
+    descending.length >= 2 &&
+    descending[0]! > 2.5 * descending[1]!
+  ) {
     cap = niceCeil(descending[1]! * 1.2);
   }
   const yMax = Math.min(niceCeil(maxValue), cap);
@@ -485,7 +514,10 @@ export function SpendChart({
                       strokeWidth={2}
                     />
                     <text
-                      x={Math.min(Math.max(x + barW / 2, padL + 26), W - padR - 26)}
+                      x={Math.min(
+                        Math.max(x + barW / 2, padL + 26),
+                        W - padR - 26,
+                      )}
                       y={padT - 8}
                       textAnchor="middle"
                       fontSize={10}
@@ -553,7 +585,11 @@ export function SpendChart({
                 textAnchor="middle"
                 fontSize={11}
                 fontWeight={i === view.length - 1 ? 700 : undefined}
-                className={i === view.length - 1 ? "fill-foreground" : "fill-muted-foreground"}
+                className={
+                  i === view.length - 1
+                    ? "fill-foreground"
+                    : "fill-muted-foreground"
+                }
               >
                 {b.short}
               </text>
@@ -562,8 +598,12 @@ export function SpendChart({
         ))}
       </svg>
 
-      <p className="num mt-1 text-caption text-muted-foreground" aria-live="polite">
-        {activeBucket.label} — {gbp(shown ? (activeBucket.values[shown] ?? 0) : activeBucket.total)}
+      <p
+        className="num mt-1 text-caption text-muted-foreground"
+        aria-live="polite"
+      >
+        {activeBucket.label} —{" "}
+        {gbp(shown ? (activeBucket.values[shown] ?? 0) : activeBucket.total)}
         {shown
           ? ` on ${shown}`
           : cumulative
@@ -572,7 +612,10 @@ export function SpendChart({
               ? `: ${categories
                   .filter((c) => (activeBucket.values[c] ?? 0) > 0)
                   .slice(0, 3)
-                  .map((c) => `${seriesName && categories.length === 1 ? seriesName : c} ${gbp(activeBucket.values[c]!)}`)
+                  .map(
+                    (c) =>
+                      `${seriesName && categories.length === 1 ? seriesName : c} ${gbp(activeBucket.values[c]!)}`,
+                  )
                   .join(" · ")}`
               : ""}
       </p>

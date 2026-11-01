@@ -23,7 +23,9 @@ let api: Api;
 let snapshotServer: SnapshotServer;
 
 const PDF_BYTES = Buffer.from("%PDF-1.4 fake penny receipt bytes");
-const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const PNG_BYTES = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
+]);
 
 const pennyPayload = {
   filename: "penny.pdf",
@@ -168,7 +170,12 @@ describe("documents API", () => {
     expect(res.status).toBe(400);
     expect(body.ok).toBe(false);
     expect(
-      existsSync(join(DATA_DIR, "Documents/Receipts/2026/2026-10/2026-10-09_PennyCaulfield_£148.00.exe")),
+      existsSync(
+        join(
+          DATA_DIR,
+          "Documents/Receipts/2026/2026-10/2026-10-09_PennyCaulfield_£148.00.exe",
+        ),
+      ),
     ).toBe(false);
   });
 

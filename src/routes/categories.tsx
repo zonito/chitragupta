@@ -1,8 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { usePerson, PageTitle, Sheet, Sparkline, Label, meta } from "@/components/shell";
-import { byCategory, spendTotal, TXNS, shareOf, sparkFor, typicalFor, gbp, currentMonthName, currentMonthKey, monthOptions, MONTHS6, categoryColor, monthlyHistoryFor, appSettings, type Category } from "@/lib/data";
-import { fetchCategoryMerchants, fetchCategoryScope, parseScope, scopeLabel, scopeOptions, type CategoryScopeData } from "@/lib/category-scope";
+import {
+  usePerson,
+  PageTitle,
+  Sheet,
+  Sparkline,
+  Label,
+  meta,
+} from "@/components/shell";
+import {
+  byCategory,
+  spendTotal,
+  TXNS,
+  shareOf,
+  sparkFor,
+  typicalFor,
+  gbp,
+  currentMonthName,
+  currentMonthKey,
+  monthOptions,
+  MONTHS6,
+  categoryColor,
+  monthlyHistoryFor,
+  appSettings,
+  type Category,
+} from "@/lib/data";
+import {
+  fetchCategoryMerchants,
+  fetchCategoryScope,
+  parseScope,
+  scopeLabel,
+  scopeOptions,
+  type CategoryScopeData,
+} from "@/lib/category-scope";
 import { SpendTimelineSection } from "@/components/spend-chart";
 import { AnimatedBar } from "@/components/motion";
 import { Button } from "@/components/ui/button";
@@ -10,7 +40,11 @@ import { CategoryIcon } from "@/components/item-icons";
 import { MerchantTile } from "@/components/tiles";
 
 export const Route = createFileRoute("/categories")({
-  head: () => meta("Categories", "Spending by category this month, with merchants and a six-month trend."),
+  head: () =>
+    meta(
+      "Categories",
+      "Spending by category this month, with merchants and a six-month trend.",
+    ),
   component: Categories,
 });
 
@@ -55,7 +89,10 @@ export function Categories() {
   const snapshotCats = byCategory(person);
   const cats: { category: Category; amount: number }[] = isDefault
     ? snapshotCats
-    : (data?.rows ?? []).map((r) => ({ category: r.category, amount: r.amount }));
+    : (data?.rows ?? []).map((r) => ({
+        category: r.category,
+        amount: r.amount,
+      }));
   const max = cats[0]?.amount ?? 1;
   const label = scopeLabel(scope, months);
   const categoryBudgets = appSettings().categoryBudgets;
@@ -64,7 +101,9 @@ export function Categories() {
   const snapshotMerchants =
     open && isDefault
       ? Object.entries(
-          TXNS.filter((t) => t.kind === "spend" && t.category === open).reduce<Record<string, number>>((m, t) => {
+          TXNS.filter((t) => t.kind === "spend" && t.category === open).reduce<
+            Record<string, number>
+          >((m, t) => {
             const v = shareOf(t, person);
             if (v > 0) m[t.merchant] = (m[t.merchant] ?? 0) + v;
             return m;
@@ -98,10 +137,13 @@ export function Categories() {
     : apiMerchants?.key === merchantKey
       ? apiMerchants.list.map((m) => [m.merchant, m.amount] as [string, number])
       : [];
-  const merchantsLoading = !isDefault && !!open && apiMerchants?.key !== merchantKey;
+  const merchantsLoading =
+    !isDefault && !!open && apiMerchants?.key !== merchantKey;
 
   const fetchedRow =
-    !isDefault && open ? data?.rows.find((r) => r.category === open) : undefined;
+    !isDefault && open
+      ? data?.rows.find((r) => r.category === open)
+      : undefined;
   const sheetAmount = isDefault
     ? (snapshotCats.find((c) => c.category === open)?.amount ?? 0)
     : (fetchedRow?.amount ?? 0);
@@ -153,7 +195,9 @@ export function Categories() {
       </div>
 
       {!isDefault && !data && !loadFailed && (
-        <p className="py-12 text-center text-body text-muted-foreground">Loading…</p>
+        <p className="py-12 text-center text-body text-muted-foreground">
+          Loading…
+        </p>
       )}
       {loadFailed && (
         <p className="py-12 text-center text-body text-muted-foreground">
@@ -191,34 +235,68 @@ export function Categories() {
             const overBy =
               budget !== null && c.amount > budget ? c.amount - budget : 0;
             return (
-            <Button variant="ghost" key={c.category} onClick={() => setOpen(c.category)} className="panel-enter block h-auto w-full whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-foreground">
-              <div className="mb-1.5 flex justify-between text-body">
-                <span className="relative flex items-center"><span className="absolute left-0 top-1/2 -translate-y-1/2"><CategoryIcon category={c.category} /></span><span className="pl-9">{c.category}</span></span>
-                <span className={`num amount${overBy > 0 ? " text-destructive" : ""}`}>{gbp(c.amount, false)}</span>
-              </div>
-              <div className="h-2 rounded-lg bg-muted">
-                <AnimatedBar percent={(c.amount / max) * 100} className="" colour={categoryColor(c.category)} />
-              </div>
-              {budget !== null && (
-                <div className="mt-2">
-                  <div className="h-1 rounded-lg bg-muted">
-                    <AnimatedBar
-                      percent={budget > 0 ? (c.amount / budget) * 100 : c.amount > 0 ? 100 : 0}
-                      className=""
-                      colour={overBy > 0 ? "var(--destructive)" : categoryColor(c.category)}
-                    />
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-caption">
-                    <span className="text-muted-foreground">Budget {gbp(budget, false)}</span>
-                    {overBy > 0 ? (
-                      <span className="num font-medium text-destructive">{gbp(overBy, false)} over</span>
-                    ) : (
-                      <span className="num text-muted-foreground">{gbp(budget - c.amount, false)} left</span>
-                    )}
-                  </div>
+              <Button
+                variant="ghost"
+                key={c.category}
+                onClick={() => setOpen(c.category)}
+                className="panel-enter block h-auto w-full whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent hover:text-foreground"
+              >
+                <div className="mb-1.5 flex justify-between text-body">
+                  <span className="relative flex items-center">
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2">
+                      <CategoryIcon category={c.category} />
+                    </span>
+                    <span className="pl-9">{c.category}</span>
+                  </span>
+                  <span
+                    className={`num amount${overBy > 0 ? " text-destructive" : ""}`}
+                  >
+                    {gbp(c.amount, false)}
+                  </span>
                 </div>
-              )}
-            </Button>
+                <div className="h-2 rounded-lg bg-muted">
+                  <AnimatedBar
+                    percent={(c.amount / max) * 100}
+                    className=""
+                    colour={categoryColor(c.category)}
+                  />
+                </div>
+                {budget !== null && (
+                  <div className="mt-2">
+                    <div className="h-1 rounded-lg bg-muted">
+                      <AnimatedBar
+                        percent={
+                          budget > 0
+                            ? (c.amount / budget) * 100
+                            : c.amount > 0
+                              ? 100
+                              : 0
+                        }
+                        className=""
+                        colour={
+                          overBy > 0
+                            ? "var(--destructive)"
+                            : categoryColor(c.category)
+                        }
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-caption">
+                      <span className="text-muted-foreground">
+                        Budget {gbp(budget, false)}
+                      </span>
+                      {overBy > 0 ? (
+                        <span className="num font-medium text-destructive">
+                          {gbp(overBy, false)} over
+                        </span>
+                      ) : (
+                        <span className="num text-muted-foreground">
+                          {gbp(budget - c.amount, false)} left
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </Button>
             );
           })}
         </div>
@@ -238,29 +316,55 @@ export function Categories() {
           <div>
             <div className="flex items-end justify-between">
               <div>
-                <div className="flex items-center gap-2 text-body text-muted-foreground"><CategoryIcon category={open} />{open}</div>
-                <div className="num text-title font-semibold">{gbp(sheetAmount, false)}</div>
+                <div className="flex items-center gap-2 text-body text-muted-foreground">
+                  <CategoryIcon category={open} />
+                  {open}
+                </div>
+                <div className="num text-title font-semibold">
+                  {gbp(sheetAmount, false)}
+                </div>
                 {isDefault ? (
-                  <div className="num text-caption text-muted-foreground">Usually {gbp(sheetTypical as number, false)}</div>
+                  <div className="num text-caption text-muted-foreground">
+                    Usually {gbp(sheetTypical as number, false)}
+                  </div>
                 ) : (
-                  sheetTypical !== null && sheetTypical > 0 && (
-                    <div className="num text-caption text-muted-foreground">Usually {gbp(sheetTypical, false)}</div>
+                  sheetTypical !== null &&
+                  sheetTypical > 0 && (
+                    <div className="num text-caption text-muted-foreground">
+                      Usually {gbp(sheetTypical, false)}
+                    </div>
                   )
                 )}
               </div>
               {(isDefault || sheetSeries.length >= 2) && (
-                <div className="text-right" style={{ color: categoryColor(open) }}>
+                <div
+                  className="text-right"
+                  style={{ color: categoryColor(open) }}
+                >
                   <Sparkline data={sheetSeries} className="" />
-                  <div className="text-micro text-muted-foreground">{sheetCaption}</div>
+                  <div className="text-micro text-muted-foreground">
+                    {sheetCaption}
+                  </div>
                 </div>
               )}
             </div>
-            <div className="mt-6"><Label>Merchants</Label></div>
+            <div className="mt-6">
+              <Label>Merchants</Label>
+            </div>
             {merchantsLoading && (
               <p className="py-4 text-body text-muted-foreground">Loading…</p>
             )}
             {merchants.map(([m, v]) => (
-              <div key={m} className="ledger-row flex items-center justify-between gap-3 py-2.5 text-body"><span className="flex min-w-0 items-center gap-2"><MerchantTile merchant={m} category={open} /><span>{m}</span></span><span className="num shrink-0">{gbp(v)}</span></div>
+              <div
+                key={m}
+                className="ledger-row flex items-center justify-between gap-3 py-2.5 text-body"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <MerchantTile merchant={m} category={open} />
+                  <span>{m}</span>
+                </span>
+                <span className="num shrink-0">{gbp(v)}</span>
+              </div>
             ))}
           </div>
         )}

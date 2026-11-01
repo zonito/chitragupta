@@ -1,8 +1,18 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ingestAll, savingsIsoDate, type IngestResult } from "@/lib/ingest/ingest";
+import {
+  ingestAll,
+  savingsIsoDate,
+  type IngestResult,
+} from "@/lib/ingest/ingest";
 import {
   classifyMovement,
   gbpPence,
@@ -24,7 +34,8 @@ import { buildSnapshot } from "@/lib/snapshot.server";
 const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"]?.trim() || null;
 const HER_CURRENT = "account-statement_2023-02-01_2026-10-31_en-sg_f68986.csv";
 const HER_PRO = "account-statement_2025-12-22_2026-10-31_en-sg_62af2b.csv";
-const HER_SAVINGS = "savings-statement_2026-02-01_2026-10-31_en-sg_-900000003_3b9780.csv";
+const HER_SAVINGS =
+  "savings-statement_2026-02-01_2026-10-31_en-sg_-900000003_3b9780.csv";
 const HAS_HER_FILES = Boolean(
   DATA_DIR && existsSync(join(DATA_DIR, "Originals", HER_CURRENT)),
 );
@@ -94,9 +105,7 @@ describeNikhila("Nikhila's statements ingest (repro2 fixture)", () => {
 
   it("discovers and ingests her three accounts with the verified counts and GBP balances", () => {
     const hers = new Map(
-      results
-        .filter((r) => r.person === "nikhila")
-        .map((r) => [r.account, r]),
+      results.filter((r) => r.person === "nikhila").map((r) => [r.account, r]),
     );
     expect([...hers.keys()].sort()).toEqual([
       "Current",
@@ -142,9 +151,9 @@ describeNikhila("Nikhila's statements ingest (repro2 fixture)", () => {
          WHERE person = 'nikhila' AND account = 'Current' GROUP BY currency`,
       )
       .all() as { currency: string; n: number }[];
-    expect(Object.fromEntries(currencies.map((c) => [c.currency, c.n]))).toEqual(
-      { GBP: 231, SGD: 15, USD: 53 },
-    );
+    expect(
+      Object.fromEntries(currencies.map((c) => [c.currency, c.n])),
+    ).toEqual({ GBP: 231, SGD: 15, USD: 53 });
     // Her savings export writes dates day-first ("1 Feb 2026",
     // "1 Sept 2026"): every one of her rows must land in a real
     // YYYY-MM bucket, her savings included.
@@ -166,12 +175,16 @@ describeNikhila("Nikhila's statements ingest (repro2 fixture)", () => {
 
   it("leaves Zonito's results identical to the repro baseline", () => {
     const mine = new Map(
-      results
-        .filter((r) => r.person === "zonito")
-        .map((r) => [r.account, r]),
+      results.filter((r) => r.person === "zonito").map((r) => [r.account, r]),
     );
-    expect(mine.get("Main")).toMatchObject({ rowsSeen: 2770, balanceMinor: 14274 });
-    expect(mine.get("Pro")).toMatchObject({ rowsSeen: 4265, balanceMinor: 15833 });
+    expect(mine.get("Main")).toMatchObject({
+      rowsSeen: 2770,
+      balanceMinor: 14274,
+    });
+    expect(mine.get("Pro")).toMatchObject({
+      rowsSeen: 4265,
+      balanceMinor: 15833,
+    });
     expect(mine.get("USD-Invest")).toMatchObject({ rowsSeen: 482 });
     expect(mine.get("Joint")).toMatchObject({ rowsSeen: 173, balanceMinor: 0 });
     expect(mine.get("Savings-9000000002")).toMatchObject({
@@ -234,10 +247,7 @@ describeNikhila("Nikhila's statements ingest (repro2 fixture)", () => {
                FROM month_aggregates WHERE person = ?`,
             )
             .all(person) as Agg[]
-        ).map((r) => [
-          `${r.year_month}|${r.category}|${r.currency}`,
-          r,
-        ]),
+        ).map((r) => [`${r.year_month}|${r.category}|${r.currency}`, r]),
       );
     const zonito = load("zonito");
     const nikhila = load("nikhila");
@@ -269,10 +279,16 @@ describeNikhila("Nikhila's statements ingest (repro2 fixture)", () => {
     expect(rows).toHaveLength(9);
     const hers = Object.fromEntries(
       rows
-        .map((r) => [r.key.slice("file_assignment:".length), JSON.parse(r.value)])
+        .map((r) => [
+          r.key.slice("file_assignment:".length),
+          JSON.parse(r.value),
+        ])
         .filter(([, v]) => (v as { person: string }).person === "nikhila"),
     );
-    expect(hers[HER_CURRENT]).toEqual({ person: "nikhila", account: "Current" });
+    expect(hers[HER_CURRENT]).toEqual({
+      person: "nikhila",
+      account: "Current",
+    });
     expect(hers[HER_PRO]).toEqual({ person: "nikhila", account: "Pro" });
     expect(hers[HER_SAVINGS]).toEqual({
       person: "nikhila",
@@ -389,7 +405,9 @@ describe("person-aware discovery (synthetic Originals)", () => {
         ACCOUNT_HEADER +
         "Card Payment,Pro,2026-10-02 10:00:00,2026-10-02 10:00:01,Her Tesco,-3.25,0.00,GBP,COMPLETED,42.00\n",
     });
-    const db = openStore(mkdtempSync(join(tmpdir(), "chitra-discovery-store-")));
+    const db = openStore(
+      mkdtempSync(join(tmpdir(), "chitra-discovery-store-")),
+    );
     const results = ingestAll(db, dir);
     const hers = results.filter((r) => r.person === "nikhila");
     expect(hers).toHaveLength(1);
@@ -410,7 +428,9 @@ describe("person-aware discovery (synthetic Originals)", () => {
         "Card Payment,Pro,2026-10-02 10:00:00,2026-10-02 10:00:01,Mixed One,-3.25,0.00,GBP,COMPLETED,42.00\n" +
         "Card Payment,Current,2026-10-03 10:00:00,2026-10-03 10:00:01,Mixed Two,-1.00,0.00,GBP,COMPLETED,41.00\n",
     });
-    const db = openStore(mkdtempSync(join(tmpdir(), "chitra-discovery-store-")));
+    const db = openStore(
+      mkdtempSync(join(tmpdir(), "chitra-discovery-store-")),
+    );
     const results = ingestAll(db, dir);
     const failure = results.find(
       (r) => r.file === "account-statement_2099_beef02.csv",
@@ -425,7 +445,9 @@ describe("person-aware discovery (synthetic Originals)", () => {
       .get() as { n: number };
     expect(mixed.n).toBe(0);
     // Everyone else still ingested.
-    expect(results.filter((r) => r.person === "zonito" && r.ok)).toHaveLength(6);
+    expect(results.filter((r) => r.person === "zonito" && r.ok)).toHaveLength(
+      6,
+    );
     db.close();
   });
 });

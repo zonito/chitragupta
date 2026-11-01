@@ -94,10 +94,38 @@ describe("snapshot builder full time", () => {
          description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
        VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, 'GBP', 0, 'spend', NULL)`,
     );
-    insert.run("timed", "2026-10-05 07:43:28", "2026-10", "Timed Shop", "Timed Shop", -1000);
-    insert.run("midnight", "2026-10-06 00:00:00", "2026-10", "Midnight Shop", "Midnight Shop", -2000);
-    insert.run("plain", "2026-10-07", "2026-10", "Plain Shop", "Plain Shop", -3000);
-    insert.run("early", "2026-10-08 00:00:29", "2026-10", "Early Shop", "Early Shop", -4000);
+    insert.run(
+      "timed",
+      "2026-10-05 07:43:28",
+      "2026-10",
+      "Timed Shop",
+      "Timed Shop",
+      -1000,
+    );
+    insert.run(
+      "midnight",
+      "2026-10-06 00:00:00",
+      "2026-10",
+      "Midnight Shop",
+      "Midnight Shop",
+      -2000,
+    );
+    insert.run(
+      "plain",
+      "2026-10-07",
+      "2026-10",
+      "Plain Shop",
+      "Plain Shop",
+      -3000,
+    );
+    insert.run(
+      "early",
+      "2026-10-08 00:00:29",
+      "2026-10",
+      "Early Shop",
+      "Early Shop",
+      -4000,
+    );
     db.prepare(
       `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added) VALUES ('Main', '2026-10-30T09:00:00.000Z', 4, 4)`,
     ).run();
@@ -182,7 +210,14 @@ describe("Activity list + sheet time (snapshot month)", () => {
   });
 
   it("a just-after-midnight row shows 00:00:29 in the list chip and the sheet", async () => {
-    renderWith([mkTxn({ id: "early", merchant: "Early Shop", time: "00:00:29", timeFull: "00:00:29" })]);
+    renderWith([
+      mkTxn({
+        id: "early",
+        merchant: "Early Shop",
+        time: "00:00:29",
+        timeFull: "00:00:29",
+      }),
+    ]);
     const row = screen.getByText("Early Shop").closest("button")!;
     expect(within(row).getByText("00:00:29")).toBeTruthy();
     fireEvent.click(row);
@@ -240,12 +275,16 @@ describe("Activity list + sheet time (fetched month)", () => {
         </DocumentsProvider>
       </PersonProvider>,
     );
-    fireEvent.change(screen.getByLabelText("Period"), { target: { value: "2026-08" } });
+    fireEvent.change(screen.getByLabelText("Period"), {
+      target: { value: "2026-08" },
+    });
   };
 
   it("a fetched timed row shows HH:MM in the list and HH:MM:SS in the sheet", async () => {
     renderFetched([augRow({})]);
-    const timedRow = (await screen.findByText("Fetched Timed Shop")).closest("button")!;
+    const timedRow = (await screen.findByText("Fetched Timed Shop")).closest(
+      "button",
+    )!;
     expect(within(timedRow).getByText("07:43")).toBeTruthy();
     expect(timedRow.textContent).not.toContain("07:43:28");
     fireEvent.click(timedRow);
@@ -264,7 +303,9 @@ describe("Activity list + sheet time (fetched month)", () => {
         merchant: "Fetched Midnight Shop",
       }),
     ]);
-    const midnightRow = (await screen.findByText("Fetched Midnight Shop")).closest("button")!;
+    const midnightRow = (
+      await screen.findByText("Fetched Midnight Shop")
+    ).closest("button")!;
     expect(midnightRow.textContent).not.toMatch(/\d{2}:\d{2}/);
     fireEvent.click(midnightRow);
     const dialog = await screen.findByRole("dialog");

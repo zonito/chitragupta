@@ -181,8 +181,11 @@ export async function museComplete(
   // error body must never leak either one into diagnostics or logs.
   const secrets = [
     ...new Set(
-      [config.apiKey, env["OPENCODE_API_KEY"]?.trim(), env["MUSE_API_KEY"]?.trim()]
-        .filter((k): k is string => !!k),
+      [
+        config.apiKey,
+        env["OPENCODE_API_KEY"]?.trim(),
+        env["MUSE_API_KEY"]?.trim(),
+      ].filter((k): k is string => !!k),
     ),
   ];
   const redact = (text: string) => {

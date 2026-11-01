@@ -122,27 +122,162 @@ describe("aggregates parity (synthetic store)", () => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`,
     );
     // [person, account, date, merchant, amount, currency, movement, category]
-    const rows: [string, string, string, string, number, string, string, string][] = [
+    const rows: [
+      string,
+      string,
+      string,
+      string,
+      number,
+      string,
+      string,
+      string,
+    ][] = [
       // Zonito, October 2026, GBP: a mixed month.
-      ["zonito", "Main", "2026-10-05", "Employer Ltd", 650000, "GBP", "income", "One-off"],
-      ["zonito", "Main", "2026-10-06", "Ocado", -12050, "GBP", "spend", "Groceries"],
-      ["zonito", "Main", "2026-10-07", "Pocket", -20000, "GBP", "aside", "Moved aside"],
-      ["zonito", "Main", "2026-10-08", "Pocket", 5000, "GBP", "aside", "Moved aside"], // aside credit: counted in n, in no sum
-      ["zonito", "Main", "2026-10-09", "Bank", 1234, "GBP", "interest", "Interest"], // interest: n only
-      ["zonito", "Pro", "2026-10-10", "Cashback", 260, "GBP", "income", "One-off"],
+      [
+        "zonito",
+        "Main",
+        "2026-10-05",
+        "Employer Ltd",
+        650000,
+        "GBP",
+        "income",
+        "One-off",
+      ],
+      [
+        "zonito",
+        "Main",
+        "2026-10-06",
+        "Ocado",
+        -12050,
+        "GBP",
+        "spend",
+        "Groceries",
+      ],
+      [
+        "zonito",
+        "Main",
+        "2026-10-07",
+        "Pocket",
+        -20000,
+        "GBP",
+        "aside",
+        "Moved aside",
+      ],
+      [
+        "zonito",
+        "Main",
+        "2026-10-08",
+        "Pocket",
+        5000,
+        "GBP",
+        "aside",
+        "Moved aside",
+      ], // aside credit: counted in n, in no sum
+      [
+        "zonito",
+        "Main",
+        "2026-10-09",
+        "Bank",
+        1234,
+        "GBP",
+        "interest",
+        "Interest",
+      ], // interest: n only
+      [
+        "zonito",
+        "Pro",
+        "2026-10-10",
+        "Cashback",
+        260,
+        "GBP",
+        "income",
+        "One-off",
+      ],
       // Zonito, October 2026, USD: the live scare's exact shape — a big
       // USD deposit and a small USD credit in the USD account. These
       // must land in the USD aggregates and nowhere else.
-      ["zonito", "USD-Invest", "2026-10-05", "Deposit", 2317121, "USD", "income", "One-off"],
-      ["zonito", "USD-Invest", "2026-10-02", "LOVE SHARMA", 10100, "USD", "income", "One-off"],
-      ["zonito", "USD-Invest", "2026-10-11", "Broker", -5000, "USD", "spend", "Fees"],
+      [
+        "zonito",
+        "USD-Invest",
+        "2026-10-05",
+        "Deposit",
+        2317121,
+        "USD",
+        "income",
+        "One-off",
+      ],
+      [
+        "zonito",
+        "USD-Invest",
+        "2026-10-02",
+        "LOVE SHARMA",
+        10100,
+        "USD",
+        "income",
+        "One-off",
+      ],
+      [
+        "zonito",
+        "USD-Invest",
+        "2026-10-11",
+        "Broker",
+        -5000,
+        "USD",
+        "spend",
+        "Fees",
+      ],
       // Zonito, September 2026.
-      ["zonito", "Main", "2026-09-15", "Ocado", -9999, "GBP", "spend", "Groceries"],
-      ["zonito", "Barclays Current", "2026-09-30", "Employer Ltd", 1244006, "GBP", "income", "One-off"],
+      [
+        "zonito",
+        "Main",
+        "2026-09-15",
+        "Ocado",
+        -9999,
+        "GBP",
+        "spend",
+        "Groceries",
+      ],
+      [
+        "zonito",
+        "Barclays Current",
+        "2026-09-30",
+        "Employer Ltd",
+        1244006,
+        "GBP",
+        "income",
+        "One-off",
+      ],
       // Nikhila, October 2026.
-      ["nikhila", "Pro", "2026-10-01", "Cashback", 260, "GBP", "income", "One-off"],
-      ["nikhila", "Pro", "2026-10-03", "UNIQLO", -4990, "GBP", "spend", "Shopping"],
-      ["nikhila", "Current", "2026-10-04", "Transfer In", 10000, "GBP", "internal", "Transfer"], // internal: n only
+      [
+        "nikhila",
+        "Pro",
+        "2026-10-01",
+        "Cashback",
+        260,
+        "GBP",
+        "income",
+        "One-off",
+      ],
+      [
+        "nikhila",
+        "Pro",
+        "2026-10-03",
+        "UNIQLO",
+        -4990,
+        "GBP",
+        "spend",
+        "Shopping",
+      ],
+      [
+        "nikhila",
+        "Current",
+        "2026-10-04",
+        "Transfer In",
+        10000,
+        "GBP",
+        "internal",
+        "Transfer",
+      ], // internal: n only
     ];
     rows.forEach((r, i) =>
       insert.run(

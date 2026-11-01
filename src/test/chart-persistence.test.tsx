@@ -22,7 +22,14 @@ const MONTHLY: MonthlyRows = {
     { category: "Home", series: [100, 110, 120] },
   ],
 };
-const ALL_PRESETS: ChartPreset[] = ["daily", "monthly", "quarterly", "ytd", "oneyear", "all"];
+const ALL_PRESETS: ChartPreset[] = [
+  "daily",
+  "monthly",
+  "quarterly",
+  "ytd",
+  "oneyear",
+  "all",
+];
 const legendFor = (names: string[]) => () => names;
 
 beforeEach(() => {
@@ -31,14 +38,25 @@ beforeEach(() => {
 
 describe("restoreChartState (validation maths)", () => {
   it("round-trips a valid stored state", () => {
-    const raw = serializeChartState({ preset: "quarterly", selected: "Groceries" });
+    const raw = serializeChartState({
+      preset: "quarterly",
+      selected: "Groceries",
+    });
     expect(
-      restoreChartState(raw, ALL_PRESETS, "monthly", legendFor(["Groceries", "Home"])),
+      restoreChartState(
+        raw,
+        ALL_PRESETS,
+        "monthly",
+        legendFor(["Groceries", "Home"]),
+      ),
     ).toEqual({ preset: "quarterly", selected: "Groceries" });
   });
 
   it("drops a stale category but keeps a valid preset", () => {
-    const raw = serializeChartState({ preset: "quarterly", selected: "Atlantis" });
+    const raw = serializeChartState({
+      preset: "quarterly",
+      selected: "Atlantis",
+    });
     expect(
       restoreChartState(raw, ALL_PRESETS, "monthly", legendFor(["Groceries"])),
     ).toEqual({ preset: "quarterly", selected: null });
@@ -47,16 +65,25 @@ describe("restoreChartState (validation maths)", () => {
   it("drops a preset the surface does not offer, with its selection", () => {
     const raw = serializeChartState({ preset: "daily", selected: "Groceries" });
     expect(
-      restoreChartState(raw, ["monthly", "quarterly"], "monthly", legendFor(["Groceries"])),
+      restoreChartState(
+        raw,
+        ["monthly", "quarterly"],
+        "monthly",
+        legendFor(["Groceries"]),
+      ),
     ).toEqual({ preset: "monthly", selected: null });
   });
 
   it("corrupt or missing storage yields the defaults", () => {
-    expect(restoreChartState("{nope", ALL_PRESETS, "monthly", legendFor([]))).toEqual({
+    expect(
+      restoreChartState("{nope", ALL_PRESETS, "monthly", legendFor([])),
+    ).toEqual({
       preset: "monthly",
       selected: null,
     });
-    expect(restoreChartState(null, ALL_PRESETS, "monthly", legendFor([]))).toEqual({
+    expect(
+      restoreChartState(null, ALL_PRESETS, "monthly", legendFor([])),
+    ).toEqual({
       preset: "monthly",
       selected: null,
     });
@@ -70,7 +97,9 @@ describe("SpendTimelineSection persistence", () => {
         title="Spending over time"
         surface={surface}
         monthly={MONTHLY}
-        {...(surface === "subscriptions" ? {} : { dailyPerson: "household" as const })}
+        {...(surface === "subscriptions"
+          ? {}
+          : { dailyPerson: "household" as const })}
       />,
     );
 
@@ -142,7 +171,9 @@ describe("SpendTimelineSection persistence", () => {
       selected: null,
     });
     // The Categories key is untouched by the Home interaction.
-    expect(JSON.parse(localStorage.getItem(chartStateKey("categories"))!)).toEqual({
+    expect(
+      JSON.parse(localStorage.getItem(chartStateKey("categories"))!),
+    ).toEqual({
       preset: "quarterly",
       selected: "Groceries",
     });

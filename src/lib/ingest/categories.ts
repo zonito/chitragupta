@@ -105,22 +105,20 @@ export function listCategories(db: Database.Database): CategoryDef[] {
     .prepare("SELECT name, colour, icon, builtin FROM categories")
     .all() as CategoryRow[];
   const order = new Map(BUILTIN_CATEGORY_DEFS.map((d, i) => [d.name, i]));
-  return rows
-    .map(rowToDef)
-    .sort((a, b) => {
-      if (a.builtin && b.builtin) {
-        return (order.get(a.name) ?? 99) - (order.get(b.name) ?? 99);
-      }
-      if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+  return rows.map(rowToDef).sort((a, b) => {
+    if (a.builtin && b.builtin) {
+      return (order.get(a.name) ?? 99) - (order.get(b.name) ?? 99);
+    }
+    if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export type CategoryResult =
-  | { ok: true; category: CategoryDef }
-  | { ok: false; error: string };
+  { ok: true; category: CategoryDef } | { ok: false; error: string };
 
-const COLOUR_PATTERN = /^(#[0-9a-fA-F]{3,8}|oklch\([^)]{1,50}\)|var\(--[a-z0-9-]{1,40}\))$/;
+const COLOUR_PATTERN =
+  /^(#[0-9a-fA-F]{3,8}|oklch\([^)]{1,50}\)|var\(--[a-z0-9-]{1,40}\))$/;
 
 export function createCategory(
   db: Database.Database,
@@ -151,7 +149,11 @@ export function createCategory(
     };
   }
   let colour: string;
-  if (input.colour === undefined || input.colour === null || input.colour === "") {
+  if (
+    input.colour === undefined ||
+    input.colour === null ||
+    input.colour === ""
+  ) {
     const customCount = existing.filter((c) => !c.builtin).length;
     colour = CUSTOM_COLOUR_PALETTE[customCount % CUSTOM_COLOUR_PALETTE.length]!;
   } else if (

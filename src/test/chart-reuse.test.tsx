@@ -1,7 +1,15 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { PersonProvider, usePerson } from "@/components/shell";
 import { gbp, hydrateData, monthlyHistoryFor } from "@/lib/data";
@@ -15,8 +23,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -67,8 +85,13 @@ describe("Home spend trend (shared chart, compact)", () => {
     // Categories chart shows for the same bucket.
     const monthly = monthlyHistoryFor("household");
     const octIdx = monthly.months.indexOf("2026-10");
-    const octTotal = monthly.rows.reduce((s, r) => s + (r.series[octIdx] ?? 0), 0);
-    expect(screen.getByText(new RegExp(`October 2026 — ${gbp(octTotal)}`))).toBeTruthy();
+    const octTotal = monthly.rows.reduce(
+      (s, r) => s + (r.series[octIdx] ?? 0),
+      0,
+    );
+    expect(
+      screen.getByText(new RegExp(`October 2026 — ${gbp(octTotal)}`)),
+    ).toBeTruthy();
   });
 
   it("isolates a category exactly like the Categories chart", () => {
@@ -113,13 +136,20 @@ describe("Subscriptions recurring-cost trend (shared chart)", () => {
       .filter((cm) => cm.month === "2026-10")
       .reduce((sum, cm) => sum + cm.total, 0);
     expect(expected).toBeCloseTo(118.95, 2);
-    expect(screen.getByText(new RegExp(`October 2026 — ${gbp(expected)}`))).toBeTruthy();
+    expect(
+      screen.getByText(new RegExp(`October 2026 — ${gbp(expected)}`)),
+    ).toBeTruthy();
     // The builder the screen uses agrees, and the legend carries the
     // window total in text.
     const rows = subscriptionMonthlyRows("household");
-    const windowTotal = monthlyBuckets(rows, 12).reduce((s, b) => s + b.total, 0);
+    const windowTotal = monthlyBuckets(rows, 12).reduce(
+      (s, b) => s + b.total,
+      0,
+    );
     expect(
-      screen.getByRole("button", { name: `Subscriptions · ${gbp(windowTotal)}` }),
+      screen.getByRole("button", {
+        name: `Subscriptions · ${gbp(windowTotal)}`,
+      }),
     ).toBeTruthy();
   });
 
@@ -173,11 +203,16 @@ describeRepro2("Subscription chargeMonths on the real store (repro2)", () => {
     const months = tesla!.chargeMonths ?? [];
     expect(months).toHaveLength(19);
     expect(months[0]!.month).toBe("2025-04");
-    expect(months[months.length - 1]).toEqual({ month: "2026-10", total: 9.99 });
+    expect(months[months.length - 1]).toEqual({
+      month: "2026-10",
+      total: 9.99,
+    });
     // 18 charges at £9.99 and one at £9.84 (verified from the raw CSVs).
     const total = months.reduce((s, cm) => s + cm.total, 0);
     expect(total).toBeCloseTo(18 * 9.99 + 9.84, 2);
-    expect(months.every((cm) => cm.total === 9.99 || cm.total === 9.84)).toBe(true);
+    expect(months.every((cm) => cm.total === 9.99 || cm.total === 9.84)).toBe(
+      true,
+    );
     // And the count still matches the sub's own charge count.
     expect(months.reduce((s, cm) => s + cm.total, 0)).toBeGreaterThan(0);
     expect(tesla!.charges).toBe(19);

@@ -80,7 +80,11 @@ describe("settings API (scratch store)", () => {
     const dir = mkdtempSync(join(tmpdir(), "chitra-settings-"));
     const api = await freshApi(dir);
 
-    const initial = (await (await request(api, "GET", "/api/settings"))!.json()) as SettingsBody;
+    const initial = (await (await request(
+      api,
+      "GET",
+      "/api/settings",
+    ))!.json()) as SettingsBody;
     expect(initial.ok).toBe(true);
     expect(initial.settings).toEqual(UNSET);
 
@@ -111,7 +115,12 @@ describe("settings API (scratch store)", () => {
     });
 
     // An empty patch changes nothing.
-    const noop = (await (await request(api, "PUT", "/api/settings", {}))!.json()) as SettingsBody;
+    const noop = (await (await request(
+      api,
+      "PUT",
+      "/api/settings",
+      {},
+    ))!.json()) as SettingsBody;
     expect(noop.settings).toEqual(partial.settings);
 
     // Explicit nulls clear, one key at a time and per category.
@@ -127,7 +136,11 @@ describe("settings API (scratch store)", () => {
       jevLastOutcome: null,
     });
 
-    const after = (await (await request(api, "GET", "/api/settings"))!.json()) as SettingsBody;
+    const after = (await (await request(
+      api,
+      "GET",
+      "/api/settings",
+    ))!.json()) as SettingsBody;
     expect(after.settings).toEqual(cleared.settings);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -169,7 +182,11 @@ describe("settings API (scratch store)", () => {
       expect(body.error!.length).toBeGreaterThan(0);
     }
     // The one good write from before the barrage is all that stands.
-    const after = (await (await request(api, "GET", "/api/settings"))!.json()) as SettingsBody;
+    const after = (await (await request(
+      api,
+      "GET",
+      "/api/settings",
+    ))!.json()) as SettingsBody;
     expect(after.settings).toEqual({ ...UNSET, availableFloorMinor: 500000 });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -178,7 +195,11 @@ describe("settings API (scratch store)", () => {
     const dir = mkdtempSync(join(tmpdir(), "chitra-settings-unknown-"));
     const api = await freshApi(dir);
     const res = await request(api, "PUT", "/api/settings", {
-      categoryBudgets: { "Not A Category": 99900, Groceries: 50000, "Moved aside": 100 },
+      categoryBudgets: {
+        "Not A Category": 99900,
+        Groceries: 50000,
+        "Moved aside": 100,
+      },
     });
     expect(res?.status).toBe(200);
     const body = (await res!.json()) as SettingsBody;
@@ -245,7 +266,9 @@ describe("settings storage", () => {
     const results = ingestAll(db, fixtureDataDir());
     expect(results.every((r) => r.ok)).toBe(true);
     const markers = db
-      .prepare("SELECT COUNT(*) AS n FROM ingest_runs WHERE account = '__rebuild__'")
+      .prepare(
+        "SELECT COUNT(*) AS n FROM ingest_runs WHERE account = '__rebuild__'",
+      )
       .get() as { n: number };
     expect(markers.n).toBe(1); // the rebuild really happened
 

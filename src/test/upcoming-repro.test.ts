@@ -5,11 +5,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { ingestAll } from "@/lib/ingest/ingest";
 import { openStore } from "@/lib/ingest/store";
 import { buildSnapshot } from "@/lib/snapshot.server";
-import {
-  hydrateData,
-  upcomingPanel,
-  upcomingShare,
-} from "@/lib/data";
+import { hydrateData, upcomingPanel, upcomingShare } from "@/lib/data";
 import { SAMPLE_SNAPSHOT } from "@/test/fixtures";
 
 const DATA_DIR = process.env["CHITRAGUPTA_DATA_DIR"]?.trim() || null;

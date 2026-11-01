@@ -24,7 +24,16 @@ function txn(
     `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
       description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
      VALUES (?, 'zonito', 'Main', ?, ?, ?, ?, ?, 0, ?, 0, ?, NULL)`,
-  ).run(fp, date, date.slice(0, 7), merchant, merchant, amountMinor, currency, movement);
+  ).run(
+    fp,
+    date,
+    date.slice(0, 7),
+    merchant,
+    merchant,
+    amountMinor,
+    currency,
+    movement,
+  );
 }
 
 beforeAll(async () => {

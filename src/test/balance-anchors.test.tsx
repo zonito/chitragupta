@@ -1,13 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  afterEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type Database from "better-sqlite3";
 
@@ -18,8 +12,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -82,7 +86,16 @@ function insertTxn(
     `INSERT INTO transactions (fingerprint, person, account, effective_date, year_month,
        description, merchant, amount_minor, fee_minor, currency, balance_minor, movement, category)
      VALUES (?, ?, ?, ?, ?, 'Synthetic', 'Synthetic', ?, 0, ?, 0, ?, 'One-off')`,
-  ).run(fp, person, account, date, date.slice(0, 7), amountMinor, currency, movement);
+  ).run(
+    fp,
+    person,
+    account,
+    date,
+    date.slice(0, 7),
+    amountMinor,
+    currency,
+    movement,
+  );
 }
 
 function insertRun(
@@ -96,7 +109,13 @@ function insertRun(
   db.prepare(
     `INSERT INTO ingest_runs (person, account, started_at, rows_seen, rows_added, balance_minor, currency)
      VALUES (?, ?, ?, 3, 3, ?, ?)`,
-  ).run(person, account, startedAt, balanceMinor, balanceMinor === null ? null : currency);
+  ).run(
+    person,
+    account,
+    startedAt,
+    balanceMinor,
+    balanceMinor === null ? null : currency,
+  );
 }
 
 /** The anchored account's transaction story, shared by the unit and
@@ -107,11 +126,51 @@ function insertRun(
  *  +100,000 − 25,000 + 5,000 − 1,200 = +78,800, so the derived
  *  balance is 128,800 as of the latest row, 2026-09-25. */
 function seedAnchorStory(db: Database.Database): void {
-  insertTxn(db, "pre", "zonito", "Anchor Current", "2026-08-15", 200000, "income");
-  insertTxn(db, "on", "zonito", "Anchor Current", "2026-09-01", 99900, "income");
-  insertTxn(db, "p1", "zonito", "Anchor Current", "2026-09-10", 100000, "income");
-  insertTxn(db, "p2", "zonito", "Anchor Current", "2026-09-12", -25000, "spend");
-  insertTxn(db, "p3", "zonito", "Anchor Current", "2026-09-20", 5000, "internal");
+  insertTxn(
+    db,
+    "pre",
+    "zonito",
+    "Anchor Current",
+    "2026-08-15",
+    200000,
+    "income",
+  );
+  insertTxn(
+    db,
+    "on",
+    "zonito",
+    "Anchor Current",
+    "2026-09-01",
+    99900,
+    "income",
+  );
+  insertTxn(
+    db,
+    "p1",
+    "zonito",
+    "Anchor Current",
+    "2026-09-10",
+    100000,
+    "income",
+  );
+  insertTxn(
+    db,
+    "p2",
+    "zonito",
+    "Anchor Current",
+    "2026-09-12",
+    -25000,
+    "spend",
+  );
+  insertTxn(
+    db,
+    "p3",
+    "zonito",
+    "Anchor Current",
+    "2026-09-20",
+    5000,
+    "internal",
+  );
   insertTxn(db, "p4", "zonito", "Anchor Current", "2026-09-25", -1200, "fee");
   addBalanceAnchor(db, {
     person: "zonito",
@@ -166,7 +225,9 @@ describe("deriveBalance", () => {
       balanceMinor: 90000,
       currency: "GBP",
     });
-    expect(anchorFor(db, "zonito", "Anchor Current")?.anchorDate).toBe("2026-09-15");
+    expect(anchorFor(db, "zonito", "Anchor Current")?.anchorDate).toBe(
+      "2026-09-15",
+    );
     // Only the rows after 15 Sep count now: +5,000 − 1,200.
     expect(deriveBalance(db, "zonito", "Anchor Current")).toEqual({
       balanceMinor: 93800,
@@ -179,7 +240,15 @@ describe("deriveBalance", () => {
 
   it("an anchor dated after all rows yields the anchor balance, as of the anchor date", () => {
     const db = openStore(tempDir("chitra-anchor-future-"));
-    insertTxn(db, "f1", "zonito", "Future Current", "2026-08-20", 40000, "income");
+    insertTxn(
+      db,
+      "f1",
+      "zonito",
+      "Future Current",
+      "2026-08-20",
+      40000,
+      "income",
+    );
     addBalanceAnchor(db, {
       person: "zonito",
       account: "Future Current",
@@ -198,7 +267,15 @@ describe("deriveBalance", () => {
 
   it("an account with no anchor derives nothing", () => {
     const db = openStore(tempDir("chitra-anchor-none-"));
-    insertTxn(db, "n1", "zonito", "Plain Current", "2026-09-10", 40000, "income");
+    insertTxn(
+      db,
+      "n1",
+      "zonito",
+      "Plain Current",
+      "2026-09-10",
+      40000,
+      "income",
+    );
     expect(deriveBalance(db, "zonito", "Plain Current")).toBeNull();
     expect(balanceSourceFor(db, "zonito", "Plain Current")).toBeNull();
     db.close();
@@ -319,7 +396,13 @@ function writeBarclaysFile(dir: string, currentRows: string[]): void {
     "-10.00",
   );
   writeFileSync(
-    join(dir, "Zonito", "Barclay", "Barclaycard", "barclaycard-full-history.csv"),
+    join(
+      dir,
+      "Zonito",
+      "Barclay",
+      "Barclaycard",
+      "barclaycard-full-history.csv",
+    ),
     [STATEMENT_HEADER, ...currentRows, cardRow].join("\n"),
   );
 }
@@ -339,13 +422,60 @@ function makeBarclaysDataDir(currentRows: string[]): string {
   mkdirSync(join(dir, "Originals"), { recursive: true });
   mkdirSync(join(dir, "Zonito", "Barclay", "Barclaycard"), { recursive: true });
   const originals: [string, string][] = [
-    ["account-statement_f5660e.csv", statementRow("Deposit", "Main", "2026-09-01", "Synthetic opening", "111.11", "GBP", "111.11")],
-    ["account-statement_01cac2.csv", statementRow("Deposit", "Pro", "2026-09-01", "Synthetic opening", "222.22", "GBP", "222.22")],
-    ["account-statement_2151f7.csv", statementRow("Deposit", "Current", "2026-09-01", "Synthetic opening", "33.33", "USD", "33.33")],
-    ["account-statement_bd9d00.csv", statementRow("Deposit", "Current", "2026-09-01", "Synthetic opening", "44.44", "GBP", "44.44")],
+    [
+      "account-statement_f5660e.csv",
+      statementRow(
+        "Deposit",
+        "Main",
+        "2026-09-01",
+        "Synthetic opening",
+        "111.11",
+        "GBP",
+        "111.11",
+      ),
+    ],
+    [
+      "account-statement_01cac2.csv",
+      statementRow(
+        "Deposit",
+        "Pro",
+        "2026-09-01",
+        "Synthetic opening",
+        "222.22",
+        "GBP",
+        "222.22",
+      ),
+    ],
+    [
+      "account-statement_2151f7.csv",
+      statementRow(
+        "Deposit",
+        "Current",
+        "2026-09-01",
+        "Synthetic opening",
+        "33.33",
+        "USD",
+        "33.33",
+      ),
+    ],
+    [
+      "account-statement_bd9d00.csv",
+      statementRow(
+        "Deposit",
+        "Current",
+        "2026-09-01",
+        "Synthetic opening",
+        "44.44",
+        "GBP",
+        "44.44",
+      ),
+    ],
   ];
   for (const [name, row] of originals) {
-    writeFileSync(join(dir, "Originals", name), [STATEMENT_HEADER, row].join("\n"));
+    writeFileSync(
+      join(dir, "Originals", name),
+      [STATEMENT_HEADER, row].join("\n"),
+    );
   }
   const savingsHeader = "Date,Description,Money out,Money in,Balance";
   for (const [name, amount] of [
@@ -354,7 +484,9 @@ function makeBarclaysDataDir(currentRows: string[]): string {
   ] as const) {
     writeFileSync(
       join(dir, "Originals", name),
-      [savingsHeader, `"Sep 1, 2026",Deposit,,£${amount},£${amount}`].join("\n"),
+      [savingsHeader, `"Sep 1, 2026",Deposit,,£${amount},£${amount}`].join(
+        "\n",
+      ),
     );
   }
   writeBarclaysFile(dir, currentRows);
@@ -392,7 +524,8 @@ describe("anchors across ingest", () => {
     expect(second.every((r) => r.ok)).toBe(true);
     expect(
       listBalanceAnchors(db).some(
-        (a) => a.account === "Barclays Current" && a.anchorDate === "2026-09-01",
+        (a) =>
+          a.account === "Barclays Current" && a.anchorDate === "2026-09-01",
       ),
     ).toBe(true);
     // 50,000 + (100,000 − 25,000); the 2026-08-15 row predates the anchor.
@@ -447,10 +580,16 @@ describe("GET /api/accounts provenance", () => {
 
     process.env["CHITRAGUPTA_STORE_DIR"] = dir;
     const { handleChitraguptaApi } = await import("@/lib/api");
-    const res = await handleChitraguptaApi(new Request("http://test/api/accounts"));
+    const res = await handleChitraguptaApi(
+      new Request("http://test/api/accounts"),
+    );
     expect(res).not.toBeNull();
     const body = (await res!.json()) as {
-      accounts: { person: string; account: string; balanceSource: string | null }[];
+      accounts: {
+        person: string;
+        account: string;
+        balanceSource: string | null;
+      }[];
     };
     const source = new Map(
       body.accounts.map((a) => [`${a.person}|${a.account}`, a.balanceSource]),

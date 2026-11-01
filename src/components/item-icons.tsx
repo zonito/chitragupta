@@ -1,4 +1,39 @@
-import { Home, List, Sparkles, PieChart, Repeat, CreditCard, Upload, FileText, Calculator, Settings, ShoppingBasket, UtensilsCrossed, Bus, GraduationCap, Plane, ShoppingBag, Receipt, ArrowLeftRight, Landmark, Tag, Star, Heart, BookOpen, Music, Dumbbell, PawPrint, Gift, Wrench, Leaf, Wallet, Baby, Car, Coffee, type LucideIcon } from "lucide-react";
+import {
+  Home,
+  List,
+  Sparkles,
+  PieChart,
+  Repeat,
+  CreditCard,
+  Upload,
+  FileText,
+  Calculator,
+  Settings,
+  ShoppingBasket,
+  UtensilsCrossed,
+  Bus,
+  GraduationCap,
+  Plane,
+  ShoppingBag,
+  Receipt,
+  ArrowLeftRight,
+  Landmark,
+  Tag,
+  Star,
+  Heart,
+  BookOpen,
+  Music,
+  Dumbbell,
+  PawPrint,
+  Gift,
+  Wrench,
+  Leaf,
+  Wallet,
+  Baby,
+  Car,
+  Coffee,
+  type LucideIcon,
+} from "lucide-react";
 import { categoryColor, categoryIcon, type Category } from "@/lib/data";
 
 /** Icon name → glyph. Category defs (built-in and custom) carry one of
@@ -42,8 +77,25 @@ const DESTINATION: Record<string, { icon: LucideIcon; colour: string }> = {
   "/calculators": { icon: Calculator, colour: "var(--cat-shopping)" },
   "/settings": { icon: Settings, colour: "var(--cat-one-off)" },
 };
-function IconChip({ icon: Icon, colour }: { icon: LucideIcon; colour: string }) {
-  return <span aria-hidden="true" className="item-icon" style={{ color: colour, backgroundColor: `color-mix(in oklab, ${colour} 12%, transparent)` }}><Icon size={16} strokeWidth={1.8} /></span>;
+function IconChip({
+  icon: Icon,
+  colour,
+}: {
+  icon: LucideIcon;
+  colour: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className="item-icon"
+      style={{
+        color: colour,
+        backgroundColor: `color-mix(in oklab, ${colour} 12%, transparent)`,
+      }}
+    >
+      <Icon size={16} strokeWidth={1.8} />
+    </span>
+  );
 }
 export function CategoryIcon({ category }: { category: Category }) {
   if (category === "Transfer") {

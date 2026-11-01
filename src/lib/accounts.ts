@@ -64,7 +64,8 @@ export function primaryFigures(
     : pick(balanceCurrency)
       ? balanceCurrency
       : [...currencies].sort()[0]!;
-  const toPounds = (map: Record<string, number>, c: string) => (map[c] ?? 0) / 100;
+  const toPounds = (map: Record<string, number>, c: string) =>
+    (map[c] ?? 0) / 100;
   return {
     currency: primary,
     spend: toPounds(insight.spend, primary),

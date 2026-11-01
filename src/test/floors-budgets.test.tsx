@@ -20,8 +20,18 @@ vi.mock("@tanstack/react-router", async () => {
   return {
     ...actual,
     useRouter: () => ({ invalidate: async () => {} }),
-    Link: ({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) => (
-      <a href={to} className={className}>{children}</a>
+    Link: ({
+      to,
+      children,
+      className,
+    }: {
+      to: string;
+      children: React.ReactNode;
+      className?: string;
+    }) => (
+      <a href={to} className={className}>
+        {children}
+      </a>
     ),
   };
 });
@@ -172,7 +182,8 @@ function categoryRow(name: string): HTMLElement {
   const el = screen
     .getAllByRole("button")
     .find(
-      (b) => b.classList.contains("panel-enter") && b.textContent?.includes(name),
+      (b) =>
+        b.classList.contains("panel-enter") && b.textContent?.includes(name),
     );
   if (!el) throw new Error(`no category row for ${name}`);
   return el;
@@ -255,16 +266,29 @@ describe("Settings: Floors & budgets form", () => {
         .value,
     ).toBe("10000");
     expect(
-      (screen.getByLabelText(
-        "Overall monthly budget, in pounds",
-      ) as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "Overall monthly budget, in pounds",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("");
     expect(
-      (screen.getByLabelText(
-        "Monthly budget for Groceries, in pounds",
-      ) as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "Monthly budget for Groceries, in pounds",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("500");
-    for (const name of ["Transport", "School", "Home", "Subscriptions", "Holidays", "Shopping", "One-off", "Eating out"]) {
+    for (const name of [
+      "Transport",
+      "School",
+      "Home",
+      "Subscriptions",
+      "Holidays",
+      "Shopping",
+      "One-off",
+      "Eating out",
+    ]) {
       expect(
         screen.getByLabelText(`Monthly budget for ${name}, in pounds`),
       ).toBeTruthy();
@@ -277,10 +301,12 @@ describe("Settings: Floors & budgets form", () => {
   });
 
   it("saves the whole form through PUT /api/settings and confirms", async () => {
-    hydrateData(
-      withSettings({ categoryBudgets: { Groceries: 50000 } }),
-    );
-    const calls: { url: string; method: string | undefined; body: string | undefined }[] = [];
+    hydrateData(withSettings({ categoryBudgets: { Groceries: 50000 } }));
+    const calls: {
+      url: string;
+      method: string | undefined;
+      body: string | undefined;
+    }[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
@@ -403,12 +429,16 @@ function token(block: string, name: string): Oklab {
 function gradientStops(selector: string): Oklab[] {
   const m = css.match(
     new RegExp(
-      `${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{[^}]*linear-gradient\\(135deg, oklch\\(([\\d. ]+)\\), oklch\\(([\\d. ]+)\\)\\)`,
+      `${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{[^}]*linear-gradient\\(\\s*135deg,\\s*oklch\\(([\\d. ]+)\\),\\s*oklch\\(([\\d. ]+)\\)\\s*\\)`,
     ),
   );
   if (!m) throw new Error(`gradient stops not found for ${selector}`);
   return [m[1]!, m[2]!].map((s) => {
-    const [l, c, h] = s.trim().split(/\s+/).map(Number) as [number, number, number];
+    const [l, c, h] = s.trim().split(/\s+/).map(Number) as [
+      number,
+      number,
+      number,
+    ];
     return oklch(l, c, h);
   });
 }
@@ -418,10 +448,18 @@ describe("danger colours clear WCAG AA in both themes", () => {
   const dark = themeBlock(".dark {");
 
   it("text-destructive on card and page backgrounds", () => {
-    for (const [name, block] of [["light", light], ["dark", dark]] as const) {
+    for (const [name, block] of [
+      ["light", light],
+      ["dark", dark],
+    ] as const) {
       const fg = token(block, "destructive");
-      expect(contrast(fg, token(block, "card")), name).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(fg, token(block, "background")), name).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(fg, token(block, "card")), name).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      expect(
+        contrast(fg, token(block, "background")),
+        name,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -429,10 +467,14 @@ describe("danger colours clear WCAG AA in both themes", () => {
     const lightStops = gradientStops(".hero-panel");
     const darkStops = gradientStops(".dark .hero-panel");
     for (const stop of lightStops) {
-      expect(contrast(token(light, "danger-on-hero"), stop)).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(token(light, "danger-on-hero"), stop),
+      ).toBeGreaterThanOrEqual(4.5);
     }
     for (const stop of darkStops) {
-      expect(contrast(token(dark, "danger-on-hero"), stop)).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(token(dark, "danger-on-hero"), stop),
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

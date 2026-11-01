@@ -28,7 +28,9 @@ export const timeOfDay = (iso: string): string | undefined => {
   const hhmm = `${match[1]}:${match[2]}`;
   if (hhmm !== "00:00") return hhmm;
   const seconds = match[3];
-  return seconds !== undefined && seconds !== "00" ? `00:00:${seconds}` : undefined;
+  return seconds !== undefined && seconds !== "00"
+    ? `00:00:${seconds}`
+    : undefined;
 };
 
 /**
@@ -101,7 +103,12 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
   if (row.currency !== "GBP") return null;
   // The snapshot's txns carry spend, internal transfers, moved-aside
   // and income; fees and interest never appear there.
-  if (row.movement !== "spend" && row.movement !== "internal" && row.movement !== "aside" && row.movement !== "income") {
+  if (
+    row.movement !== "spend" &&
+    row.movement !== "internal" &&
+    row.movement !== "aside" &&
+    row.movement !== "income"
+  ) {
     return null;
   }
   const date = row.date.slice(0, 10);
@@ -118,21 +125,30 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     owner: row.account === "Joint" ? "joint" : (row.person as Owner),
     account: accountTxnLabel(row.person, row.account),
     accountId: row.account,
-    kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : row.movement === "income" ? "income" : "transfer",
+    kind:
+      row.movement === "spend"
+        ? "spend"
+        : row.movement === "aside"
+          ? "aside"
+          : row.movement === "income"
+            ? "income"
+            : "transfer",
     ...(row.amountMinor > 0 ? { incoming: true } : {}),
     ...(time ? { time } : {}),
     ...(timeFull ? { timeFull } : {}),
-    ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
+    ...(row.description && row.description !== row.merchant
+      ? { note: row.description }
+      : {}),
     ...(row.userNote ? { userNote: row.userNote } : {}),
   };
 }
 
-export async function fetchApiTransactions(params: Record<string, string>): Promise<Txn[]> {
+export async function fetchApiTransactions(
+  params: Record<string, string>,
+): Promise<Txn[]> {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`/api/transactions?${qs}`);
   if (!res.ok) throw new Error(`transactions request failed: ${res.status}`);
   const body = (await res.json()) as { transactions: ApiTxnRow[] };
-  return body.transactions
-    .map(apiTxnToTxn)
-    .filter((t): t is Txn => t !== null);
+  return body.transactions.map(apiTxnToTxn).filter((t): t is Txn => t !== null);
 }
