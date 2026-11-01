@@ -1,0 +1,47 @@
+# Pre-commit solidification (AH-085). Install once per clone:
+#   pnpm install && pre-commit install
+# No commit-msg hook: this repo's history does not follow Conventional
+# Commits (subjects are free-form "Activity: ...", "Fix: ..."), so
+# enforcing that convention would reject the established style.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: pnpm exec prettier --write
+        language: system
+        types_or: [ts, tsx, javascript, jsx, json, css, markdown, yaml]
+      - id: eslint
+        name: eslint
+        entry: pnpm exec eslint
+        language: system
+        types_or: [ts, tsx, javascript, jsx]
+      - id: typecheck
+        name: typecheck (tsc --noEmit)
+        entry: pnpm exec tsc --noEmit
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fast-tests
+        name: fast tests (vitest, 180s timeout)
+        entry: bash scripts/hooks/fast-test.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: block-real-data
+        name: block real data and secrets (public repo guard)
+        entry: bash scripts/hooks/block-real-data.sh
+        language: system
+        types: [file]

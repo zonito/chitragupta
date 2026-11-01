@@ -5,21 +5,39 @@ TanStack Start + React + Tailwind, running locally only.
 
 ## Run locally
 
-Requires Node.js 20+ and npm.
+Requires Node.js 20+ and pnpm.
 
 ```sh
-npm install
-npm run dev      # serves http://localhost:3016
+pnpm install
+pnpm dev         # serves http://localhost:3016
 ```
 
 Other commands:
 
 ```sh
-npm run build    # production build → .output/ (node-server preset)
-npm start        # serve the production build (node .output/server/index.mjs)
-npm test         # vitest suite
-npm run lint     # eslint
+pnpm build       # production build → .output/ (node-server preset)
+pnpm start       # serve the production build (node .output/server/index.mjs)
+pnpm test        # vitest suite
+pnpm lint        # eslint
+pnpm typecheck   # tsc --noEmit
 ```
+
+## Pre-commit hooks
+
+One step on a fresh clone, after `pnpm install`:
+
+```sh
+pre-commit install
+```
+
+That installs hygiene checks (whitespace, EOF, yaml/json/toml validity,
+large-file and merge-conflict guards), Prettier, ESLint, `tsc --noEmit`,
+a fast vitest lane (180s hard timeout; data-dependent suites self-skip
+without `CHITRAGUPTA_DATA_DIR`), and a public-repo guard
+(`scripts/hooks/block-real-data.sh`) that blocks committing
+statement/data files and secret-shaped strings.
+There is deliberately no commit-msg hook: this repo's history does not
+follow Conventional Commits.
 
 ## Data
 
@@ -59,5 +77,6 @@ the same computed figures. `MUSE_API_BASE_URL` defaults to
 - Internal transfers between the couple and their own accounts/pockets are
   never income or spending.
 - Money moved to savings/investments/brokers is "Moved aside", never an expense.
-- No budgets, targets or limit UI anywhere; motivation is by facts only.
+- Motivation is by facts only; the only thresholds are the household's
+  own optional Available floor and monthly budgets in Settings.
 - Amounts are computed by code, never by an AI model.
