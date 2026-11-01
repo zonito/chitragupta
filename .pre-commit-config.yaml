@@ -45,3 +45,9 @@ repos:
         entry: bash scripts/hooks/block-real-data.sh
         language: system
         types: [file]
+      - id: api-docs
+        name: api docs (openapi + postman coverage)
+        entry: python3 scripts/check-api-docs.py
+        language: system
+        pass_filenames: false
+        files: ^(openapi\.yaml|postman_collection\.json|src/lib/api\.ts|src/lib/snapshot\.ts|src/routes/)

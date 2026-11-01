@@ -1,0 +1,862 @@
+{
+  "info": {
+    "_postman_id": "00000000-0000-4000-8000-000000000086",
+    "name": "Chitragupta API",
+    "description": "Generated from, and consistent with, openapi.yaml in the repo root (the API contract of record — see AGENTS.md). One request per spec operation, folders matching the spec tags. Synthetic example values only. Set the collection variable baseUrl to run against a local instance. The app requires no auth on any endpoint, so the collection configures none.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://100.125.239.56:3016",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Ingestion",
+      "item": [
+        {
+          "name": "Latest ingest run per account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ingest/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ingest", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Run statement ingestion now",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ingest/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ingest", "run"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Whether a classification gateway key is configured",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/classify/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "classify", "run"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Classify unknown merchants now",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/classify/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "classify", "run"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Review and merchants",
+      "item": [
+        {
+          "name": "Merchants awaiting classification review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/review-queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "review-queue"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dismiss a merchant from the review queue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/review-queue/dismiss",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "review-queue", "dismiss"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant\": \"Example Groceries Ltd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set a merchant's category (merchant memory correction)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/merchants",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "merchants"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant\": \"Example Groceries Ltd\",\n  \"category\": \"Groceries\",\n  \"source\": \"user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "List spending categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create a custom category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Example Category\",\n  \"icon\": \"tag\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a custom category",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Example Category\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Read household settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "settings"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Patch household settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "settings"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availableFloorMinor\": 10000,\n  \"categoryBudgets\": {\n    \"Groceries\": 40000\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Search and list transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions"],
+              "query": [
+                {
+                  "key": "person",
+                  "value": "household",
+                  "disabled": false
+                },
+                {
+                  "key": "account",
+                  "value": "Pro",
+                  "disabled": false
+                },
+                {
+                  "key": "month",
+                  "value": "2026-11",
+                  "disabled": false
+                },
+                {
+                  "key": "from",
+                  "value": "2026-10",
+                  "disabled": false
+                },
+                {
+                  "key": "to",
+                  "value": "2026-11",
+                  "disabled": false
+                },
+                {
+                  "key": "merchant",
+                  "value": "Example Groceries Ltd",
+                  "disabled": false
+                },
+                {
+                  "key": "q",
+                  "value": "Example",
+                  "disabled": false
+                },
+                {
+                  "key": "category",
+                  "value": "Groceries",
+                  "disabled": false
+                },
+                {
+                  "key": "ids",
+                  "value": "example-fingerprint-1,example-fingerprint-2",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "200",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set or clear the user's note on one transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/note",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions", "note"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"example-fingerprint-1\",\n  \"note\": \"Example note\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Accounts and aggregates",
+      "item": [
+        {
+          "name": "Per-account insights for the display month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Category aggregates (legacy month view or scoped view)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/aggregates",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "aggregates"],
+              "query": [
+                {
+                  "key": "person",
+                  "value": "household",
+                  "disabled": false
+                },
+                {
+                  "key": "scope",
+                  "value": "month",
+                  "disabled": false
+                },
+                {
+                  "key": "month",
+                  "value": "2026-11",
+                  "disabled": false
+                },
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "disabled": false
+                },
+                {
+                  "key": "all",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "category",
+                  "value": "Groceries",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Daily spend buckets for the Categories timeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/aggregates/daily",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "aggregates", "daily"],
+              "query": [
+                {
+                  "key": "person",
+                  "value": "household",
+                  "disabled": false
+                },
+                {
+                  "key": "days",
+                  "value": "30",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Digest",
+      "item": [
+        {
+          "name": "Digest data for a week (external-reader API)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/digest",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "digest"],
+              "query": [
+                {
+                  "key": "week",
+                  "value": "2026-W44",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Ask",
+      "item": [
+        {
+          "name": "Ask a natural-language question about the household's money",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ask"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"How much did we spend on groceries last month?\",\n  \"person\": \"household\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jev",
+      "item": [
+        {
+          "name": "Jev's second opinion for the Coach view (fail-open)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jev/coach",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jev", "coach"],
+              "query": [
+                {
+                  "key": "person",
+                  "value": "household",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Jev's cached opinion on one subscription (cache only)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jev/subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jev", "subscription"],
+              "query": [
+                {
+                  "key": "merchant",
+                  "value": "Example Subscription",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ask Jev live about one subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jev/subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jev", "subscription"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant\": \"Example Subscription\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Blind Jev proxy (external/Molang-facing)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jev/ask",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jev", "ask"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"state\": {\n    \"example_fact_gbp\": 12.0\n  },\n  \"questions\": {\n    \"posture\": {\n      \"question\": \"Which posture fits best right now?\",\n      \"choices\": [\n        \"Hold steady\",\n        \"Ease off\"\n      ]\n    }\n  },\n  \"model\": \"jev-latest\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Correct subscription detection for a merchant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/override",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", "override"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchant\": \"Example Subscription\",\n  \"mode\": \"cancelled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "File a receipt/document and optionally link it to a transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"example-receipt.pdf\",\n  \"contentBase64\": \"JVBERi0xLjQK\",\n  \"type\": \"Receipt\",\n  \"merchant\": \"Example Groceries Ltd\",\n  \"date\": \"2026-11-01\",\n  \"amount\": 12.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Detach a document from its transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/detach",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "detach"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"example-fingerprint-1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Download/view a filed document's bytes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:id/file",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", ":id", "file"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "00000000-0000-4000-8000-000000000001"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Pages",
+      "item": [
+        {
+          "name": "Page: Home (/)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": []
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Activity (/activity)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/activity",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Calculators (/calculators)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/calculators",
+              "host": ["{{baseUrl}}"],
+              "path": ["calculators"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Cards (/cards)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cards",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Categories (/categories)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Coach (/coach)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/coach",
+              "host": ["{{baseUrl}}"],
+              "path": ["coach"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Import (/import)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/import",
+              "host": ["{{baseUrl}}"],
+              "path": ["import"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: More (/more)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/more",
+              "host": ["{{baseUrl}}"],
+              "path": ["more"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Receipts (/receipts)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/receipts",
+              "host": ["{{baseUrl}}"],
+              "path": ["receipts"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Settings (/settings)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Page: Subscriptions (/subscriptions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

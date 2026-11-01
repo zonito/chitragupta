@@ -1,0 +1,2220 @@
+openapi: 3.0.3
+info:
+  title: Chitragupta API
+  version: 1.0.0
+  description: |
+    Household expense app: bank statement ingestion (Revolut and Barclays),
+    merchant classification, Home Available/forecast views, an Ask interface,
+    receipts and documents, and a digest-data API plus contributions,
+    corrections and ingestion-monitoring APIs consumed by external readers.
+
+    This spec is the API contract of record (see AGENTS.md, "API
+    documentation"). It describes what the code in `src/lib/api.ts`
+    (`handleChitraguptaApi` / `routeWithDb` / `routeJev`, dispatched from
+    `src/server.ts` before the TanStack Start SSR handler) and the
+    file-based page routes under `src/routes/` actually do. Where the
+    code's behaviour looks inconsistent it is documented as-is; the
+    discrepancies are listed in the AH-086 completion report, not fixed
+    here.
+
+    ## Auth
+    The app serves **no authentication** on any endpoint: there is no
+    login, bearer token, API key or session check in the routing code.
+    It is a local-only household app. Do not expose an instance beyond a
+    trusted network without adding auth in code first — and if auth is
+    ever added, this spec's security schemes must be added in the same
+    change (see AGENTS.md).
+
+    ## Conventions
+    - JSON bodies use `application/json; charset=utf-8` unless noted.
+    - Success bodies carry `ok: true`; error bodies are
+      `{ ok: false, error: <string> }` (see `Error` schema).
+    - Money in the JSON APIs is integer **minor units** (pence) unless a
+      schema says otherwise. The one exception is document upload, whose
+      `amount` is pounds (see `DocumentCreate`).
+    - Amounts are **never summed across currencies**: multi-currency
+      results are reported per currency (for example `spend` /
+      `moneyIn` maps keyed by currency code, or separate
+      `otherCurrencies` rows).
+    - The snapshot server function `getSnapshot`
+      (`createServerFn({ method: "GET" })` in `src/lib/snapshot.ts`,
+      consumed by the root route loader) is an internal TanStack Start
+      RPC whose URL is a build-generated hash, not a stable path. It is
+      therefore inventoried but intentionally not a path in this spec;
+      its return shape is `src/lib/data.ts`'s `DataSnapshot`. CSRF
+      middleware in `src/start.ts` protects server functions only —
+      it does not protect `/api/*`.
+  contact:
+    name: Chitragupta (public repo — synthetic examples only)
+servers:
+  - url: http://100.125.239.56:3016
+    description: Household local instance (the app's local base)
+  - url: http://localhost:3016
+    description: Local dev instance (pnpm dev)
+security: []
+tags:
+  - name: Ingestion
+    description: Statement ingestion and merchant classification runs.
+  - name: Review and merchants
+    description: Merchant review queue and merchant-memory corrections.
+  - name: Categories
+    description: Spending categories (built-in plus user-created).
+  - name: Settings
+    description: Household thresholds (floor, budgets, Jev switch).
+  - name: Transactions
+    description: Transaction search and per-transaction notes.
+  - name: Accounts and aggregates
+    description: Per-account insights and category aggregates.
+  - name: Digest
+    description: Digest-data API consumed by external readers.
+  - name: Ask
+    description: Natural-language Ask interface (figures computed in code).
+  - name: Jev
+    description: Jev second-opinion integration and its blind proxy.
+  - name: Subscriptions
+    description: Human corrections to subscription detection.
+  - name: Documents
+    description: Receipts and documents (upload, detach, file download).
+  - name: Pages
+    description: Server-rendered HTML pages (file-based routes).
+paths:
+  /api/ingest/status:
+    get:
+      tags: [Ingestion]
+      operationId: getIngestStatus
+      summary: Latest ingest run per account
+      description: |
+        One row per (person, account) from the latest `ingest_runs`
+        record, excluding internal `__*` accounts, plus up to 5 recent
+        `__rebuild__` records. Monitoring endpoint for external readers.
+      responses:
+        "200":
+          description: Latest ingest state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestStatusResponse"
+              example:
+                ok: true
+                accounts:
+                  - person: zonito
+                    account: Pro
+                    lastIngest: "2026-11-01T08:00:00Z"
+                    rowsSeen: 120
+                    rowsAdded: 3
+                    balanceMinor: 123456
+                    currency: GBP
+                    discrepancy: null
+                rebuilds:
+                  - at: "2026-11-01T08:00:00Z"
+                    discrepancy: null
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/ingest/run:
+    post:
+      tags: [Ingestion]
+      operationId: runIngest
+      summary: Run statement ingestion now
+      description: |
+        Ingests every account from `CHITRAGUPTA_DATA_DIR`, seeds merchant
+        memory, recomputes aggregates for zonito, nikhila and household,
+        then drains merchant classification (a no-op with no gateway key;
+        classification failures never fail the ingest).
+
+        A partial failure still returns **200** with `ok: false` and the
+        failed accounts named in `error` — documented as-is.
+      responses:
+        "200":
+          description: Ingest finished (check `ok` for partial failure).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestRunResponse"
+              examples:
+                success:
+                  value:
+                    ok: true
+                    results:
+                      - person: zonito
+                        account: Pro
+                        rowsSeen: 120
+                        rowsAdded: 3
+                        balanceMinor: 123456
+                        currency: GBP
+                        discrepancy: null
+                        ok: true
+                        file: example-statement.csv
+                    classification:
+                      ran: false
+                      reason: "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only"
+                      classified: 0
+                      failed: 0
+                      remaining: 2
+                      gateway: { attempted: false, ok: false, provider: null }
+                partialFailure:
+                  value:
+                    ok: false
+                    error: "1 of 4 accounts failed: Pro (example-statement.csv): no transactions parsed"
+                    results: []
+                    classification: null
+        "500":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/classify/run:
+    get:
+      tags: [Ingestion]
+      operationId: getClassifyStatus
+      summary: Whether a classification gateway key is configured
+      responses:
+        "200":
+          description: Configuration status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, configured]
+                properties:
+                  ok: { type: boolean, example: true }
+                  configured: { type: boolean, example: false }
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+    post:
+      tags: [Ingestion]
+      operationId: runClassify
+      summary: Classify unknown merchants now
+      description: |
+        Sends each queued unknown merchant (name, transaction type and
+        count only — never amounts, balances or account details) to the
+        configured model gateway once and remembers the result. With no
+        key configured this is a rules-only no-op summary.
+      responses:
+        "200":
+          description: Classification summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassifySummaryResponse"
+              example:
+                ok: true
+                ran: false
+                reason: "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only"
+                classified: 0
+                failed: 0
+                remaining: 2
+                gateway: { attempted: false, ok: false, provider: null }
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/review-queue:
+    get:
+      tags: [Review and merchants]
+      operationId: getReviewQueue
+      summary: Merchants awaiting classification review
+      description: |
+        Distinct merchants with spend rows that are in neither merchant
+        memory nor the dismissed list, ordered by row count. `queue` is
+        the display list; `total` is the true uncapped count.
+      responses:
+        "200":
+          description: Review queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewQueueResponse"
+              example:
+                ok: true
+                queue:
+                  - merchant: Example Groceries Ltd
+                    count: 4
+                    examples: ["Example Groceries Ltd"]
+                    detail: "£12.00 · 4 charges · last 1 Nov"
+                    suggestion: Groceries
+                total: 1
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/review-queue/dismiss:
+    post:
+      tags: [Review and merchants]
+      operationId: dismissReviewMerchant
+      summary: Dismiss a merchant from the review queue
+      description: |
+        Records only the dismissal: writes no merchant memory, touches
+        no transaction and recomputes no aggregate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant]
+              properties:
+                merchant: { type: string, example: Example Groceries Ltd }
+            example: { merchant: Example Groceries Ltd }
+      responses:
+        "200":
+          description: Dismissed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/merchants:
+    post:
+      tags: [Review and merchants]
+      operationId: setMerchant
+      summary: Set a merchant's category (merchant memory correction)
+      description: |
+        External contribution/correction endpoint: records the merchant
+        in merchant memory, rewrites that merchant's transaction
+        categories, and recomputes aggregates for all three person
+        scopes. With `source: "user"`, outgoing rows previously filed
+        as "moved aside" also join spend under the corrected category.
+        An absent or unrecognised `source` defaults to `molang`
+        (documented as-is).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantSetRequest"
+            example:
+              merchant: Example Groceries Ltd
+              category: Groceries
+              source: user
+      responses:
+        "200":
+          description: Merchant recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, merchant, category]
+                properties:
+                  ok: { type: boolean, example: true }
+                  merchant: { type: string, example: Example Groceries Ltd }
+                  category: { type: string, example: Groceries }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/categories:
+    get:
+      tags: [Categories]
+      operationId: listCategories
+      summary: List spending categories
+      description: Built-ins first in canonical order, then customs alphabetically.
+      responses:
+        "200":
+          description: Category list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, categories]
+                properties:
+                  ok: { type: boolean, example: true }
+                  categories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CategoryDef"
+              example:
+                ok: true
+                categories:
+                  - name: Groceries
+                    colour: "var(--cat-groceries)"
+                    icon: shopping-basket
+                    builtin: true
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+    post:
+      tags: [Categories]
+      operationId: createCategory
+      summary: Create a custom category
+      description: |
+        Name must be 1–40 characters, unique case-insensitively, and not
+        a system movement label (Moved aside, Fees, Interest, Transfer).
+        An omitted colour is handed out from the custom palette; an
+        omitted icon defaults to `tag`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryCreateRequest"
+            example: { name: Example Category, icon: tag }
+      responses:
+        "200":
+          description: Category created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, category]
+                properties:
+                  ok: { type: boolean, example: true }
+                  category:
+                    $ref: "#/components/schemas/CategoryDef"
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+    delete:
+      tags: [Categories]
+      operationId: deleteCategory
+      summary: Delete a custom category
+      description: |
+        Built-ins cannot be deleted, and a category still used by
+        merchant memory or transactions cannot be deleted (400).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: Example Category }
+            example: { name: Example Category }
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/settings:
+    get:
+      tags: [Settings]
+      operationId: getSettings
+      summary: Read household settings
+      responses:
+        "200":
+          description: Current settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, settings]
+                properties:
+                  ok: { type: boolean, example: true }
+                  settings:
+                    $ref: "#/components/schemas/AppSettings"
+              example:
+                ok: true
+                settings:
+                  availableFloorMinor: null
+                  overallMonthlyBudgetMinor: null
+                  categoryBudgets: {}
+                  jevEnabled: true
+                  jevLastOutcome: null
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+    put:
+      tags: [Settings]
+      operationId: updateSettings
+      summary: Patch household settings
+      description: |
+        Partial patch: absent keys are left untouched, an explicit
+        `null` clears a floor/budget, a number sets it. Amounts must be
+        whole pence, £0 or more, or the whole patch is rejected (400).
+        Category-budget entries naming a non-category are ignored.
+        Unknown top-level keys are ignored rather than stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsPatch"
+            example:
+              availableFloorMinor: 10000
+              categoryBudgets: { Groceries: 40000 }
+      responses:
+        "200":
+          description: Updated settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, settings]
+                properties:
+                  ok: { type: boolean, example: true }
+                  settings:
+                    $ref: "#/components/schemas/AppSettings"
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/transactions:
+    get:
+      tags: [Transactions]
+      operationId: listTransactions
+      summary: Search and list transactions
+      description: |
+        Rows ordered by effective date descending. All filters combine
+        (AND) and are applied in SQL before the limit. `q` matches
+        merchant, description and the user's own notes (LIKE), and a
+        numeric `q` also matches amounts with the shared amount-search
+        semantics. Amounts are signed minor units in the row's own
+        currency; currencies are never mixed into a total here.
+      parameters:
+        - name: person
+          in: query
+          description: Store person filter. `household` (or any other value) applies no person filter — documented as-is; only a value other than `household` filters.
+          schema: { type: string, example: household }
+        - name: account
+          in: query
+          description: Store account name (person + account is the identity).
+          schema: { type: string, example: Pro }
+        - name: month
+          in: query
+          description: Single month, YYYY-MM.
+          schema: { type: string, pattern: '^\d{4}-\d{2}$', example: "2026-11" }
+        - name: from
+          in: query
+          description: Inclusive range start month, YYYY-MM.
+          schema: { type: string, pattern: '^\d{4}-\d{2}$', example: "2026-10" }
+        - name: to
+          in: query
+          description: Inclusive range end month, YYYY-MM.
+          schema: { type: string, pattern: '^\d{4}-\d{2}$', example: "2026-11" }
+        - name: merchant
+          in: query
+          description: Exact merchant match.
+          schema: { type: string, example: Example Groceries Ltd }
+        - name: q
+          in: query
+          description: Free-text / amount search over merchant, description and user notes.
+          schema: { type: string, example: Example }
+        - name: category
+          in: query
+          description: Resolved category (explicit category, else merchant memory, else movement fallback).
+          schema: { type: string, example: Groceries }
+        - name: ids
+          in: query
+          description: Comma-separated transaction fingerprints (exact match, at most 1000).
+          schema:
+            {
+              type: string,
+              example: "example-fingerprint-1,example-fingerprint-2",
+            }
+        - name: limit
+          in: query
+          description: Row cap. Default 200; clamped to 1–1000, or 1–10000 when a `from`/`to` range is given.
+          schema: { type: integer, default: 200, example: 200 }
+      responses:
+        "200":
+          description: Matching transactions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionsResponse"
+              example:
+                ok: true
+                count: 1
+                transactions:
+                  - id: example-fingerprint-1
+                    person: zonito
+                    account: Pro
+                    date: "2026-11-01 09:30:00"
+                    month: "2026-11"
+                    description: Example Groceries Ltd
+                    merchant: Example Groceries Ltd
+                    amountMinor: -1200
+                    currency: GBP
+                    movement: spend
+                    category: Groceries
+                    userNote: null
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/transactions/note:
+    post:
+      tags: [Transactions]
+      operationId: setTransactionNote
+      summary: Set or clear the user's note on one transaction
+      description: |
+        Keyed by transaction fingerprint. An empty (or whitespace-only,
+        or absent) note deletes the note and returns `note: null`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, example: example-fingerprint-1 }
+                note: { type: string, example: Example note }
+            example: { id: example-fingerprint-1, note: Example note }
+      responses:
+        "200":
+          description: "Note saved (or cleared, with note: null)."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id, note]
+                properties:
+                  ok: { type: boolean, example: true }
+                  id: { type: string, example: example-fingerprint-1 }
+                  note:
+                    type: string
+                    nullable: true
+                    example: Example note
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/accounts:
+    get:
+      tags: [Accounts and aggregates]
+      operationId: getAccounts
+      summary: Per-account insights for the display month
+      description: |
+        One entry per (person, account) identity. `spend` and `moneyIn`
+        are maps keyed by currency code with minor-unit values — each
+        currency reported separately, never summed together. Balances
+        are not here; they ride the snapshot and are joined by the
+        client on (person, account). `balanceSource` is the balance's
+        provenance for that join. With no transactions, `month` is
+        null and `accounts` is empty.
+      responses:
+        "200":
+          description: Account insights.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountsResponse"
+              example:
+                ok: true
+                month: "2026-11"
+                accounts:
+                  - person: zonito
+                    account: Pro
+                    balanceSource: statement
+                    spend: { GBP: 1200 }
+                    moneyIn: { GBP: 100000 }
+                    topCategories:
+                      - { category: Groceries, spend_minor: 1200 }
+                    biggest:
+                      merchant: Example Groceries Ltd
+                      amount_minor: 1200
+                      currency: GBP
+                      date: "2026-11-01"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/aggregates:
+    get:
+      tags: [Accounts and aggregates]
+      operationId: getAggregates
+      summary: Category aggregates (legacy month view or scoped view)
+      description: |
+        Two response shapes on one path, selected by query parameters
+        (documented as-is):
+
+        - **Scoped view** when `scope`, `year` or `all` is present:
+          weighted GBP spend computed from transactions (household at
+          100%; a named person counts Joint rows at 0.5). Supports
+          `scope=month|year|all`, `month=YYYY-MM`, `year=YYYY` and an
+          optional `category=<name>` drill-down that adds per-merchant
+          rows. `spend_minor` values can carry a half (a halved odd
+          Joint row), so they are numbers, not integers.
+        - **Legacy month view** otherwise: precomputed
+          `month_aggregates` for one month. GBP rows in `rows`;
+          every other currency is reported separately in
+          `otherCurrencies`, never mixed into the GBP rows.
+      parameters:
+        - name: person
+          in: query
+          schema:
+            type: string
+            enum: [household, zonito, nikhila]
+            default: household
+            example: household
+        - name: scope
+          in: query
+          description: Scoped view selector.
+          schema: { type: string, enum: [month, year, all], example: month }
+        - name: month
+          in: query
+          description: Legacy month, or the scoped month with `scope=month` (YYYY-MM).
+          schema: { type: string, pattern: '^\d{4}-\d{2}$', example: "2026-11" }
+        - name: year
+          in: query
+          description: Scoped year (YYYY). Its mere presence selects the scoped view.
+          schema: { type: string, pattern: '^\d{4}$', example: "2026" }
+        - name: all
+          in: query
+          description: Presence selects the scoped `all` view (any value).
+          schema: { type: string, example: "1" }
+        - name: category
+          in: query
+          description: Scoped view only — adds `category` and per-merchant `merchants` to the response.
+          schema: { type: string, example: Groceries }
+      responses:
+        "200":
+          description: Aggregates (legacy or scoped shape — see description).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AggregatesLegacyResponse"
+                  - $ref: "#/components/schemas/AggregatesScopedResponse"
+              examples:
+                legacy:
+                  value:
+                    ok: true
+                    person: household
+                    month: "2026-11"
+                    rows:
+                      - category: Groceries
+                        spend_minor: 1200
+                        income_minor: 0
+                        aside_minor: 0
+                        txn_count: 1
+                    otherCurrencies:
+                      - currency: EUR
+                        spend: 500
+                        income: 0
+                        aside: 0
+                        txns: 1
+                scoped:
+                  value:
+                    ok: true
+                    person: household
+                    scope: month
+                    month: "2026-11"
+                    total_minor: 1200
+                    seriesPeriods:
+                      [
+                        "2026-06",
+                        "2026-07",
+                        "2026-08",
+                        "2026-09",
+                        "2026-10",
+                        "2026-11",
+                      ]
+                    seriesLabels: [Jun, Jul, Aug, Sep, Oct, Nov]
+                    rows:
+                      - category: Groceries
+                        spend_minor: 1200
+                        typical_minor: 1000
+                        series: [0, 0, 0, 0, 0, 1200]
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/aggregates/daily:
+    get:
+      tags: [Accounts and aggregates]
+      operationId: getAggregatesDaily
+      summary: Daily spend buckets for the Categories timeline
+      description: |
+        The last `days` days ending at the store's latest transaction
+        date (never the wall clock), GBP spend only, every day returned
+        zero-filled. Category totals are minor units keyed by category
+        name inside each bucket. With no transactions, `start`/`end`/
+        `dataStart` are null and `buckets` is empty.
+      parameters:
+        - name: person
+          in: query
+          schema:
+            type: string
+            enum: [household, zonito, nikhila]
+            default: household
+            example: household
+        - name: days
+          in: query
+          description: Window size in days; clamped to 1–366, invalid values fall back to 30.
+          schema: { type: integer, default: 30, example: 30 }
+      responses:
+        "200":
+          description: Daily buckets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AggregatesDailyResponse"
+              example:
+                ok: true
+                person: household
+                days: 30
+                start: "2026-10-03"
+                end: "2026-11-01"
+                dataStart: "2026-01-01"
+                buckets:
+                  - date: "2026-11-01"
+                    total_minor: 1200
+                    categories: { Groceries: 1200 }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/digest:
+    get:
+      tags: [Digest]
+      operationId: getDigest
+      summary: Digest data for a week (external-reader API)
+      description: |
+        Digest-data API consumed by external readers. `byMonth` is
+        per-person by contract (household rows are the sum of the two
+        people and are excluded so consumers adding people up never
+        double-count). `movedAsideTotal` is GBP; foreign-currency
+        moved-aside totals are reported separately per currency in
+        `movedAsideForeign`, never added into the GBP total.
+      parameters:
+        - name: week
+          in: query
+          description: ISO week `YYYY-Www`. Defaults to the current week. A malformed value yields an empty week set with the month derived from the string — documented as-is.
+          schema: { type: string, example: "2026-W44" }
+      responses:
+        "200":
+          description: Digest payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigestResponse"
+              example:
+                ok: true
+                week: "2026-W44"
+                month: "2026-10"
+                byMonth:
+                  - person: zonito
+                    category: Groceries
+                    spend: 1200
+                    income: 0
+                    aside: 0
+                    txns: 1
+                weekTransactions:
+                  - effective_date: "2026-11-01 09:30:00"
+                    description: Example Groceries Ltd
+                    merchant: Example Groceries Ltd
+                    amount_minor: -1200
+                    currency: GBP
+                    movement: spend
+                    category: Groceries
+                upcomingRegulars:
+                  - merchant: Example Subscription
+                    category: Subscriptions
+                    times: 4
+                    avg_minor: 999.0
+                oneOffs: []
+                movedAsideTotal: 0
+                movedAsideForeign:
+                  - { currency: EUR, total: 500 }
+                unclassifiedMerchants:
+                  - { merchant: Example Groceries Ltd, n: 4 }
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/ask:
+    post:
+      tags: [Ask]
+      operationId: postAsk
+      summary: Ask a natural-language question about the household's money
+      description: |
+        The app pulls the matching records and computes every figure in
+        code; a model (when a gateway key is configured) only writes
+        prose around those figures. With no key, or on any gateway
+        failure, the answer is deterministic (`ai: false`) — the
+        endpoint never errors for gateway problems. A 500 means a store
+        problem.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  {
+                    type: string,
+                    example: "How much did we spend on groceries last month?",
+                  }
+                person:
+                  type: string
+                  description: Current view. Only `zonito`/`nikhila` are honoured; any other value reads as household (documented as-is). A person named in the question itself overrides this.
+                  example: household
+            example:
+              question: "How much did we spend on groceries last month?"
+              person: household
+      responses:
+        "200":
+          description: Answer with its code-computed figures.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskResponse"
+              example:
+                ok: true
+                answer: "You spent £12.00 on groceries last month across 1 transaction."
+                figures:
+                  total: 12.0
+                  count: 1
+                  latest:
+                    {
+                      merchant: Example Groceries Ltd,
+                      date: "2026-11-01",
+                      amount: 12.0,
+                    }
+                  perMonth: null
+                  month: "2026-10"
+                  truncated: false
+                ai: false
+                gateway: { attempted: false, ok: false, provider: null }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "500":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/jev/coach:
+    get:
+      tags: [Jev]
+      operationId: getJevCoach
+      summary: Jev's second opinion for the Coach view (fail-open)
+      description: |
+        Returns the cached or fresh Jev opinion for the person view, or
+        `jev: null` when Jev is off, has nothing to say, or is down with
+        nothing cached — a null Jev means "render nothing", never an
+        error state.
+      parameters:
+        - name: person
+          in: query
+          schema:
+            type: string
+            enum: [household, zonito, nikhila]
+            default: household
+            example: household
+      responses:
+        "200":
+          description: Opinion, or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JevOpinionResponse"
+              examples:
+                withOpinion:
+                  value:
+                    ok: true
+                    jev:
+                      answers:
+                        {
+                          posture: "Hold steady",
+                          lever: "Review subscriptions",
+                        }
+                      at: "2026-11-01T08:00:00Z"
+                      cached: true
+                noOpinion:
+                  value: { ok: true, jev: null }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/jev/subscription:
+    get:
+      tags: [Jev]
+      operationId: getJevSubscription
+      summary: Jev's cached opinion on one subscription (cache only)
+      parameters:
+        - name: merchant
+          in: query
+          required: true
+          schema: { type: string, example: Example Subscription }
+      responses:
+        "200":
+          description: Cached opinion, or null (never a live call).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JevOpinionResponse"
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+    post:
+      tags: [Jev]
+      operationId: postJevSubscription
+      summary: Ask Jev live about one subscription
+      description: |
+        Always a live call when Jev is enabled. When Jev is disabled
+        this returns **200** `{ ok: true, jev: null, reason: "disabled" }`
+        (documented as-is); an unknown subscription is 404; an
+        unreachable Jev is 502 with `jev: "unavailable"`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant]
+              properties:
+                merchant: { type: string, example: Example Subscription }
+            example: { merchant: Example Subscription }
+      responses:
+        "200":
+          description: Fresh opinion, or the disabled verdict.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/JevOpinionResponse"
+                  - type: object
+                    required: [ok, jev, reason]
+                    properties:
+                      ok: { type: boolean, example: true }
+                      jev: { nullable: true, example: null }
+                      reason: { type: string, example: disabled }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "404":
+          $ref: "#/components/responses/GenericError"
+        "502":
+          description: Jev unreachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, jev]
+                properties:
+                  ok: { type: boolean, example: false }
+                  jev: { type: string, example: unavailable }
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/jev/ask:
+    post:
+      tags: [Jev]
+      operationId: postJevAskProxy
+      summary: Blind Jev proxy (external/Molang-facing)
+      description: |
+        Forwards the request body verbatim to
+        `{VARUNA_TUNNEL_URL | http://127.0.0.1:8400}/v1/varuna/jev/ask`
+        and returns the upstream status and body verbatim. Needs no
+        store, so it stays reachable with no store configured. The body
+        shape is the upstream's contract; the app neither validates nor
+        transforms it. The documented request/response schemas are the
+        upstream shapes this app's own client uses (`JevPayload` /
+        the Varuna reply), marked as pass-through.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JevPayload"
+            example:
+              state: { example_fact_gbp: 12.0 }
+              questions:
+                posture:
+                  question: "Which posture fits best right now?"
+                  choices: ["Hold steady", "Ease off"]
+              model: jev-latest
+      responses:
+        "200":
+          description: Upstream reply, forwarded verbatim.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Upstream Varuna reply, forwarded verbatim (shape owned by the upstream).
+                additionalProperties: true
+        "502":
+          description: Upstream unreachable (8s timeout).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, jev, error]
+                properties:
+                  ok: { type: boolean, example: false }
+                  jev: { type: string, example: unavailable }
+                  error: { type: string, example: fetch failed }
+  /api/subscriptions/override:
+    post:
+      tags: [Subscriptions]
+      operationId: setSubscriptionOverride
+      summary: Correct subscription detection for a merchant
+      description: |
+        Keyed by canonical merchant, so name variants share one
+        correction. `mode: null` (or an absent mode) removes the
+        override — the detector's own output returns exactly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant]
+              properties:
+                merchant: { type: string, example: Example Subscription }
+                mode:
+                  type: string
+                  nullable: true
+                  enum: [force, suppress, cancelled, null]
+                  example: cancelled
+            example: { merchant: Example Subscription, mode: cancelled }
+      responses:
+        "200":
+          description: "Override applied (or removed, with mode: null)."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, merchant, mode]
+                properties:
+                  ok: { type: boolean, example: true }
+                  merchant: { type: string, example: Example Subscription }
+                  mode:
+                    type: string
+                    nullable: true
+                    enum: [force, suppress, cancelled, null]
+                    example: cancelled
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/documents:
+    post:
+      tags: [Documents]
+      operationId: uploadDocument
+      summary: File a receipt/document and optionally link it to a transaction
+      description: |
+        The file bytes are base64 in the JSON body (no multipart). The
+        file is filed under the data dir's Documents tree by the naming
+        convention and recorded in the store. **Note:** `amount` here
+        is pounds (a JSON number), unlike the minor units used
+        elsewhere — it is stored as `Math.round(amount * 100)`.
+        Re-uploading identical bytes under the same convention name
+        returns the existing document instead of duplicating it. One
+        document per transaction: attaching to a transaction that
+        already has one detaches the previous document, which stays
+        filed as unmatched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCreateRequest"
+            example:
+              filename: example-receipt.pdf
+              contentBase64: JVBERi0xLjQK
+              type: Receipt
+              merchant: Example Groceries Ltd
+              date: "2026-11-01"
+              amount: 12.0
+      responses:
+        "200":
+          description: Filed document (in the client Doc shape).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, document]
+                properties:
+                  ok: { type: boolean, example: true }
+                  document:
+                    $ref: "#/components/schemas/Doc"
+              example:
+                ok: true
+                document:
+                  id: 00000000-0000-4000-8000-000000000001
+                  merchant: Example Groceries Ltd
+                  date: 1 Nov 2026
+                  amount: 12.0
+                  type: Receipt
+                  path: "PersonalFinance/Documents/Receipts/2026/2026-11/2026-11-01_ExampleGroceriesLtd_£12.00.pdf"
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/documents/detach:
+    post:
+      tags: [Documents]
+      operationId: detachDocument
+      summary: Detach a document from its transaction
+      description: |
+        Clears only the link: the file and its record stay, listed as
+        unmatched. `detached` is the number of links cleared (0 when
+        the transaction had no document — still `ok: true`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [txnId]
+              properties:
+                txnId: { type: string, example: example-fingerprint-1 }
+            example: { txnId: example-fingerprint-1 }
+      responses:
+        "200":
+          description: Detach result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, detached]
+                properties:
+                  ok: { type: boolean, example: true }
+                  detached: { type: integer, example: 1 }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /api/documents/{id}/file:
+    get:
+      tags: [Documents]
+      operationId: getDocumentFile
+      summary: Download/view a filed document's bytes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Document id (UUID) from the snapshot/`Doc.id`.
+          schema:
+            { type: string, example: 00000000-0000-4000-8000-000000000001 }
+      responses:
+        "200":
+          description: The file bytes, served inline with its media type.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "400":
+          $ref: "#/components/responses/GenericError"
+        "404":
+          $ref: "#/components/responses/GenericError"
+        "503":
+          $ref: "#/components/responses/StoreNotConfigured"
+  /:
+    get:
+      tags: [Pages]
+      operationId: getPageHome
+      summary: "Page: Home (/)"
+      description: Server-rendered HTML page (file-based route `src/routes/index.tsx`). A catastrophic SSR failure returns the app's HTML error page with status 500.
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+        "500":
+          description: HTML error page.
+          content:
+            text/html:
+              schema: { type: string }
+  /activity:
+    get:
+      tags: [Pages]
+      operationId: getPageActivity
+      summary: "Page: Activity (/activity)"
+      description: Server-rendered HTML page (file-based route `src/routes/activity.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /calculators:
+    get:
+      tags: [Pages]
+      operationId: getPageCalculators
+      summary: "Page: Calculators (/calculators)"
+      description: Server-rendered HTML page (file-based route `src/routes/calculators.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /cards:
+    get:
+      tags: [Pages]
+      operationId: getPageCards
+      summary: "Page: Cards (/cards)"
+      description: Server-rendered HTML page (file-based route `src/routes/cards.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /categories:
+    get:
+      tags: [Pages]
+      operationId: getPageCategories
+      summary: "Page: Categories (/categories)"
+      description: Server-rendered HTML page (file-based route `src/routes/categories.tsx`). Distinct from `GET /api/categories`.
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /coach:
+    get:
+      tags: [Pages]
+      operationId: getPageCoach
+      summary: "Page: Coach (/coach)"
+      description: Server-rendered HTML page (file-based route `src/routes/coach.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /import:
+    get:
+      tags: [Pages]
+      operationId: getPageImport
+      summary: "Page: Import (/import)"
+      description: Server-rendered HTML page (file-based route `src/routes/import.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /more:
+    get:
+      tags: [Pages]
+      operationId: getPageMore
+      summary: "Page: More (/more)"
+      description: Server-rendered HTML page (file-based route `src/routes/more.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /receipts:
+    get:
+      tags: [Pages]
+      operationId: getPageReceipts
+      summary: "Page: Receipts (/receipts)"
+      description: Server-rendered HTML page (file-based route `src/routes/receipts.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /settings:
+    get:
+      tags: [Pages]
+      operationId: getPageSettings
+      summary: "Page: Settings (/settings)"
+      description: Server-rendered HTML page (file-based route `src/routes/settings.tsx`). Distinct from `GET /api/settings`.
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+  /subscriptions:
+    get:
+      tags: [Pages]
+      operationId: getPageSubscriptions
+      summary: "Page: Subscriptions (/subscriptions)"
+      description: Server-rendered HTML page (file-based route `src/routes/subscriptions.tsx`).
+      responses:
+        "200":
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+components:
+  responses:
+    GenericError:
+      description: Error (see the operation for the exact status).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { ok: false, error: example error }
+    StoreNotConfigured:
+      description: The local store is not configured on this instance (`CHITRAGUPTA_STORE_DIR` unset). Every `/api/*` endpoint except the blind Jev proxy returns this 503 in that state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            ok: false
+            error: "CHITRAGUPTA_STORE_DIR is not set; copy .env.example to .env"
+  schemas:
+    Error:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, example: false }
+        error: { type: string, example: example error }
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, example: true }
+    Person:
+      type: string
+      enum: [household, zonito, nikhila]
+      example: household
+    CategoryDef:
+      type: object
+      required: [name, colour, icon, builtin]
+      properties:
+        name: { type: string, example: Groceries }
+        colour:
+          type: string
+          description: Theme token, hex or oklch colour.
+          example: "var(--cat-groceries)"
+        icon: { type: string, example: shopping-basket }
+        builtin: { type: boolean, example: true }
+    AppSettings:
+      type: object
+      required:
+        [
+          availableFloorMinor,
+          overallMonthlyBudgetMinor,
+          categoryBudgets,
+          jevEnabled,
+          jevLastOutcome,
+        ]
+      properties:
+        availableFloorMinor:
+          type: integer
+          nullable: true
+          description: Available floor in minor units; null means no floor.
+          example: 10000
+        overallMonthlyBudgetMinor:
+          type: integer
+          nullable: true
+          description: Overall monthly budget in minor units; null means no budget.
+          example: 200000
+        categoryBudgets:
+          type: object
+          description: Category name → monthly budget in minor units.
+          additionalProperties: { type: integer }
+          example: { Groceries: 40000 }
+        jevEnabled:
+          type: boolean
+          description: Jev second opinions; on unless explicitly switched off.
+          example: true
+        jevLastOutcome:
+          type: object
+          nullable: true
+          required: [status, at]
+          properties:
+            status: { type: string, enum: [ok, unavailable], example: ok }
+            at: { type: string, example: "2026-11-01T08:00:00Z" }
+    SettingsPatch:
+      type: object
+      description: Partial settings patch. Absent keys are untouched; explicit null clears.
+      properties:
+        availableFloorMinor:
+          type: integer
+          nullable: true
+          minimum: 0
+          example: 10000
+        overallMonthlyBudgetMinor:
+          type: integer
+          nullable: true
+          minimum: 0
+          example: 200000
+        categoryBudgets:
+          type: object
+          additionalProperties:
+            type: integer
+            nullable: true
+            minimum: 0
+          example: { Groceries: 40000 }
+        jevEnabled: { type: boolean, example: true }
+    ReviewQueueItem:
+      type: object
+      required: [merchant, count, examples, detail, suggestion]
+      properties:
+        merchant: { type: string, example: Example Groceries Ltd }
+        count: { type: integer, example: 4 }
+        examples:
+          type: array
+          items: { type: string }
+          example: [Example Groceries Ltd]
+        detail:
+          type: string
+          example: "£12.00 · 4 charges · last 1 Nov"
+        suggestion:
+          type: string
+          nullable: true
+          description: Category the app currently resolves for this merchant, or null when only the movement fallback resolves.
+          example: Groceries
+    ReviewQueueResponse:
+      type: object
+      required: [ok, queue, total]
+      properties:
+        ok: { type: boolean, example: true }
+        queue:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewQueueItem"
+        total:
+          type: integer
+          description: True uncapped queue size (the queue list itself may be capped for display).
+          example: 1
+    IngestStatusResponse:
+      type: object
+      required: [ok, accounts, rebuilds]
+      properties:
+        ok: { type: boolean, example: true }
+        accounts:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                person,
+                account,
+                lastIngest,
+                rowsSeen,
+                rowsAdded,
+                balanceMinor,
+                currency,
+                discrepancy,
+              ]
+            properties:
+              person: { type: string, example: zonito }
+              account: { type: string, example: Pro }
+              lastIngest:
+                type: string
+                nullable: true
+                example: "2026-11-01T08:00:00Z"
+              rowsSeen: { type: integer, example: 120 }
+              rowsAdded: { type: integer, example: 3 }
+              balanceMinor:
+                type: integer
+                nullable: true
+                description: Balance in minor units in its own currency; null when the run recorded none (unknown, never £0).
+                example: 123456
+              currency:
+                type: string
+                nullable: true
+                example: GBP
+              discrepancy:
+                type: string
+                nullable: true
+                example: null
+        rebuilds:
+          type: array
+          items:
+            type: object
+            required: [at, discrepancy]
+            properties:
+              at:
+                type: string
+                nullable: true
+                example: "2026-11-01T08:00:00Z"
+              discrepancy:
+                type: string
+                nullable: true
+                example: null
+    IngestResult:
+      type: object
+      required:
+        [
+          person,
+          account,
+          rowsSeen,
+          rowsAdded,
+          balanceMinor,
+          currency,
+          discrepancy,
+          ok,
+          file,
+        ]
+      properties:
+        person: { type: string, example: zonito }
+        account: { type: string, example: Pro }
+        rowsSeen: { type: integer, example: 120 }
+        rowsAdded: { type: integer, example: 3 }
+        balanceMinor:
+          type: integer
+          nullable: true
+          example: 123456
+        currency:
+          type: string
+          nullable: true
+          example: GBP
+        discrepancy:
+          type: string
+          nullable: true
+          example: null
+        ok:
+          type: boolean
+          description: False when this account's source file could not be read or parsed.
+          example: true
+        file:
+          type: string
+          nullable: true
+          description: The Originals file this account reads (basename), or null when none could be named.
+          example: example-statement.csv
+        error:
+          type: string
+          description: Failure detail when `ok` is false.
+          example: no transactions parsed
+    GatewayStatus:
+      type: object
+      required: [attempted, ok, provider]
+      properties:
+        attempted: { type: boolean, example: false }
+        ok: { type: boolean, example: false }
+        provider:
+          type: string
+          nullable: true
+          description: Gateway provider name, or null when no call was attempted. (Provider spellings are owned by `src/lib/muse.server.ts`.)
+          example: null
+        status:
+          type: integer
+          description: HTTP status of the gateway call, when one was attempted.
+          example: 200
+        error:
+          type: string
+          description: Short gateway error excerpt (keys redacted), on failure.
+          example: example gateway error
+    ClassifySummary:
+      type: object
+      required: [ran, classified, failed, remaining, gateway]
+      properties:
+        ran: { type: boolean, example: false }
+        reason:
+          type: string
+          description: Why nothing ran, when `ran` is false.
+          example: "No gateway API key is set (OPENCODE_API_KEY or MUSE_API_KEY); staying rules-only"
+        classified: { type: integer, example: 0 }
+        failed: { type: integer, example: 0 }
+        remaining: { type: integer, example: 2 }
+        gateway:
+          $ref: "#/components/schemas/GatewayStatus"
+    ClassifySummaryResponse:
+      allOf:
+        - $ref: "#/components/schemas/OkResponse"
+        - $ref: "#/components/schemas/ClassifySummary"
+    IngestRunResponse:
+      type: object
+      required: [ok, results, classification]
+      properties:
+        ok:
+          type: boolean
+          description: False on partial failure (the HTTP status stays 200 — documented as-is).
+          example: true
+        error:
+          type: string
+          description: Present when `ok` is false — names the failed accounts.
+          example: "1 of 4 accounts failed: Pro (example-statement.csv): no transactions parsed"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestResult"
+        classification:
+          nullable: true
+          description: Classification summary, or null when the classification drain itself failed (never fails the ingest).
+          allOf:
+            - $ref: "#/components/schemas/ClassifySummary"
+    MerchantSetRequest:
+      type: object
+      required: [merchant, category]
+      properties:
+        merchant: { type: string, example: Example Groceries Ltd }
+        category: { type: string, example: Groceries }
+        colour:
+          type: string
+          nullable: true
+          example: null
+        icon:
+          type: string
+          nullable: true
+          example: null
+        source:
+          type: string
+          description: One of rules, claude-api, molang, user. Absent or unrecognised values default to molang.
+          example: user
+    CategoryCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+          example: Example Category
+        colour:
+          type: string
+          nullable: true
+          description: Hex, oklch() or var(--token). Omitted/null/empty hands out the next custom palette colour.
+          example: "oklch(0.52 0.14 320)"
+        icon:
+          type: string
+          nullable: true
+          description: One of the shared category icon names. Omitted/null/empty defaults to tag.
+          example: tag
+    TransactionRow:
+      type: object
+      required:
+        [
+          id,
+          person,
+          account,
+          date,
+          month,
+          description,
+          merchant,
+          amountMinor,
+          currency,
+          movement,
+          category,
+          userNote,
+        ]
+      properties:
+        id:
+          type: string
+          description: Transaction fingerprint.
+          example: example-fingerprint-1
+        person: { type: string, example: zonito }
+        account: { type: string, example: Pro }
+        date:
+          type: string
+          description: Effective timestamp as stored (for example "2026-11-01 09:30:00"; the exact separator comes from the stored value).
+          example: "2026-11-01 09:30:00"
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          example: "2026-11"
+        description: { type: string, example: Example Groceries Ltd }
+        merchant: { type: string, example: Example Groceries Ltd }
+        amountMinor:
+          type: integer
+          description: Signed minor units in the row's own currency (negative is money out).
+          example: -1200
+        currency: { type: string, example: GBP }
+        movement:
+          type: string
+          description: Store movement (for example spend, income, aside, transfer — spellings owned by the ingest layer).
+          example: spend
+        category:
+          type: string
+          description: Resolved category (explicit category, else merchant memory, else movement fallback).
+          example: Groceries
+        userNote:
+          type: string
+          nullable: true
+          example: null
+    TransactionsResponse:
+      type: object
+      required: [ok, count, transactions]
+      properties:
+        ok: { type: boolean, example: true }
+        count: { type: integer, example: 1 }
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionRow"
+    AccountsResponse:
+      type: object
+      required: [ok, month, accounts]
+      properties:
+        ok: { type: boolean, example: true }
+        month:
+          type: string
+          nullable: true
+          pattern: '^\d{4}-\d{2}$'
+          description: Display month (YYYY-MM), or null when the store has no transactions.
+          example: "2026-11"
+        accounts:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                person,
+                account,
+                balanceSource,
+                spend,
+                moneyIn,
+                topCategories,
+                biggest,
+              ]
+            properties:
+              person: { type: string, example: zonito }
+              account: { type: string, example: Pro }
+              balanceSource:
+                type: string
+                nullable: true
+                enum: [statement, derived, null]
+                description: Provenance of the balance the client joins from the snapshot.
+                example: statement
+              spend:
+                type: object
+                description: Minor units spent in the display month, keyed by currency code — per currency, never summed together.
+                additionalProperties: { type: integer }
+                example: { GBP: 1200 }
+              moneyIn:
+                type: object
+                description: Minor units in (income/interest) in the display month, keyed by currency code.
+                additionalProperties: { type: integer }
+                example: { GBP: 100000 }
+              topCategories:
+                type: array
+                description: Top 3 GBP categories by spend.
+                items:
+                  type: object
+                  required: [category, spend_minor]
+                  properties:
+                    category: { type: string, example: Groceries }
+                    spend_minor: { type: integer, example: 1200 }
+              biggest:
+                type: object
+                nullable: true
+                required: [merchant, amount_minor, currency, date]
+                properties:
+                  merchant: { type: string, example: Example Groceries Ltd }
+                  amount_minor:
+                    type: integer
+                    description: Absolute minor units in its own currency.
+                    example: 1200
+                  currency: { type: string, example: GBP }
+                  date: { type: string, example: "2026-11-01" }
+    AggregatesLegacyResponse:
+      type: object
+      required: [ok, person, month, rows, otherCurrencies]
+      properties:
+        ok: { type: boolean, example: true }
+        person: { $ref: "#/components/schemas/Person" }
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          example: "2026-11"
+        rows:
+          type: array
+          description: GBP rows only.
+          items:
+            type: object
+            required:
+              [category, spend_minor, income_minor, aside_minor, txn_count]
+            properties:
+              category: { type: string, example: Groceries }
+              spend_minor: { type: integer, example: 1200 }
+              income_minor: { type: integer, example: 0 }
+              aside_minor: { type: integer, example: 0 }
+              txn_count: { type: integer, example: 1 }
+        otherCurrencies:
+          type: array
+          description: Non-GBP totals, one row per currency — never mixed into the GBP rows.
+          items:
+            type: object
+            required: [currency, spend, income, aside, txns]
+            properties:
+              currency: { type: string, example: EUR }
+              spend: { type: integer, example: 500 }
+              income: { type: integer, example: 0 }
+              aside: { type: integer, example: 0 }
+              txns: { type: integer, example: 1 }
+    AggregatesScopedResponse:
+      type: object
+      required:
+        [ok, person, scope, total_minor, seriesPeriods, seriesLabels, rows]
+      properties:
+        ok: { type: boolean, example: true }
+        person: { $ref: "#/components/schemas/Person" }
+        scope: { type: string, enum: [month, year, all], example: month }
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          description: "Present with scope: month."
+          example: "2026-11"
+        year:
+          type: string
+          pattern: '^\d{4}$'
+          description: "Present with scope: year."
+          example: "2026"
+        total_minor:
+          type: number
+          description: Whole weighted GBP spend in scope, including spend whose category folds outside the category list (which `rows` omit). Can carry a half.
+          example: 1200
+        seriesPeriods:
+          type: array
+          items: { type: string }
+          example: ["2026-06", "2026-11"]
+        seriesLabels:
+          type: array
+          items: { type: string }
+          example: [Jun, Nov]
+        rows:
+          type: array
+          items:
+            type: object
+            required: [category, spend_minor, typical_minor, series]
+            properties:
+              category: { type: string, example: Groceries }
+              spend_minor:
+                type: number
+                description: Weighted minor units; can carry a half (a halved odd Joint row).
+                example: 1200
+              typical_minor:
+                type: number
+                nullable: true
+                description: '"Usually": median of the prior 6 months (month scope), median of other years (year scope, needs ≥2 other years), else null.'
+                example: 1000
+              series:
+                type: array
+                items: { type: number }
+                example: [0, 1200]
+        category:
+          type: string
+          description: Present when a `category` drill-down was requested.
+          example: Groceries
+        merchants:
+          type: array
+          description: Present with `category` — per-merchant weighted spend in that category within the scope, sorted descending.
+          items:
+            type: object
+            required: [merchant, spend_minor]
+            properties:
+              merchant: { type: string, example: Example Groceries Ltd }
+              spend_minor: { type: number, example: 1200 }
+    AggregatesDailyResponse:
+      type: object
+      required: [ok, person, days, start, end, dataStart, buckets]
+      properties:
+        ok: { type: boolean, example: true }
+        person: { $ref: "#/components/schemas/Person" }
+        days: { type: integer, example: 30 }
+        start:
+          type: string
+          nullable: true
+          format: date
+          example: "2026-10-03"
+        end:
+          type: string
+          nullable: true
+          format: date
+          example: "2026-11-01"
+        dataStart:
+          type: string
+          nullable: true
+          format: date
+          description: First transaction date in the store.
+          example: "2026-01-01"
+        buckets:
+          type: array
+          items:
+            type: object
+            required: [date, total_minor, categories]
+            properties:
+              date: { type: string, format: date, example: "2026-11-01" }
+              total_minor: { type: integer, example: 1200 }
+              categories:
+                type: object
+                description: Category name → GBP spend in minor units that day.
+                additionalProperties: { type: integer }
+                example: { Groceries: 1200 }
+    DigestResponse:
+      type: object
+      required:
+        [
+          ok,
+          week,
+          month,
+          byMonth,
+          weekTransactions,
+          upcomingRegulars,
+          oneOffs,
+          movedAsideTotal,
+          movedAsideForeign,
+          unclassifiedMerchants,
+        ]
+      properties:
+        ok: { type: boolean, example: true }
+        week: { type: string, example: "2026-W44" }
+        month:
+          type: string
+          description: Month (YYYY-MM) of the week's ISO Monday.
+          example: "2026-10"
+        byMonth:
+          type: array
+          description: Per-person month aggregates (household rows excluded by contract). Minor units, GBP rows.
+          items:
+            type: object
+            required: [person, category, spend, income, aside, txns]
+            properties:
+              person: { type: string, example: zonito }
+              category: { type: string, example: Groceries }
+              spend: { type: integer, example: 1200 }
+              income: { type: integer, example: 0 }
+              aside: { type: integer, example: 0 }
+              txns: { type: integer, example: 1 }
+        weekTransactions:
+          type: array
+          description: Up to 200 transactions in the week, newest first. Amounts are signed minor units in each row's own currency.
+          items:
+            type: object
+            required:
+              [
+                effective_date,
+                description,
+                merchant,
+                amount_minor,
+                currency,
+                movement,
+                category,
+              ]
+            properties:
+              effective_date: { type: string, example: "2026-11-01 09:30:00" }
+              description: { type: string, example: Example Groceries Ltd }
+              merchant: { type: string, example: Example Groceries Ltd }
+              amount_minor: { type: integer, example: -1200 }
+              currency: { type: string, example: GBP }
+              movement: { type: string, example: spend }
+              category:
+                type: string
+                nullable: true
+                example: Groceries
+        upcomingRegulars:
+          type: array
+          description: Merchants with ≥3 spend charges, most frequent first (up to 20). Amounts are per currency only in aggregate here — `avg_minor` averages the merchant's own rows as stored.
+          items:
+            type: object
+            required: [merchant, category, times, avg_minor]
+            properties:
+              merchant: { type: string, example: Example Subscription }
+              category:
+                type: string
+                nullable: true
+                example: Subscriptions
+              times: { type: integer, example: 4 }
+              avg_minor:
+                type: number
+                description: Average charge magnitude in minor units (SQL AVG, so a float).
+                example: 999.0
+        oneOffs:
+          type: array
+          description: The month's largest one-off spends (≤ −£250.00), up to 50.
+          items:
+            type: object
+            required:
+              [effective_date, description, merchant, amount_minor, currency]
+            properties:
+              effective_date: { type: string, example: "2026-11-01 09:30:00" }
+              description: { type: string, example: Example One-off }
+              merchant: { type: string, example: Example One-off }
+              amount_minor: { type: integer, example: -25000 }
+              currency: { type: string, example: GBP }
+        movedAsideTotal:
+          type: integer
+          description: GBP moved-aside total for the month, minor units.
+          example: 0
+        movedAsideForeign:
+          type: array
+          description: Non-GBP moved-aside totals, one row per currency — never added into `movedAsideTotal`.
+          items:
+            type: object
+            required: [currency, total]
+            properties:
+              currency: { type: string, example: EUR }
+              total: { type: integer, example: 500 }
+        unclassifiedMerchants:
+          type: array
+          items:
+            type: object
+            required: [merchant, n]
+            properties:
+              merchant: { type: string, example: Example Groceries Ltd }
+              n: { type: integer, example: 4 }
+    AskFigures:
+      type: object
+      required: [total, count, latest, perMonth, month, truncated]
+      properties:
+        total:
+          type: number
+          description: Total of the matched spend set, in pounds, scoped to the person via shareOf.
+          example: 12.0
+        count: { type: integer, example: 1 }
+        latest:
+          type: object
+          nullable: true
+          required: [merchant, date, amount]
+          properties:
+            merchant: { type: string, example: Example Groceries Ltd }
+            date: { type: string, example: "2026-11-01" }
+            amount: { type: number, example: 12.0 }
+        perMonth:
+          type: array
+          nullable: true
+          description: Present only when the matched set spans months.
+          items:
+            type: object
+            required: [month, total, count]
+            properties:
+              month: { type: string, example: "2026-10" }
+              total: { type: number, example: 12.0 }
+              count: { type: integer, example: 1 }
+        month:
+          type: string
+          nullable: true
+          description: YYYY-MM when the question named a month, else null.
+          example: "2026-10"
+        truncated:
+          type: boolean
+          description: True only when the pull ceiling actually cut the set (totals are then a floor).
+          example: false
+        top:
+          type: array
+          nullable: true
+          description: Present only for "top" answers — the largest matching spends, biggest first.
+          items:
+            type: object
+            required: [merchant, date, amount]
+            properties:
+              merchant: { type: string, example: Example Groceries Ltd }
+              date: { type: string, example: "2026-11-01" }
+              amount: { type: number, example: 12.0 }
+    AskResponse:
+      allOf:
+        - $ref: "#/components/schemas/OkResponse"
+        - type: object
+          required: [answer, figures, ai, gateway]
+          properties:
+            answer:
+              {
+                type: string,
+                example: "You spent £12.00 on groceries last month across 1 transaction.",
+              }
+            figures:
+              $ref: "#/components/schemas/AskFigures"
+            ai:
+              type: boolean
+              description: True when a model wrote the prose; false for the deterministic answer.
+              example: false
+            gateway:
+              $ref: "#/components/schemas/GatewayStatus"
+    JevOpinion:
+      type: object
+      required: [answers, at, cached]
+      properties:
+        answers:
+          type: object
+          description: Question key → chosen answer (each one of the choices offered for that key).
+          additionalProperties: { type: string }
+          example: { posture: "Hold steady" }
+        at:
+          type: string
+          description: ISO time of the live call that produced the answers.
+          example: "2026-11-01T08:00:00Z"
+        cached: { type: boolean, example: true }
+    JevOpinionResponse:
+      type: object
+      required: [ok, jev]
+      properties:
+        ok: { type: boolean, example: true }
+        jev:
+          nullable: true
+          description: Null means "render nothing" (Jev off, nothing to say, or down with nothing cached).
+          allOf:
+            - $ref: "#/components/schemas/JevOpinion"
+    JevPayload:
+      type: object
+      description: "Upstream Varuna Jev request shape, forwarded verbatim by the proxy."
+      required: [state, questions]
+      properties:
+        state:
+          type: object
+          description: Computed facts only (merchant/category names and figures — never raw statement rows, balances or account identifiers).
+          additionalProperties: true
+          example: { example_fact_gbp: 12.0 }
+        questions:
+          type: object
+          additionalProperties:
+            type: object
+            required: [question, choices]
+            properties:
+              question:
+                { type: string, example: "Which posture fits best right now?" }
+              choices:
+                type: array
+                items: { type: string }
+                example: ["Hold steady", "Ease off"]
+        model: { type: string, example: jev-latest }
+    Doc:
+      type: object
+      required: [id, merchant, date, amount, type, path]
+      properties:
+        id: { type: string, example: 00000000-0000-4000-8000-000000000001 }
+        merchant: { type: string, example: Example Groceries Ltd }
+        date:
+          type: string
+          description: Display date label (for example "1 Nov 2026"), as served by the snapshot — not ISO.
+          example: 1 Nov 2026
+        amount:
+          type: number
+          description: Pounds.
+          example: 12.0
+        type:
+          type: string
+          enum: [Receipt, Bill, Invoice, Warranty]
+          example: Receipt
+        txnId:
+          type: string
+          description: Present only when linked to a transaction.
+          example: example-fingerprint-1
+        matchedLine:
+          type: string
+          description: Present on snapshot-matched documents only.
+        path:
+          type: string
+          description: Data-dir-relative path prefixed with PersonalFinance/.
+          example: "PersonalFinance/Documents/Receipts/2026/2026-11/2026-11-01_ExampleGroceriesLtd_£12.00.pdf"
+        warrantyEnds:
+          type: string
+          description: Present only when a warranty end date was recorded.
+          example: "2028-11-01"
+        owner:
+          type: string
+          enum: [zonito, nikhila, joint]
+    DocumentCreateRequest:
+      type: object
+      required: [filename, contentBase64, type, merchant, date, amount]
+      properties:
+        filename:
+          type: string
+          description: Extension must be pdf, jpg, jpeg or png.
+          example: example-receipt.pdf
+        contentBase64:
+          type: string
+          format: byte
+          description: Base64 file bytes. Must decode to 1 byte – 10 MB.
+          example: JVBERi0xLjQK
+        type:
+          type: string
+          enum: [Receipt, Bill, Invoice, Warranty]
+          example: Receipt
+        merchant: { type: string, example: Example Groceries Ltd }
+        date:
+          type: string
+          format: date
+          description: Real calendar date, YYYY-MM-DD.
+          example: "2026-11-01"
+        amount:
+          type: number
+          description: Pounds (not minor units — see the operation description).
+          example: 12.0
+        txnId:
+          type: string
+          nullable: true
+          description: Transaction fingerprint to link to. Absent/empty files the document unmatched.
+          example: example-fingerprint-1
+        warrantyEnds:
+          type: string
+          nullable: true
+          example: "2028-11-01"
