@@ -196,6 +196,10 @@ function dataDirWith(files: Record<string, string>): string {
   for (const [name, text] of Object.entries(files)) {
     writeFileSync(join(originals, name), text);
   }
+  writeFileSync(
+    join(dir, "account-identifiers.json"),
+    JSON.stringify({ zonito: ["Savings-9000000001", "Savings-9000000002"] }),
+  );
   return dir;
 }
 

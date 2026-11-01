@@ -94,7 +94,7 @@ export interface Txn {
   owner: Owner;
   account: string;
   /** Store account name behind the display label ("Pro", "Joint",
-   * "Savings-9000000002") — the label alone is not unique (two savings
+   * "Savings-<digits>") — the label alone is not unique (two savings
    * accounts share one) and repeats across people (both hold a Pro),
    * so account-scoped views key on this plus the owner. Set by both
    * transaction mappers; absent on hand-built fixture rows. */
@@ -239,7 +239,7 @@ export interface AccountInfo {
    *  as-of is `lastDate`. */
   balanceAsOf?: string;
   /** Store identity behind the display name: the ingest account name
-   * ("Pro", "Savings-9000000002") and the store person who holds it
+   * ("Pro", "Savings-<digits>") and the store person who holds it
    * ("zonito" | "nikhila"; Joint's rows are stored under "zonito").
    * Set by the snapshot builder; absent on hand-built fixtures. */
   accountId?: string;

@@ -58,6 +58,10 @@ function fixtureDataDir(
       contents[account as keyof typeof FILES],
     );
   }
+  writeFileSync(
+    join(dir, "account-identifiers.json"),
+    JSON.stringify({ zonito: ["Savings-9000000001", "Savings-9000000002"] }),
+  );
   return dir;
 }
 

@@ -17,6 +17,7 @@ import {
 } from "./parse";
 import { openStoreFile, RULES_VERSION, STORE_FILENAME } from "./store";
 import { CATEGORY_SQL } from "./category-sql";
+import { configuredAccounts } from "./account-identifiers.server";
 
 export type IngestResult = {
   /** Whose account this is — two people can both hold a "Pro". */
@@ -756,7 +757,7 @@ function persistAssignment(
 }
 
 /** "Savings-<digits>" from a savings filename tag, tolerating the
- * leading minus her export carries ("..._en-sg_-900000003_3b9780.csv"). */
+ * leading minus her export carries ("..._en-sg_-<digits>_<hash>.csv"). */
 function savingsAccountFromFilename(file: string): string | null {
   const tokens = file.replace(/\.csv$/i, "").split("_");
   for (let i = tokens.length - 1; i >= 0; i--) {
@@ -764,6 +765,30 @@ function savingsAccountFromFilename(file: string): string | null {
     if (m) return `Savings-${m[1]}`;
   }
   return null;
+}
+
+/**
+ * Zonito's full account list: the non-savings constants, plus his
+ * savings accounts from the two local sources that may carry real
+ * statement identifiers — the identifiers file outside the repo (see
+ * account-identifiers.server.ts) and the store's own persisted file
+ * assignments. Neither source is source control; together they keep
+ * existing stores discovering exactly the accounts they always have,
+ * with no identifier ever committed.
+ */
+export function zonitoAccounts(
+  db: import("better-sqlite3").Database,
+  dataDir: string,
+): IngestAccount[] {
+  const accounts: IngestAccount[] = [...INGEST_ACCOUNTS];
+  const add = (account: string) => {
+    if (account && !accounts.includes(account)) accounts.push(account);
+  };
+  for (const account of configuredAccounts("zonito", dataDir)) add(account);
+  for (const a of persistedAssignments(db).values()) {
+    if (a.person === "zonito" && isSavingsAccount(a.account)) add(a.account);
+  }
+  return accounts;
 }
 
 export function discoverFiles(
@@ -794,7 +819,7 @@ export function discoverFiles(
 
   // Zonito first: a persisted assignment rules; otherwise the standing
   // filename hints claim their file (never one persisted to Nikhila).
-  for (const account of INGEST_ACCOUNTS) {
+  for (const account of zonitoAccounts(db, dataDir)) {
     const mine = [...persisted.entries()].find(
       ([file, a]) =>
         a.person === "zonito" && a.account === account && files.includes(file),
@@ -943,7 +968,7 @@ export function ingestAccounts(
   const assignedZonito = new Set(
     assignments.filter((a) => a.person === "zonito").map((a) => a.account),
   );
-  for (const account of INGEST_ACCOUNTS) {
+  for (const account of zonitoAccounts(db, dataDir)) {
     if (!assignedZonito.has(account)) {
       results.push(ingestAccountSafe(db, "zonito", account, dataDir));
     }

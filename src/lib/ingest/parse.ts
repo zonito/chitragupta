@@ -9,13 +9,19 @@ import { createHash } from "node:crypto";
  */
 export type IngestAccount = string;
 
+/**
+ * Zonito's non-savings accounts. His savings accounts are NOT listed
+ * here: their names carry real statement identifiers, which live in
+ * the local identifiers file outside the repo (see
+ * account-identifiers.server.ts) and in the store's persisted file
+ * assignments. Discovery (ingest.ts) assembles the full Zonito list
+ * from these constants plus those two local sources.
+ */
 export const INGEST_ACCOUNTS: IngestAccount[] = [
   "Main",
   "Pro",
   "USD-Invest",
   "Joint",
-  "Savings-9000000002",
-  "Savings-9000000001",
 ];
 
 export type StatementRow = {

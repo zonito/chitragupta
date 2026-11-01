@@ -69,8 +69,6 @@ export const ACCOUNT_TXN_LABEL: Record<string, string> = {
   Pro: "Revolut Pro · Zonito",
   "USD-Invest": "Revolut USD-Invest · Zonito",
   Joint: "Joint Bills · Revolut",
-  "Savings-9000000002": "Revolut Savings · Zonito",
-  "Savings-9000000001": "Revolut Savings · Zonito",
 };
 
 /**
@@ -80,6 +78,9 @@ export const ACCOUNT_TXN_LABEL: Record<string, string> = {
  * from Zonito's map.
  */
 export function accountTxnLabel(person: string, account: string): string {
+  if (account.startsWith("Savings-") && person !== "nikhila") {
+    return "Revolut Savings · Zonito";
+  }
   if (person === "nikhila") {
     if (account === "Current") return "Revolut Current · Nikhila";
     if (account.startsWith("Savings-")) return "Revolut Savings · Nikhila";

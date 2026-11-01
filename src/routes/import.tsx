@@ -40,8 +40,6 @@ const STATUS_LABEL: Record<string, string> = {
   Pro: "Revolut Pro",
   "USD-Invest": "Revolut USD-Invest",
   Joint: "Joint Bills",
-  "Savings-9000000002": "Revolut Savings 0002",
-  "Savings-9000000001": "Revolut Savings 0001",
 };
 
 /** The snapshot's display label for one person's raw account name —
@@ -49,6 +47,9 @@ const STATUS_LABEL: Record<string, string> = {
  * "Pro", so status rows are matched by person + label, never label
  * alone. */
 function statusLabel(person: string, account: string): string {
+  if (account.startsWith("Savings-")) {
+    return `Revolut Savings ${account.slice(-4)}`;
+  }
   if (person === "nikhila") {
     if (account === "Current") return "Revolut Current";
     if (account.startsWith("Savings-")) {

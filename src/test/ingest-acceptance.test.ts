@@ -12,14 +12,16 @@ const describeAcceptance = DATA_DIR ? describe : describe.skip;
 // 30 Oct 2026): the Pro export gained 3 TfL rows (£12.45 × 3) in the
 // 30 Oct merge, so Pro is 4,265 rows ending at £158.33, the store holds
 // 8,612 rows, and October 2026 GBP spend is £1,952.38.
+// Account names for savings accounts carry real statement
+// identifiers on the real data, so expectations key off row counts
+// and balances, never the literal names.
 const EXPECTED_ROWS: Record<string, number> = {
   Main: 2770,
   Pro: 4265,
   "USD-Invest": 482,
   Joint: 173,
-  "Savings-9000000002": 567,
-  "Savings-9000000001": 355,
 };
+const EXPECTED_SAVINGS_ROWS = [355, 567];
 
 describeAcceptance("acceptance numbers from the real Originals", () => {
   it("ingests 8,612 transactions with per-account counts (REVERTED excluded)", () => {
@@ -31,8 +33,15 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
     const total = mine.reduce((n, r) => n + r.rowsSeen, 0);
     expect(total).toBe(8612);
     for (const r of mine) {
+      if (r.account.startsWith("Savings-")) continue;
       expect(r.rowsSeen).toBe(EXPECTED_ROWS[r.account]);
     }
+    expect(
+      mine
+        .filter((r) => r.account.startsWith("Savings-"))
+        .map((r) => r.rowsSeen)
+        .sort((a, b) => a - b),
+    ).toEqual(EXPECTED_SAVINGS_ROWS);
     const count = (
       db
         .prepare(
@@ -85,7 +94,7 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
     const jan = db
       .prepare(
         `SELECT effective_date, year_month FROM transactions
-         WHERE account = 'Savings-9000000001' AND description = 'Deposit'
+         WHERE account LIKE 'Savings-%' AND description = 'Deposit'
          ORDER BY effective_date LIMIT 1`,
       )
       .get() as { effective_date: string; year_month: string };
@@ -110,8 +119,13 @@ describeAcceptance("acceptance numbers from the real Originals", () => {
     expect(byAccount["Main"]!.balanceMinor).toBe(14274);
     expect(byAccount["Pro"]!.balanceMinor).toBe(15833);
     expect(byAccount["Joint"]!.balanceMinor).toBe(0);
-    expect(byAccount["Savings-9000000002"]!.balanceMinor).toBe(80563);
-    expect(byAccount["Savings-9000000001"]!.balanceMinor).toBe(27164);
+    const savingsByRows = new Map(
+      Object.values(byAccount)
+        .filter((r) => r.account.startsWith("Savings-"))
+        .map((r) => [r.rowsSeen, r.balanceMinor]),
+    );
+    expect(savingsByRows.get(567)).toBe(80563);
+    expect(savingsByRows.get(355)).toBe(27164);
     const usd = db
       .prepare(
         "SELECT DISTINCT currency AS c FROM transactions WHERE account = 'USD-Invest'",

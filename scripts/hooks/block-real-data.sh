@@ -42,6 +42,21 @@ for f in "$@"; do
   if grep -Iq -E '(OPENCODE_API_KEY|MUSE_API_KEY)[[:space:]]*=[[:space:]]*[^[:space:]#]{8,}' "$f" 2>/dev/null; then
     echo "block-real-data: API key assignment with a value found in: $f" >&2; fail=1
   fi
+  # Real account identifiers (AH-108): savings account names carrying
+  # real digits, UK sort-code shapes, and 8-digit numbers in account
+  # context must never land in code or fixtures. The synthetic fixture
+  # range (Savings-90000000xx) is the documented exception, mirroring
+  # the short synthetic keys above; real identifiers live only in the
+  # local account-identifiers.json outside the repo.
+  if grep -Ioh -E 'Savings-[0-9]{6,}' "$f" 2>/dev/null | grep -vq -E '^Savings-9000[0-9]+$'; then
+    echo "block-real-data: savings account identifier found in: $f" >&2; fail=1
+  fi
+  if grep -Iq -E '(^|[^0-9])[0-9]{2}-[0-9]{2}-[0-9]{2}([^0-9]|$)' "$f" 2>/dev/null; then
+    echo "block-real-data: sort-code-shaped string found in: $f" >&2; fail=1
+  fi
+  if grep -Ihi -E 'account[^[:cntrl:]]{0,40}[0-9]{8}' "$f" 2>/dev/null | grep -v 'Savings-9000' | grep -q .; then
+    echo "block-real-data: account-number-shaped string in account context found in: $f" >&2; fail=1
+  fi
 done
 
 exit "$fail"

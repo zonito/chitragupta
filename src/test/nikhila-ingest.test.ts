@@ -395,6 +395,10 @@ function syntheticDir(extra: Record<string, string>): string {
   for (const [name, contents] of Object.entries(files)) {
     writeFileSync(join(originals, name), contents);
   }
+  writeFileSync(
+    join(dir, "account-identifiers.json"),
+    JSON.stringify({ zonito: ["Savings-9000000001", "Savings-9000000002"] }),
+  );
   return dir;
 }
 

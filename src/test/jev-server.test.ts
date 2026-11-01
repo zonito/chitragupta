@@ -89,6 +89,10 @@ function seedStore(): string {
     join(originals, "savings-9000000001.csv"),
     'Date,Description,Money Out,Money In,Balance\n"Oct 6, 2026",Deposit,,50.00,50.00\n',
   );
+  writeFileSync(
+    join(dataDir, "account-identifiers.json"),
+    JSON.stringify({ zonito: ["Savings-9000000001", "Savings-9000000002"] }),
+  );
   const storeDir = mkdtempSync(join(tmpdir(), "chitra-jev-store-"));
   const db = openStore(storeDir);
   const results = ingestAll(db, dataDir);

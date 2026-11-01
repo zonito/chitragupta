@@ -59,14 +59,16 @@ const ACCOUNT_LIST_LABEL: Record<string, string> = {
   Pro: "Revolut Pro",
   "USD-Invest": "Revolut USD-Invest",
   Joint: "Joint Bills",
-  "Savings-9000000002": "Revolut Savings 0002",
-  "Savings-9000000001": "Revolut Savings 0001",
 };
 
-/** Account-list label for one person's account. Nikhila's names derive
- * from her account names (savings keep their last four digits, so her
- * account reads "Revolut Savings 0003"); Zonito's use the fixed map. */
+/** Account-list label for one person's account. Names derive from the
+ * account names (savings keep their last four digits, so a savings
+ * account reads "Revolut Savings <last4>"); Zonito's non-savings
+ * accounts use the fixed map above. */
 function accountListLabel(person: string, account: string): string {
+  if (account.startsWith("Savings-")) {
+    return `Revolut Savings ${account.slice(-4)}`;
+  }
   if (person === "nikhila") {
     if (account === "Current") return "Revolut Current";
     if (account.startsWith("Savings-")) {
