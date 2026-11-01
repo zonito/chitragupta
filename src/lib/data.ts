@@ -199,10 +199,23 @@ export interface AccountInfo {
   stale: boolean;
   /** Balance in minor units recorded by the selected ingest run, or
    *  null when that run recorded none (older stores, failed runs). A
-   *  null balance is unknown — never render it as £0.00. */
+   *  null balance is unknown — never render it as £0.00. When the
+   *  selected run recorded none but the account has a balance anchor
+   *  (see ingest/balance-anchors.ts), this carries the DERIVED
+   *  balance instead and balanceSource says so. */
   balanceMinor: number | null;
   /** Currency of balanceMinor; null exactly when balanceMinor is null. */
   currency: string | null;
+  /** Where balanceMinor came from: "statement" (recorded by the
+   *  selected ingest run), "derived" (walked forward from a balance
+   *  anchor), or null when there is no balance at all. Absent on
+   *  hand-built fixtures. */
+  balanceSource?: "statement" | "derived" | null;
+  /** For a derived balance, the date it is as of: the account's
+   *  latest transaction date, or the anchor date when no row
+   *  postdates the anchor. Absent for statement balances, whose
+   *  as-of is `lastDate`. */
+  balanceAsOf?: string;
   /** Store identity behind the display name: the ingest account name
    * ("Pro", "Savings-9000000002") and the store person who holds it
    * ("zonito" | "nikhila"; Joint's rows are stored under "zonito").
@@ -664,7 +677,9 @@ export interface AvailableSummary {
 /**
  * What is available to spend, per person view, from the snapshot's
  * account balances (each recorded by that account's latest real ingest
- * run). Household includes every account, Joint included; an
+ * run, or derived from a balance anchor when no run could record one —
+ * balanceSource on the account says which, and a derived balance counts
+ * exactly like a recorded one). Household includes every account, Joint included; an
  * individual's view is their own accounts only — Joint money is the
  * household's, so it never inflates one person's headline. Accounts
  * whose balance is unknown are listed in the breakdown but excluded
@@ -699,7 +714,13 @@ export function availableFor(person: Person): AvailableSummary {
     .map(([currency, minor]) => ({ currency, total: minor / 100 }))
     .filter((f) => f.total !== 0)
     .sort((a, b) => a.currency.localeCompare(b.currency));
-  const asOf = included.reduce((m, a) => (a.lastDate > m ? a.lastDate : m), "");
+  // The view's as-of is the freshest balance date across accounts:
+  // a derived balance speaks as of its own date (balanceAsOf), a
+  // statement balance as of its run's statement date (lastDate).
+  const asOf = included.reduce((m, a) => {
+    const d = a.balanceAsOf ?? a.lastDate;
+    return d > m ? d : m;
+  }, "");
   return { accounts, gbpTotal: anyBalance ? gbpMinor / 100 : null, foreign, asOf };
 }
 

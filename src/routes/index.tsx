@@ -139,6 +139,7 @@ export function AvailableBreakdown({ person }: { person: Person }) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {a.stale && <Chip tone="warn">Stale</Chip>}
+            {a.balanceSource === "derived" && <Chip>Derived</Chip>}
             <span className="num text-body">
               {a.balanceMinor !== null ? formatMoney(a.balanceMinor / 100, a.currency) : "Not recorded"}
             </span>

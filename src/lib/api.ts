@@ -41,6 +41,7 @@ import {
   updateSettings,
   type SettingsPatch,
 } from "./ingest/settings";
+import { balanceSourceFor } from "./ingest/balance-anchors";
 import { answerAsk } from "./ask.server";
 import { parseAmountQuery } from "./amount-search";
 import { coachJevOpinion, subJevAsk, subJevCached } from "./jev.server";
@@ -339,7 +340,10 @@ function aggregatesDaily(db: Database.Database, url: URL): Response {
  * statement dates are NOT here: they ride the snapshot's selected
  * ingest runs, and the client joins on (person, account), so an
  * account card's balance always agrees with Home's Available total
- * and /api/ingest/status by construction.
+ * and /api/ingest/status by construction. Each entry DOES carry the
+ * balance's provenance (balanceSource, from the snapshot's own
+ * rules: "statement" | "derived" from a balance anchor | null), so
+ * an API consumer labels the joined balance exactly as the app does.
  */
 function accountsInsights(db: Database.Database): Response {
   const monthRow = db
@@ -437,6 +441,7 @@ function accountsInsights(db: Database.Database): Response {
     return {
       person,
       account,
+      balanceSource: balanceSourceFor(db, person, account),
       spend: flow.spend,
       moneyIn: flow.moneyIn,
       topCategories,

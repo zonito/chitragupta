@@ -22,6 +22,7 @@ import { accountTxnLabel, timeOfDay } from "./txn-map";
 import { displayMonthKey } from "./calendar.server";
 import { listCategories } from "./ingest/categories";
 import { getSettings } from "./ingest/settings";
+import { deriveBalance } from "./ingest/balance-anchors";
 import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
 import { detectIncomeRegulars } from "./forecast";
 import {
@@ -642,18 +643,41 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const maxStarted = runRows.reduce((m, r) => (r.started_at > m ? r.started_at : m), "");
   const accounts: AccountInfo[] = runRows.map((r) => {
     const chosen = contentByAccount.get(`${r.person}|${r.account}`) ?? r;
+    // The balance rides the SAME selected run as last/added: a later
+    // failed run (balance NULL) never poses as the account's state,
+    // and a run that recorded no balance leaves it unknown (null),
+    // never a fabricated zero.
+    let balanceMinor = chosen.balance_minor ?? null;
+    let currency = chosen.currency ?? null;
+    let balanceSource: AccountInfo["balanceSource"] =
+      balanceMinor !== null ? "statement" : null;
+    let balanceAsOf: string | undefined;
+    if (balanceMinor === null) {
+      // No run could record a balance — the account's exports carry
+      // no balance column (Barclays current account). A balance
+      // anchor (a statement end balance, walked forward over the
+      // store's transactions) supplies a derived one, computed here
+      // at snapshot build time so Home, Cards and the API read the
+      // same figure. Accounts WITH a recorded balance never reach
+      // this: their anchors, if any, are ignored entirely.
+      const derived = deriveBalance(db, r.person, r.account);
+      if (derived) {
+        balanceMinor = derived.balanceMinor;
+        currency = derived.currency;
+        balanceSource = "derived";
+        balanceAsOf = derived.asOf;
+      }
+    }
     return {
       name: accountListLabel(r.person, r.account),
       owner: r.account === "Joint" ? "joint" : (r.person as Owner),
       last: shortDayLabel(chosen.started_at.slice(0, 10)),
       lastDate: chosen.started_at.slice(0, 10),
       added: chosen.rows_added,
-      // The balance rides the SAME selected run as last/added: a later
-      // failed run (balance NULL) never poses as the account's state,
-      // and a run that recorded no balance leaves it unknown (null),
-      // never a fabricated zero.
-      balanceMinor: chosen.balance_minor ?? null,
-      currency: chosen.currency ?? null,
+      balanceMinor,
+      currency,
+      balanceSource,
+      ...(balanceAsOf ? { balanceAsOf } : {}),
       accountId: r.account,
       person: r.person,
       stale:

@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { seedBalanceAnchors } from "./balance-anchors";
 
 export const SCHEMA_VERSION = 2;
 
@@ -89,6 +90,17 @@ CREATE TABLE IF NOT EXISTS subscription_overrides (
   source TEXT NOT NULL DEFAULT 'user',
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS balance_anchors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person TEXT NOT NULL,
+  account TEXT NOT NULL,
+  anchor_date TEXT NOT NULL,
+  balance_minor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_balance_anchors_key
+  ON balance_anchors (person, account, anchor_date);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -139,6 +151,11 @@ export function openStoreFile(path: string): Database.Database {
       "ALTER TABLE ingest_runs ADD COLUMN person TEXT NOT NULL DEFAULT 'zonito'",
     );
   }
+  // Balance anchors (statement balances for accounts whose exports
+  // carry no balance column) are seeded on open: idempotent, and the
+  // table itself is outside the ingest swap set, so the seed — like
+  // any anchor added later — survives rebuilds by construction.
+  seedBalanceAnchors(db);
   const row = db
     .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
     .get() as { value: string } | undefined;

@@ -120,6 +120,7 @@ function AccountInsightCard({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {info.stale && <Chip tone="warn">Stale</Chip>}
+          {info.balanceSource === "derived" && <Chip>Derived</Chip>}
           <span className="num text-body font-semibold">
             {info.balanceMinor !== null
               ? formatMoney(info.balanceMinor / 100, info.currency)
