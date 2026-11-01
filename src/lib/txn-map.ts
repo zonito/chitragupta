@@ -25,6 +25,21 @@ export const timeOfDay = (iso: string): string | undefined => {
   return hhmm === "00:00" ? undefined : hhmm;
 };
 
+/**
+ * The full time of day recorded on a store timestamp, "HH:MM:SS",
+ * for the detail sheet — or undefined when the stamp carries no
+ * seconds or is exactly 00:00:00 (the date-only placeholder). A
+ * stamp like 00:00:29 is a genuine recorded time (a payment landing
+ * just after midnight), so it survives here even though timeOfDay
+ * reads its HH:MM as the placeholder and hides it in the list.
+ */
+export const timeOfDayFull = (iso: string): string | undefined => {
+  const match = /[T ](\d{2}):(\d{2}):(\d{2})/.exec(iso);
+  if (!match) return undefined;
+  const full = `${match[1]}:${match[2]}:${match[3]}`;
+  return full === "00:00:00" ? undefined : full;
+};
+
 export interface ApiTxnRow {
   id: string;
   person: string;
@@ -85,6 +100,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
   }
   const date = row.date.slice(0, 10);
   const time = timeOfDay(row.date);
+  const timeFull = timeOfDayFull(row.date);
   return {
     id: row.id,
     date,
@@ -99,6 +115,7 @@ export function apiTxnToTxn(row: ApiTxnRow): Txn | null {
     kind: row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : row.movement === "income" ? "income" : "transfer",
     ...(row.amountMinor > 0 ? { incoming: true } : {}),
     ...(time ? { time } : {}),
+    ...(timeFull ? { timeFull } : {}),
     ...(row.description && row.description !== row.merchant ? { note: row.description } : {}),
     ...(row.userNote ? { userNote: row.userNote } : {}),
   };

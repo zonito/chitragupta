@@ -18,7 +18,7 @@ import {
   type Txn,
   type UpcomingPayment,
 } from "./data";
-import { accountTxnLabel, timeOfDay } from "./txn-map";
+import { accountTxnLabel, timeOfDay, timeOfDayFull } from "./txn-map";
 import { displayMonthKey } from "./calendar.server";
 import { listCategories } from "./ingest/categories";
 import { getSettings } from "./ingest/settings";
@@ -240,6 +240,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     }
     const kind = row.movement === "spend" ? "spend" : row.movement === "aside" ? "aside" : row.movement === "income" ? "income" : "transfer";
     const time = timeOfDay(row.effective_date);
+    const timeFull = timeOfDayFull(row.effective_date);
     txns.push({
       id: row.fingerprint,
       date: day10(row.effective_date),
@@ -260,6 +261,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       // decorating them, so neither path invents an fx string.
       ...(row.amount_minor > 0 ? { incoming: true } : {}),
       ...(time ? { time } : {}),
+      ...(timeFull ? { timeFull } : {}),
       ...(row.description && row.description !== row.merchant
         ? { note: row.description }
         : {}),

@@ -562,6 +562,10 @@ export function Activity() {
                   <div className="mt-1 flex items-center gap-1.5">
                     <CategoryChip category={t.category} />
                     {person === "household" && <span className="text-caption text-muted-foreground">{ownerName(t.owner)}</span>}
+                    {/* The recorded time of day (HH:MM), when the row
+                        carries one — date-only rows (Barclays) show
+                        nothing, never a fake 00:00. */}
+                    {t.time && <span className="num text-caption text-muted-foreground">{t.time}</span>}
                   </div>
                   </div>
                 </div>
@@ -600,7 +604,7 @@ export function Activity() {
             </div>
             <dl className="text-body">
               {[
-                ["Date", dayLabel(openTxn.day, true, openTxn.monthKey) + (openTxn.time ? ` · ${openTxn.time}` : "")],
+                ["Date", dayLabel(openTxn.day, true, openTxn.monthKey) + (openTxn.timeFull || openTxn.time ? ` · ${openTxn.timeFull ?? openTxn.time}` : "")],
                 ["Account", openTxn.account],
                 ["Who", personLabel(openTxn.owner)],
                 ...(openTxn.fx ? [["Original", openTxn.fx]] : []),

@@ -117,6 +117,11 @@ export interface Txn {
    * date-only placeholder (see timeOfDay in txn-map); shown verbatim
    * in the detail sheet, never timezone-converted. */
   time?: string;
+  /** The recorded time to the second, "HH:MM:SS" (see timeOfDayFull
+   * in txn-map), when the stored timestamp carries seconds and is
+   * not exactly 00:00:00. The detail sheet prefers this over `time`;
+   * the list keeps the shorter `time`. Set by both mappers. */
+  timeFull?: string;
 }
 
 export interface UpcomingPayment {
