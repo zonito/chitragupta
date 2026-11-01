@@ -57,7 +57,8 @@ export function Activity() {
   const [cat, setCat] = useState("all");
   // The selected period: a month key ("2026-10") or a range preset
   // ("preset:last12" — This quarter / Year to date / Last 12 months,
-  // anchored to the store's latest data month, not the wall clock).
+  // anchored to the display month: the calendar month once begun,
+  // else the store's latest data month).
   const [period, setPeriod] = useState<string>(() => currentMonthKey());
   const [open, setOpen] = useState<Txn | null>(null);
   // Account scope from the URL (set by the Cards account cards). Read

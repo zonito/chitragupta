@@ -19,6 +19,7 @@ import {
   type UpcomingPayment,
 } from "./data";
 import { accountTxnLabel, timeOfDay } from "./txn-map";
+import { displayMonthKey } from "./calendar.server";
 import { listCategories } from "./ingest/categories";
 import { getSettings } from "./ingest/settings";
 import { applySubscriptionOverrides, detectSubscriptions } from "./subscriptions";
@@ -186,9 +187,19 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     .all() as { year_month: string }[];
   if (monthRows.length === 0) return { ...EMPTY_SNAPSHOT, configured: true, docs, settings };
   const current = monthRows[0]!.year_month;
-  const included = monthRows.slice(0, 2).map((r) => r.year_month);
+  // The display month: the Europe/London calendar month once it has
+  // begun, even when no statement has landed in it yet — the app's
+  // "current month" for presentation. Computations over the data
+  // itself (typicals, sparks, the detectors, new merchants) stay
+  // anchored to `current`, the latest DATA month; only the
+  // presentation anchors follow the display month: the snapshot's
+  // monthKey, the month list, the transaction window below, the
+  // Money-in feed's month, the monthly history's range end and the
+  // Coming-up window.
+  const display = displayMonthKey(current);
+  const included = [...new Set([display, shiftMonth(display, -1)])];
 
-  // Transactions for the current and previous month, GBP only (foreign
+  // Transactions for the display month and the month before it, GBP only (foreign
   // currency is reported per-currency by /api/aggregates, never mixed in).
   // Newest first — including within a day, where effective_date may
   // carry a time — matching /api/transactions' ORDER BY, so a snapshot
@@ -212,11 +223,12 @@ function buildFromDb(db: Database.Database): DataSnapshot {
     const amount = Math.abs(row.amount_minor) / 100;
     const day = Number(day10(row.effective_date).slice(8, 10));
     if (row.movement === "income") {
-      // The Home "Money in" feed derivation — unchanged: current-month
-      // positive income only. The row ALSO falls through into txns
+      // The Home "Money in" feed derivation: display-month positive
+      // income only — a display month with no statements yet simply
+      // yields an empty feed. The row ALSO falls through into txns
       // below (kind "income"), mirroring apiTxnToTxn, so Activity
       // lists income for snapshot months exactly as for fetched ones.
-      if (row.year_month === current && row.amount_minor > 0) {
+      if (row.year_month === display && row.amount_minor > 0) {
         income.push({
           day,
           amount,
@@ -312,10 +324,19 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   const monthly: DataSnapshot["monthly"] = (() => {
     const aggMonths = [...new Set(aggRows.map((r) => r.year_month))].sort();
     if (aggMonths.length === 0) return { months: [], series: {} };
+    // The range ends at the display month: a calendar month that has
+    // begun but has no aggregates yet rides as an honest zero month,
+    // so the charts' current bucket is the display month. (The
+    // aside/flow series align to this same range and gain the same
+    // zero month by construction.)
+    const rangeEnd =
+      display > aggMonths[aggMonths.length - 1]!
+        ? display
+        : aggMonths[aggMonths.length - 1]!;
     const months: string[] = [];
     for (let k = aggMonths[0]!; ; k = shiftMonth(k, 1)) {
       months.push(k);
-      if (k === aggMonths[aggMonths.length - 1]) break;
+      if (k === rangeEnd) break;
     }
     const minor = new Map<string, number>();
     for (const r of aggRows) {
@@ -533,7 +554,7 @@ function buildFromDb(db: Database.Database): DataSnapshot {
   // which the detector derives from its latest cluster charge (Joint
   // account → "joint", else that charge's person). A yearly sub due
   // next month appears here exactly like a monthly one.
-  const nextMonthKey = shiftMonth(current, 1);
+  const nextMonthKey = shiftMonth(display, 1);
   const [nextYear, nextMonth] = nextMonthKey.split("-").map(Number) as [number, number];
   const windowEnd = new Date(Date.UTC(nextYear, nextMonth, 0)).toISOString().slice(0, 10);
   const upcoming: UpcomingPayment[] = subs
@@ -649,11 +670,18 @@ function buildFromDb(db: Database.Database): DataSnapshot {
 
   return {
     configured: true,
-    monthKey: current,
+    monthKey: display,
     latestDate: day10(latestDate),
-    // Every month in the store, newest first — the picker and Ask route
-    // older months to /api/transactions; txns below stay at two months.
-    months: monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),
+    // Every month in the store, newest first, with the display month
+    // at the head when it has no rows yet (so the pickers offer it) —
+    // the picker and Ask route older months to /api/transactions;
+    // txns below stay at two months.
+    months: [
+      ...(display !== current
+        ? [{ key: display, label: monthLabel(display) }]
+        : []),
+      ...monthRows.map((r) => ({ key: r.year_month, label: monthLabel(r.year_month) })),
+    ],
     txns,
     income,
     incomeRegulars,

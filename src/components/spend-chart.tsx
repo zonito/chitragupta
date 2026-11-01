@@ -57,7 +57,8 @@ export interface SpendTimelineSectionProps {
  * Monthly-family presets bucket `monthly` locally (no fetch); only the
  * Daily preset fetches, lazily, the first time it is chosen — 60 days,
  * so the comparison line reads the previous 30 from the same response.
- * "Current" is anchored to the data's latest month throughout.
+ * "Current" is anchored to the display month throughout (the
+ * monthly history's last month).
  */
 export function SpendTimelineSection({
   title,

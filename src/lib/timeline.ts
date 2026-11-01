@@ -11,7 +11,9 @@ import { gbp, SUBS, type Person } from "./data";
  * The Daily preset is the one exception: days live only in
  * transactions, so it fetches /api/aggregates/daily, which resolves
  * categories in recomputeAggregates' order. "Current" everywhere is
- * anchored to the store's latest data month, never the wall clock.
+ * anchored to the display month: the monthly history's range ends
+ * there (a begun calendar month rides as a zero month), never at a
+ * raw wall-clock month beyond it.
  */
 
 export type ChartPreset = "daily" | "monthly" | "quarterly" | "ytd" | "oneyear" | "all";
@@ -150,9 +152,10 @@ export function quarterlyBuckets(data: MonthlyRows, count: number | null = 12): 
   return bucketsFromQuarters(data, count === null ? quarters : quarters.slice(-count));
 }
 
-/** Current calendar year by month, Jan → the latest data month. The
- * year is the latest month's year (the store's "now"), so a store
- * whose data ends in March shows Jan–Mar, whatever the wall clock says. */
+/** Current calendar year by month, Jan → the history's last month.
+ * The year is that month's year (the store's "now"): the history ends
+ * at the display month, so a begun calendar month shows as a zero
+ * month at the end. */
 export function ytdBuckets(data: MonthlyRows): ChartBucket[] {
   const latest = data.months[data.months.length - 1];
   if (!latest) return [];

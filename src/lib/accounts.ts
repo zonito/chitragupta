@@ -22,7 +22,7 @@ export interface AccountInsight {
 }
 
 export interface AccountsData {
-  month: string | null; // the store's latest month, YYYY-MM
+  month: string | null; // the display month, YYYY-MM
   accounts: AccountInsight[];
 }
 

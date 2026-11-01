@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, flowWindowFor, type IncomeEntry, type Person } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, ALL_TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, flowWindowFor, type IncomeEntry, type Person } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
@@ -544,7 +544,11 @@ export function Index() {
   // No data at all: one honest empty state instead of five £0 panels
   // and captions with a dangling month ("Spent in ", "Coming up · ").
   // The month-interpolating captions below only render past this guard.
-  if (!currentMonthKey() || TXNS.length === 0) {
+  // The guard reads ALL_TXNS (the whole loaded window), not TXNS: in a
+  // display month that has begun but has no statements yet, the
+  // display month's own list is legitimately empty while the app has
+  // plenty of data — that is a £0 month, not the empty state.
+  if (!currentMonthKey() || ALL_TXNS.length === 0) {
     return (
       <Panel>
         <Label>Home</Label>

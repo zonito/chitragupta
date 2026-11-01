@@ -1,6 +1,7 @@
 /**
- * Activity period presets: ranges anchored to the store's latest
- * data month (never the wall clock, so fixtures and quiet weeks
+ * Activity period presets: ranges anchored to the display month
+ * (the calendar month once begun, else the store's latest data
+ * month — the snapshot's monthKey, so fixtures and quiet weeks
  * behave). A preset resolves to an inclusive month range; the server
  * expresses it with from/to month params and the client merges the
  * fetched months with any snapshot months inside the range,
@@ -52,7 +53,7 @@ export interface PeriodRange {
 
 /**
  * The month range a preset covers when anchored at `anchor` (the
- * store's latest data month, YYYY-MM):
+ * display month, YYYY-MM):
  * - quarter: the calendar quarter containing the anchor, from its
  *   first month to the anchor (Oct 2026 → Oct only, the quarter so far)
  * - ytd: January of the anchor's year to the anchor

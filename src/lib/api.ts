@@ -45,6 +45,7 @@ import { answerAsk } from "./ask.server";
 import { parseAmountQuery } from "./amount-search";
 import { coachJevOpinion, subJevAsk, subJevCached } from "./jev.server";
 import { canonicalMerchant, type SubscriptionOverrideMode } from "./subscriptions";
+import { displayMonthKey } from "./calendar.server";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -328,8 +329,9 @@ function aggregatesDaily(db: Database.Database, url: URL): Response {
  * GET /api/accounts.
  *
  * One entry per (person, account) identity in the store, with the
- * store's LATEST month's figures computed from transactions
- * server-side: spend and money-in summed per currency (never mixed —
+ * DISPLAY month's figures computed from transactions server-side
+ * (the calendar month once it has begun — a month with no statements
+ * yet reports honest zeros): spend and money-in summed per currency (never mixed —
  * a multi-currency account reports each currency separately), the top
  * 3 GBP categories (recomputeAggregates' resolution order, folded to
  * the live category list), and the biggest single payment (largest by
@@ -344,7 +346,7 @@ function accountsInsights(db: Database.Database): Response {
     .prepare("SELECT MAX(year_month) AS m FROM transactions")
     .get() as { m: string | null };
   if (!monthRow.m) return json({ ok: true, month: null, accounts: [] });
-  const month = monthRow.m;
+  const month = displayMonthKey(monthRow.m);
 
   const identities = db
     .prepare(

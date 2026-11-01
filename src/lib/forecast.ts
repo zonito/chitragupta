@@ -17,8 +17,9 @@ import { canonicalMerchant } from "./subscriptions";
 
 /**
  * Month-end forecast and safe-to-spend: a deterministic projection of
- * the current view's Available balance to the end of the store's
- * current month. No AI and no invented figures — every input is a fact
+ * the current view's Available balance to the end of the display
+ * month (the calendar month once begun, else the latest data month).
+ * No AI and no invented figures — every input is a fact
  * the app already holds:
  *
  * - the start is the Available card's own GBP total for the view;
@@ -338,7 +339,10 @@ export interface PaceResult {
  * rows in no subscription cluster, one-offs excluded (a one-off is
  * tagged precisely so it never skews a run rate) — per elapsed day,
  * elapsed being the days from the month's start to the latest data
- * date. Under 5 elapsed days the month's own rate is mostly noise, so
+ * date. A month the data has not reached yet (a display month ahead
+ * of the statements) has zero elapsed days: its own rate is zero and
+ * the blend below falls back to the previous complete month's pace.
+ * Under 5 elapsed days the month's own rate is mostly noise, so
  * it blends 50/50 with the previous complete month's daily
  * non-regular rate (same exclusions, over that month's full length).
  */
@@ -349,7 +353,12 @@ export function paceFor(
   txns: readonly Txn[],
   regularIds: ReadonlySet<string>,
 ): PaceResult {
-  const elapsedDays = Number(asOf.slice(8, 10));
+  const elapsedDays =
+    asOf < `${monthKey}-01`
+      ? 0
+      : asOf > monthEndOf(monthKey)
+        ? daysInMonth(monthKey)
+        : Number(asOf.slice(8, 10));
   const remainingDays = daysInMonth(monthKey) - elapsedDays;
   const nonRegular = (key: string) =>
     txns
@@ -573,7 +582,13 @@ export function forecastFor(person: Person): MonthForecast | null {
   const monthKey = currentMonthKey();
   if (!monthKey) return null;
   const asOf = latestDataDate();
-  if (!asOf || asOf.slice(0, 7) !== monthKey) return null;
+  // The display month may run ahead of the data (a calendar month
+  // that has begun with no statements in it yet): the walk then
+  // starts at the latest data date and spans the whole display
+  // month. Data dated after the display month's end cannot occur
+  // (the display month is never before the latest data month); if
+  // it somehow did, there is nothing honest to project.
+  if (!asOf || asOf > monthEndOf(monthKey)) return null;
   const start = availableFor(person).gbpTotal;
   if (start === null) return null;
   const monthEnd = monthEndOf(monthKey);
