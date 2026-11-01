@@ -9,9 +9,10 @@ import { apiTxnToTxn, timeOfDay, type ApiTxnRow } from "@/lib/txn-map";
 
 /**
  * Part 3 of the Activity pass: the detail sheet shows the exact time
- * of day when the stored timestamp carries one ("Friday 23 October ·
- * 14:32"), and never prints 00:00 — a midnight stamp is the date-only
- * placeholder. Times are shown as recorded, no timezone conversion.
+ * of day in a chip when the stored timestamp carries one ("Friday 23
+ * October" + a 14:32 chip), and never prints 00:00 — a midnight stamp
+ * is the date-only placeholder. Times are shown as recorded, no
+ * timezone conversion.
  */
 
 describe("timeOfDay", () => {
@@ -25,6 +26,13 @@ describe("timeOfDay", () => {
     expect(timeOfDay("2026-10-23")).toBeUndefined();
     expect(timeOfDay("2026-10-23 00:00:00")).toBeUndefined();
     expect(timeOfDay("2026-10-23T00:00")).toBeUndefined();
+  });
+
+  it("a seconds-bearing first-minute stamp (00:00:29) is returned in full", () => {
+    // A genuine time just after midnight: the short "00:00" would
+    // read as the placeholder, so the list value keeps its seconds.
+    expect(timeOfDay("2026-11-01 00:00:29")).toBe("00:00:29");
+    expect(timeOfDay("2026-11-01T00:00:05")).toBe("00:00:05");
   });
 });
 
@@ -89,11 +97,13 @@ afterEach(() => {
 });
 
 describe("Activity sheet time", () => {
-  it("a timed transaction shows '· 14:32' beside the date", async () => {
+  it("a timed transaction shows the time in a chip beside the date", async () => {
     renderWith([mkTxn({ id: "timed", time: "14:32" })]);
     fireEvent.click(screen.getByText("Timed Shop").closest("button")!);
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Friday 23 October · 14:32/)).toBeTruthy();
+    expect(within(dialog).getByText(/Friday 23 October/)).toBeTruthy();
+    expect(within(dialog).getByText("14:32")).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/October ·/);
   });
 
   it("a date-only transaction shows the date and no time", async () => {

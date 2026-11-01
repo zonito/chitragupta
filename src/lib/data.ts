@@ -113,14 +113,16 @@ export interface Txn {
    * signal; set by both transaction mappers. */
   incoming?: boolean;
   /** The exact time of day as recorded on the stored timestamp,
-   * "HH:MM". Absent when the row is date-only or carries the 00:00
-   * date-only placeholder (see timeOfDay in txn-map); shown verbatim
-   * in the detail sheet, never timezone-converted. */
+   * "HH:MM" — or the full "HH:MM:SS" for a stamp in the first minute
+   * of the day (00:00:29), where the short form would read as the
+   * placeholder. Absent when the row is date-only or carries the
+   * 00:00 date-only placeholder (see timeOfDay in txn-map); shown in
+   * a chip in the Activity list, never timezone-converted. */
   time?: string;
   /** The recorded time to the second, "HH:MM:SS" (see timeOfDayFull
    * in txn-map), when the stored timestamp carries seconds and is
-   * not exactly 00:00:00. The detail sheet prefers this over `time`;
-   * the list keeps the shorter `time`. Set by both mappers. */
+   * not exactly 00:00:00. The detail sheet's chip prefers this over
+   * `time`; the list keeps the shorter `time`. Set by both mappers. */
   timeFull?: string;
 }
 

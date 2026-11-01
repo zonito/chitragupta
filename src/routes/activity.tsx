@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Paperclip, Upload, X, StickyNote, Copy, Check } from "lucide-react";
+import { Search, Paperclip, Upload, X, StickyNote, Copy, Check, Clock } from "lucide-react";
 import { usePerson, PageTitle, CategoryChip, Sheet, Label, meta } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { DocumentPreview, useDocuments } from "@/components/documents";
@@ -45,6 +45,25 @@ const sel = "rounded-lg border bg-card px-3 py-1.5 text-body";
  * incoming flag (the store row's amount was positive), so transfer
  * legs and moved-aside rows follow their own sign. */
 const amountDirClass = (t: Txn) => (t.incoming ? "amount-in" : "amount-out");
+
+/** The recorded time of day as a small neutral chip: a clock glyph
+ * and the time in tabular figures on the muted surface tint — the
+ * shared Chip's neutral pairing (bg-muted / text-muted-foreground),
+ * so it reads as quiet metadata beside the coloured category chip
+ * and keeps AA contrast in both themes. Used in the list meta row
+ * and on the detail sheet's Date line. Tabular figures come from
+ * the tabular-nums utility, NOT the num class: .ledger-row .num
+ * forces body size and foreground colour (it exists for amounts),
+ * which would blow the chip up to body text. */
+function TimeChip({ value }: { value: string }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-micro font-medium text-muted-foreground tabular-nums">
+      <Clock aria-hidden className="h-[11px] w-[11px] shrink-0" />
+      {value}
+    </span>
+  );
+}
+
 const signedGbp = (t: Txn, value: number) =>
   `${t.incoming ? "+" : "−"}${gbp(value)}`;
 
@@ -562,10 +581,10 @@ export function Activity() {
                   <div className="mt-1 flex items-center gap-1.5">
                     <CategoryChip category={t.category} />
                     {person === "household" && <span className="text-caption text-muted-foreground">{ownerName(t.owner)}</span>}
-                    {/* The recorded time of day (HH:MM), when the row
-                        carries one — date-only rows (Barclays) show
-                        nothing, never a fake 00:00. */}
-                    {t.time && <span className="num text-caption text-muted-foreground">{t.time}</span>}
+                    {/* The recorded time of day as a small chip, when
+                        the row carries one — date-only rows (Barclays)
+                        show nothing, never a fake 00:00. */}
+                    {t.time && <TimeChip value={t.time} />}
                   </div>
                   </div>
                 </div>
@@ -603,8 +622,17 @@ export function Activity() {
               {openTxn.owner === "joint" && person !== "household" && <p className="num mt-1 text-caption text-muted-foreground">Full bill {signedGbp(openTxn, openTxn.amount)}</p>}
             </div>
             <dl className="text-body">
+              {/* The Date row is rendered on its own: its time segment
+                  is the same chip the list uses (full HH:MM:SS), not
+                  appended text. Date-only rows show the date alone. */}
+              <div className="ledger-row flex items-center justify-between gap-4 py-2.5">
+                <dt className="text-muted-foreground">Date</dt>
+                <dd className="flex min-w-0 items-center gap-2 text-right">
+                  {dayLabel(openTxn.day, true, openTxn.monthKey)}
+                  {(openTxn.timeFull ?? openTxn.time) && <TimeChip value={(openTxn.timeFull ?? openTxn.time) as string} />}
+                </dd>
+              </div>
               {[
-                ["Date", dayLabel(openTxn.day, true, openTxn.monthKey) + (openTxn.timeFull || openTxn.time ? ` · ${openTxn.timeFull ?? openTxn.time}` : "")],
                 ["Account", openTxn.account],
                 ["Who", personLabel(openTxn.owner)],
                 ...(openTxn.fx ? [["Original", openTxn.fx]] : []),

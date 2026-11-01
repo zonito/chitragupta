@@ -15,14 +15,20 @@ import { categoryNames } from "./data";
  * usually a bare "YYYY-MM-DD" and sometimes "YYYY-MM-DD HH:MM:SS"
  * (an ISO T separator works too). A 00:00 stamp is the date-only
  * placeholder, not a real midnight transaction, so it reads as no
- * time — the sheet must never print 00:00. Times are shown exactly
- * as recorded: no parsing into a Date, no timezone conversion.
+ * time — the sheet must never print 00:00. One exception: a stamp in
+ * the first minute of the day with real seconds (00:00:29, a payment
+ * landing just after midnight) is genuine, so it is returned in full
+ * as "00:00:SS" — shown whole, it can neither be mistaken for the
+ * placeholder nor needs hiding. Times are shown exactly as
+ * recorded: no parsing into a Date, no timezone conversion.
  */
 export const timeOfDay = (iso: string): string | undefined => {
-  const match = /[T ](\d{2}):(\d{2})/.exec(iso);
+  const match = /[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(iso);
   if (!match) return undefined;
   const hhmm = `${match[1]}:${match[2]}`;
-  return hhmm === "00:00" ? undefined : hhmm;
+  if (hhmm !== "00:00") return hhmm;
+  const seconds = match[3];
+  return seconds !== undefined && seconds !== "00" ? `00:00:${seconds}` : undefined;
 };
 
 /**
@@ -30,8 +36,8 @@ export const timeOfDay = (iso: string): string | undefined => {
  * for the detail sheet — or undefined when the stamp carries no
  * seconds or is exactly 00:00:00 (the date-only placeholder). A
  * stamp like 00:00:29 is a genuine recorded time (a payment landing
- * just after midnight), so it survives here even though timeOfDay
- * reads its HH:MM as the placeholder and hides it in the list.
+ * just after midnight), so it survives here, and timeOfDay returns
+ * it in full for the list too: a real time is never hidden.
  */
 export const timeOfDayFull = (iso: string): string | undefined => {
   const match = /[T ](\d{2}):(\d{2}):(\d{2})/.exec(iso);

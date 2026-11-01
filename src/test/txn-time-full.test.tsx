@@ -14,9 +14,12 @@ import { apiTxnToTxn, timeOfDayFull, type ApiTxnRow } from "@/lib/txn-map";
 
 /**
  * Exact time in Activity, list and sheet: the list shows the recorded
- * HH:MM, the sheet shows HH:MM:SS, and date-only rows (a midnight
- * stamp is the placeholder, e.g. every Barclays row) show no time
- * anywhere — for snapshot months and /api/transactions months alike.
+ * HH:MM in a small chip, the sheet shows HH:MM:SS in the same chip,
+ * and date-only rows (a midnight stamp is the placeholder, e.g. every
+ * Barclays row) show no time anywhere — for snapshot months and
+ * /api/transactions months alike. A stamp in the first minute of the
+ * day (00:00:29) is genuine: the list chip shows it in full rather
+ * than hiding it behind the placeholder's HH:MM.
  */
 
 describe("timeOfDayFull", () => {
@@ -64,6 +67,12 @@ describe("apiTxnToTxn full time", () => {
     expect(txn?.time).toBeUndefined();
     expect(txn?.timeFull).toBeUndefined();
   });
+
+  it("a just-after-midnight row maps the full stamp for the list too", () => {
+    const txn = apiTxnToTxn(apiRow({ date: "2026-11-01 00:00:29" }));
+    expect(txn?.time).toBe("00:00:29");
+    expect(txn?.timeFull).toBe("00:00:29");
+  });
 });
 
 describe("snapshot builder full time", () => {
@@ -88,8 +97,9 @@ describe("snapshot builder full time", () => {
     insert.run("timed", "2026-10-05 07:43:28", "2026-10", "Timed Shop", "Timed Shop", -1000);
     insert.run("midnight", "2026-10-06 00:00:00", "2026-10", "Midnight Shop", "Midnight Shop", -2000);
     insert.run("plain", "2026-10-07", "2026-10", "Plain Shop", "Plain Shop", -3000);
+    insert.run("early", "2026-10-08 00:00:29", "2026-10", "Early Shop", "Early Shop", -4000);
     db.prepare(
-      `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added) VALUES ('Main', '2026-10-30T09:00:00.000Z', 3, 3)`,
+      `INSERT INTO ingest_runs (account, started_at, rows_seen, rows_added) VALUES ('Main', '2026-10-30T09:00:00.000Z', 4, 4)`,
     ).run();
     db.close();
 
@@ -98,6 +108,9 @@ describe("snapshot builder full time", () => {
     const timed = snap.txns.find((t) => t.id === "timed");
     expect(timed?.time).toBe("07:43");
     expect(timed?.timeFull).toBe("07:43:28");
+    const early = snap.txns.find((t) => t.id === "early");
+    expect(early?.time).toBe("00:00:29");
+    expect(early?.timeFull).toBe("00:00:29");
     for (const id of ["midnight", "plain"]) {
       const txn = snap.txns.find((t) => t.id === id);
       expect(txn?.time).toBeUndefined();
@@ -145,14 +158,37 @@ afterEach(() => {
 });
 
 describe("Activity list + sheet time (snapshot month)", () => {
-  it("a timed row shows HH:MM in the list and HH:MM:SS in the sheet", async () => {
+  it("a timed row shows HH:MM in a list chip and HH:MM:SS in the sheet chip", async () => {
     renderWith([mkTxn({ id: "timed", time: "07:43", timeFull: "07:43:28" })]);
     const row = screen.getByText("Timed Shop").closest("button")!;
-    expect(within(row).getByText("07:43")).toBeTruthy();
+    const chip = within(row).getByText("07:43");
+    // The chip treatment: the shared neutral tint and a clock glyph,
+    // not plain appended text. Micro size with tabular figures via
+    // tabular-nums — never the num class, whose .ledger-row rule
+    // forces body size and foreground colour (it exists for amounts).
+    expect(chip.className).toContain("bg-muted");
+    expect(chip.className).toContain("text-micro");
+    expect(chip.className).toContain("tabular-nums");
+    expect(chip.className).not.toMatch(/(^|\s)num(\s|$)/);
+    expect(chip.querySelector("svg")).toBeTruthy();
     expect(row.textContent).not.toContain("07:43:28");
     fireEvent.click(row);
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Friday 23 October · 07:43:28/)).toBeTruthy();
+    expect(within(dialog).getByText(/Friday 23 October/)).toBeTruthy();
+    const sheetChip = within(dialog).getByText("07:43:28");
+    expect(sheetChip.className).toContain("bg-muted");
+    expect(sheetChip.querySelector("svg")).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/October ·/);
+  });
+
+  it("a just-after-midnight row shows 00:00:29 in the list chip and the sheet", async () => {
+    renderWith([mkTxn({ id: "early", merchant: "Early Shop", time: "00:00:29", timeFull: "00:00:29" })]);
+    const row = screen.getByText("Early Shop").closest("button")!;
+    expect(within(row).getByText("00:00:29")).toBeTruthy();
+    fireEvent.click(row);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Friday 23 October/)).toBeTruthy();
+    expect(within(dialog).getByText("00:00:29")).toBeTruthy();
   });
 
   it("a date-only row shows no time in the list or the sheet", async () => {
@@ -214,7 +250,9 @@ describe("Activity list + sheet time (fetched month)", () => {
     expect(timedRow.textContent).not.toContain("07:43:28");
     fireEvent.click(timedRow);
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/3 August · 07:43:28/)).toBeTruthy();
+    expect(within(dialog).getByText(/3 August/)).toBeTruthy();
+    expect(within(dialog).getByText("07:43:28")).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/August ·/);
   });
 
   it("a fetched midnight row shows no time in the list or the sheet", async () => {
