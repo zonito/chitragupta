@@ -208,7 +208,7 @@ describe("Home Available card and breakdown", () => {
     );
     // Sample balances: 1250.00 + 342.10 + 5000.00 + 864.20 + 2210.45 + 640.00.
     expect(screen.getAllByText("£10,306.75").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Across 6 accounts · as of 28 Oct 2026/)).toBeTruthy();
+    expect(screen.getByText(/Across 6 accounts · Latest balances · 28 Oct 2026/)).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Available balance, show breakdown by account" }),

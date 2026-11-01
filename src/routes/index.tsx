@@ -91,7 +91,7 @@ export function AvailableCard({ person, onOpen, className }: { person: Person; o
               </p>
             ))}
           <p className="mt-1 text-caption text-muted-foreground">
-            Across {known} account{known === 1 ? "" : "s"} · as of {dateLabel(avail.asOf)}
+            Across {known} account{known === 1 ? "" : "s"} · Latest balances · {dateLabel(avail.asOf)}
           </p>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -124,7 +124,7 @@ export function AvailableBreakdown({ person }: { person: Person }) {
         {person === "household"
           ? "Every account — yours, Nikhila's and Joint"
           : `${ownerName(person as "zonito" | "nikhila")}'s own accounts`}
-        {avail.asOf ? ` · as of ${dateLabel(avail.asOf)}` : ""}
+        {avail.asOf ? ` · Latest balances · ${dateLabel(avail.asOf)}` : ""}
       </p>
       {avail.accounts.map((a) => (
         <div key={`${a.owner}:${a.name}`} className="ledger-row flex items-center justify-between gap-3 py-3">
