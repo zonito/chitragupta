@@ -584,6 +584,18 @@ export const monthlyOf = (s: Sub) => yearlyOf(s) / 12;
 export const gbp = (n: number, dp = true) =>
   new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", minimumFractionDigits: dp ? 2 : 0, maximumFractionDigits: dp ? 2 : 0 }).format(n);
 
+/** Compact pounds for tight spaces (chart ticks, per-month net
+ * figures at phone width): whole pounds under £1,000, then £k with
+ * one decimal, trimmed ("£300", "£2.3k", "£14.8k", "£250k"). The
+ * magnitude only — callers add any sign, and the exact figure always
+ * remains available in full wherever this is used. */
+export const gbpCompact = (n: number) => {
+  const a = Math.abs(n);
+  if (a < 1000) return gbp(a, false);
+  const k = a / 1000;
+  return `£${Number(k.toFixed(k >= 100 ? 0 : 1))}k`;
+};
+
 const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export const dayLabel = (d: number, long = false, monthKey?: string) => {
   const { year, month } = monthParts(monthKey ?? snapshot.monthKey);

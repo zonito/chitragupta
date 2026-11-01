@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePerson, Panel, Label, Sheet, Chip, meta } from "@/components/shell";
-import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, TXNS, ALL_TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, flowWindowFor, type IncomeEntry, type Person } from "@/lib/data";
+import { spendTotal, typicalTotal, biggestChanges, asideTotal, coachNote, currentMonthKey, currentMonthName, nextMonthName, gbp, gbpCompact, TXNS, ALL_TXNS, upcomingPanel, upcomingShare, upcomingDateLabel, incomeFor, incomeTotal, ownerName, personLabel, categoryColor, availableFor, appSettings, formatMoney, dateLabel, monthlyHistoryFor, flowWindowFor, type IncomeEntry, type Person } from "@/lib/data";
 import { smallSpendFact } from "@/lib/calculators";
 import { AnimatedBar, CountUpMoney } from "@/components/motion";
 import { AccountTile } from "@/components/tiles";
@@ -492,7 +492,9 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
       </div>
       <p className="num mt-1 text-heading font-semibold leading-relaxed">
         In {gbp(current.income)} · Out {gbp(current.spend)} · Gap{" "}
-        <span className={current.gap >= 0 ? "text-good" : "text-destructive"}>
+        <span
+          className={`whitespace-nowrap ${current.gap >= 0 ? "text-good" : "text-destructive"}`}
+        >
           {signedGap(current.gap)}
         </span>
       </p>
@@ -503,13 +505,13 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
             <div key={r.month} className="flex min-w-0 flex-1 flex-col items-center" title={figures}>
               <span className="sr-only">{figures}</span>
               <div className="flex h-24 w-full items-end justify-center gap-1" aria-hidden="true">
-                <div className="flex h-full w-3 items-end rounded-sm bg-muted/60">
+                <div className="flex h-full w-3.5 items-end rounded-sm bg-muted/60">
                   <div
                     className={`w-full rounded-sm ${r.income > 0 ? "min-h-[2px]" : ""}`}
                     style={{ height: `${barPct(r.income)}%`, backgroundColor: "var(--good)" }}
                   />
                 </div>
-                <div className="flex h-full w-3 items-end rounded-sm bg-muted/60">
+                <div className="flex h-full w-3.5 items-end rounded-sm bg-muted/60">
                   <div
                     className={`w-full rounded-sm ${r.spend > 0 ? "min-h-[2px]" : ""}`}
                     style={{ height: `${barPct(r.spend)}%`, backgroundColor: "var(--destructive)" }}
@@ -517,11 +519,19 @@ export function IncomeSpendingCard({ person, className }: { person: Person; clas
                 </div>
               </div>
               <div className="mt-1.5 text-micro text-muted-foreground">{flowMonthShort(r.month)}</div>
+              {/* The net under each pair: full figure where the
+                  column can hold it, compact (£14.8k) at phone
+                  widths — six full "−£14,775.49" texts in ~55px
+                  columns overlapped each other. The exact figure
+                  always remains in the group's title + sr-only text. */}
               <div
-                className={`num text-caption ${r.gap >= 0 ? "text-good" : "text-destructive"}`}
+                className={`num ${r.gap >= 0 ? "text-good" : "text-destructive"}`}
                 aria-hidden="true"
               >
-                {signedGap(r.gap)}
+                <span className="hidden text-caption sm:inline">{signedGap(r.gap)}</span>
+                <span className="text-micro sm:hidden">
+                  {`${r.gap >= 0 ? "+" : "−"}${gbpCompact(Math.abs(r.gap))}`}
+                </span>
               </div>
             </div>
           );
