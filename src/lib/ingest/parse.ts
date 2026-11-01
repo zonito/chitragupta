@@ -174,6 +174,25 @@ export function statementFingerprint(
   ]);
 }
 
+/**
+ * The stored fingerprint for the Nth occurrence (N ≥ 2) of a row whose
+ * base fingerprint already occurred earlier in the same source file.
+ * Barclays statement rows carry a midnight timestamp and no balance,
+ * so genuinely separate events (eight £250 cash withdrawals at the
+ * same ATM in a day) can be byte-identical, and the base fingerprint
+ * alone would collapse them into one stored transaction. Occurrence
+ * keeps each repeat addressable while the first occurrence keeps the
+ * base fingerprint it has always had — existing transaction ids,
+ * notes and corrections are untouched. Derived through the same
+ * hash, so repeat ids keep the 32-hex shape of every other id.
+ */
+export function statementRepeatFingerprint(
+  baseFingerprint: string,
+  occurrence: number,
+): string {
+  return fingerprint([baseFingerprint, `repeat:${occurrence}`]);
+}
+
 export function savingsFingerprint(
   account: IngestAccount,
   r: SavingsRow,

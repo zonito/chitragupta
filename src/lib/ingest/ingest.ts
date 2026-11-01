@@ -9,6 +9,7 @@ import {
   parseSavingsCsv,
   savingsFingerprint,
   statementFingerprint,
+  statementRepeatFingerprint,
   type IngestAccount,
   type MoneyMovement,
   type SavingsRow,
@@ -350,6 +351,19 @@ export function ingestAccount(
       (r) => r.state !== "REVERTED",
     );
     const items: unknown[][] = [];
+    // Within-file occurrence counting for the fingerprint below: one
+    // source file can hold genuinely separate rows that are
+    // byte-identical (see statementRepeatFingerprint), and the plain
+    // fingerprint would collapse them into a single stored
+    // transaction. Occurrence is counted over this ingest's own row
+    // stream — one file, already sliced to this account's Product,
+    // REVERTED rows excluded — so a re-ingest of the same file
+    // recomputes the same ids, and the store's INSERT OR IGNORE keeps
+    // deduping across files and ingests exactly as before: a second
+    // file carrying the same rows inserts nothing, and when two
+    // overlapping files carry different repeat counts the union
+    // converges to the richest file's multiplicity.
+    const occurrences = new Map<string, number>();
     const lastByCurrency = new Map<string, { date: string; bal: number }>();
     for (const r of arows) {
       const effective = effectiveDateOf(r);
@@ -374,8 +388,13 @@ export function ingestAccount(
         amountMinor,
         merchant,
       );
+      const baseFingerprint = statementFingerprint(account, r);
+      const occurrence = (occurrences.get(baseFingerprint) ?? 0) + 1;
+      occurrences.set(baseFingerprint, occurrence);
       items.push([
-        statementFingerprint(account, r),
+        occurrence === 1
+          ? baseFingerprint
+          : statementRepeatFingerprint(baseFingerprint, occurrence),
         person,
         account,
         effective,
