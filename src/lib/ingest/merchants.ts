@@ -4,13 +4,6 @@ import { listCategories } from "./categories";
 
 export type MerchantSource = "rules" | "claude-api" | "molang" | "user";
 
-export type MerchantRule = {
-  match: RegExp;
-  category: string;
-  colour: string | null;
-  icon: string | null;
-};
-
 const CAT = {
   Groceries: "var(--cat-groceries)",
   EatingOut: "var(--cat-eating-out)",
@@ -67,13 +60,7 @@ export const MERCHANT_RULES: { match: RegExp; category: string }[] = [
   },
 ];
 
-export function ruleCategory(
-  merchant: string,
-  type: string,
-  description: string,
-): string | null {
-  void type;
-  void description;
+export function ruleCategory(merchant: string): string | null {
   for (const rule of MERCHANT_RULES) {
     if (rule.match.test(merchant)) return rule.category;
   }
@@ -96,7 +83,7 @@ export function seedMerchantMemory(db: Database.Database): number {
     for (const { merchant } of rows) {
       if (seen.has(merchant)) continue;
       seen.add(merchant);
-      const category = ruleCategory(merchant, "", merchant);
+      const category = ruleCategory(merchant);
       if (category) {
         added += Number(insert.run(merchant, category, null, null).changes);
       }

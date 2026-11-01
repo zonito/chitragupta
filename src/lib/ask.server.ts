@@ -9,6 +9,7 @@ import {
   type Txn,
 } from "./data";
 import { searchRecords } from "./record-search";
+import { CATEGORY_SQL } from "./ingest/category-sql";
 import { apiTxnToTxn, type ApiTxnRow } from "./txn-map";
 import {
   gatewayCallCount,
@@ -238,12 +239,6 @@ export function parseAskPlan(text: string): AskPlan | null {
     ...(limit !== undefined ? { limit } : {}),
   };
 }
-
-const CATEGORY_SQL = `COALESCE(t.category, m.category,
-  CASE t.movement
-    WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
-    WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
-    WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`;
 
 interface PullParams {
   month?: string;

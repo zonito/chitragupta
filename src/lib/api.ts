@@ -42,6 +42,8 @@ import {
   type SettingsPatch,
 } from "./ingest/settings";
 import { balanceSourceFor } from "./ingest/balance-anchors";
+import { CATEGORY_SQL } from "./ingest/category-sql";
+import { loadEnvFile } from "./env.server";
 import { answerAsk } from "./ask.server";
 import { parseAmountQuery } from "./amount-search";
 import { coachJevOpinion, subJevAsk, subJevCached } from "./jev.server";
@@ -51,17 +53,12 @@ import { displayMonthKey } from "./calendar.server";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
 /**
- * The resolved-category expression, identical to the one the SELECT in
- * /api/transactions computes (and to CATEGORY_SQL in ask.server.ts).
- * Filtering on it in SQL — before LIMIT — is what makes a category
- * query return that category's rows instead of whatever fraction of
- * the category happened to survive an unfiltered LIMIT.
+ * The resolved-category expression (CATEGORY_SQL, shared from
+ * ingest/category-sql.ts). Filtering on it in SQL — before LIMIT —
+ * is what makes a category query return that category's rows instead
+ * of whatever fraction of the category happened to survive an
+ * unfiltered LIMIT.
  */
-const CATEGORY_SQL = `COALESCE(t.category, m.category,
-  CASE t.movement
-    WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
-    WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
-    WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -84,16 +81,7 @@ async function getDb(): Promise<Database.Database | null> {
   if (!dir) return null;
   if (!dbPromise) {
     dbPromise = (async () => {
-      const { readFileSync } = await import("node:fs");
-      const envPath = process.cwd() + "/.env";
-      try {
-        for (const line of readFileSync(envPath, "utf8").split("\n")) {
-          const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-          if (m && !process.env[m[1]!]) process.env[m[1]!] = m[2]!.trim();
-        }
-      } catch {
-        // no .env — env vars only
-      }
+      loadEnvFile();
       const resolved = storeDir();
       if (!resolved) throw new Error("CHITRAGUPTA_STORE_DIR is not set");
       const db = openStore(resolved);

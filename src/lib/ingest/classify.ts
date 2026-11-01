@@ -230,7 +230,12 @@ export async function classifyUnknownMerchants(
         source: "claude-api",
       });
       classified++;
-    } catch {
+    } catch (error) {
+      pollGateway();
+      console.error(
+        `chitragupta: classification failed for ${item.merchant}`,
+        error,
+      );
       failed++;
     }
   }

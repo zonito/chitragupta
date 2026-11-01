@@ -16,6 +16,7 @@ import {
   type StatementRow,
 } from "./parse";
 import { openStoreFile, RULES_VERSION, STORE_FILENAME } from "./store";
+import { CATEGORY_SQL } from "./category-sql";
 
 export type IngestResult = {
   /** Whose account this is — two people can both hold a "Pro". */
@@ -178,21 +179,7 @@ function monthOf(dateStr: string): string {
   if (iso) return `${iso[1]}-${iso[2]}`;
   const written = trimmed.match(/^([A-Za-z]{3})\s+\d{1,2},\s*(\d{4})$/);
   if (written) {
-    const months: Record<string, string> = {
-      Jan: "01",
-      Feb: "02",
-      Mar: "03",
-      Apr: "04",
-      May: "05",
-      Jun: "06",
-      Jul: "07",
-      Aug: "08",
-      Sep: "09",
-      Oct: "10",
-      Nov: "11",
-      Dec: "12",
-    };
-    const num = months[written[1]!];
+    const num = SAVINGS_MONTHS[written[1]!];
     if (num) return `${written[2]}-${num}`;
   }
   return trimmed.slice(0, 7);
@@ -523,11 +510,7 @@ export function ingestAccountSafe(
   }
 }
 
-const AGGREGATE_CATEGORY = `COALESCE(t.category, m.category,
-         CASE t.movement
-           WHEN 'spend' THEN 'One-off' WHEN 'income' THEN 'One-off'
-           WHEN 'aside' THEN 'Moved aside' WHEN 'fee' THEN 'Fees'
-           WHEN 'interest' THEN 'Interest' ELSE 'Transfer' END)`;
+const AGGREGATE_CATEGORY = CATEGORY_SQL;
 
 export function recomputeAggregates(
   db: import("better-sqlite3").Database,

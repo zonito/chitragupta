@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import type Database from "better-sqlite3";
+import { loadEnvFile } from "./env.server";
 import { openStore } from "./ingest/store";
 import { reviewQueueCount } from "./ingest/merchants";
 import {
@@ -38,17 +38,6 @@ import type { Doc } from "./data";
  * transactions table and the precomputed month_aggregates — this file never
  * reads a CSV.
  */
-
-function loadEnvFile(): void {
-  try {
-    for (const line of readFileSync(process.cwd() + "/.env", "utf8").split("\n")) {
-      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-      if (m && !process.env[m[1]!]) process.env[m[1]!] = m[2]!.trim();
-    }
-  } catch {
-    // no .env — env vars only
-  }
-}
 
 type Row = {
   fingerprint: string;
@@ -178,7 +167,8 @@ function buildFromDb(db: Database.Database): DataSnapshot {
       )
       .all() as DocumentRow[];
     docs = docRows.map(documentRowToDoc);
-  } catch {
+  } catch (error) {
+    console.error("chitragupta: documents read failed", error);
     docs = [];
   }
   const monthRows = db

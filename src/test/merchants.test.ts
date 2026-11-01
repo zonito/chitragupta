@@ -14,39 +14,39 @@ import {
 
 describe("merchant rules", () => {
   it("classifies obvious UK merchants without an API", () => {
-    expect(ruleCategory("Ocado", "Card Payment", "Ocado")).toBe("Groceries");
-    expect(ruleCategory("Tesco", "Card Payment", "Tesco")).toBe("Groceries");
+    expect(ruleCategory("Ocado")).toBe("Groceries");
+    expect(ruleCategory("Tesco")).toBe("Groceries");
     expect(
-      ruleCategory("Waitrose & Partners", "Card Payment", "Waitrose"),
+      ruleCategory("Waitrose & Partners"),
     ).toBe("Groceries");
-    expect(ruleCategory("Transport for London", "Card Payment", "TfL")).toBe(
+    expect(ruleCategory("Transport for London")).toBe(
       "Transport",
     );
-    expect(ruleCategory("Octopus Energy", "Card Payment", "Octopus")).toBe(
+    expect(ruleCategory("Octopus Energy")).toBe(
       "Home",
     );
-    expect(ruleCategory("Netflix", "Card Payment", "Netflix")).toBe(
+    expect(ruleCategory("Netflix")).toBe(
       "Subscriptions",
     );
-    expect(ruleCategory("Spotify Family", "Card Payment", "Spotify")).toBe(
+    expect(ruleCategory("Spotify Family")).toBe(
       "Subscriptions",
     );
-    expect(ruleCategory("Amazon", "Card Payment", "Amazon")).toBe("Shopping");
-    expect(ruleCategory("Ikea", "Card Payment", "Ikea")).toBe("Shopping");
-    expect(ruleCategory("Pret A Manger", "Card Payment", "Pret")).toBe(
+    expect(ruleCategory("Amazon")).toBe("Shopping");
+    expect(ruleCategory("Ikea")).toBe("Shopping");
+    expect(ruleCategory("Pret A Manger")).toBe(
       "Eating out",
     );
-    expect(ruleCategory("ParentPay", "Card Payment", "ParentPay")).toBe(
+    expect(ruleCategory("ParentPay")).toBe(
       "School",
     );
   });
 
   it("leaves unknown merchants for the review queue", () => {
     expect(
-      ruleCategory("Infinite Clarity", "Card Payment", "Infinite Clarity"),
+      ruleCategory("Infinite Clarity"),
     ).toBeNull();
     expect(
-      ruleCategory("Mahavir Sweet Mart", "Card Payment", "Mahavir Sweet Mart"),
+      ruleCategory("Mahavir Sweet Mart"),
     ).toBe("Groceries");
   });
 });

@@ -191,9 +191,19 @@ describe("snapshot builder", () => {
   });
 
   it("returns the honest empty snapshot when no store is configured", () => {
-    delete process.env["CHITRAGUPTA_STORE_DIR"];
-    const snap = buildSnapshot();
-    expect(snap.configured).toBe(false);
-    expect(snap.txns).toEqual([]);
+    // Hermetic: buildSnapshot loads .env from the working directory, so
+    // point cwd at an empty temp dir — otherwise a developer's real .env
+    // resurrects CHITRAGUPTA_STORE_DIR after the delete below.
+    dir = mkdtempSync(join(tmpdir(), "chitragupta-noenv-"));
+    const prevCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      delete process.env["CHITRAGUPTA_STORE_DIR"];
+      const snap = buildSnapshot();
+      expect(snap.configured).toBe(false);
+      expect(snap.txns).toEqual([]);
+    } finally {
+      process.chdir(prevCwd);
+    }
   });
 });
