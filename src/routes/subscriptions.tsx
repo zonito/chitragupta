@@ -8,7 +8,7 @@ import { fetchApiTransactions } from "@/lib/txn-map";
 import { subscriptionMonthlyRows } from "@/lib/timeline";
 import { SpendTimelineSection } from "@/components/spend-chart";
 import { MerchantTile } from "@/components/tiles";
-import { canonicalMerchant } from "@/lib/subscriptions";
+import { canonicalMerchant, sortSubsByNextExpected } from "@/lib/subscriptions";
 import { postSubscriptionOverride, type SubscriptionOverrideMode } from "@/lib/subscription-overrides";
 
 export const Route = createFileRoute("/subscriptions")({
@@ -83,7 +83,10 @@ export function Subs() {
       )}
 
       {SECTION_ORDER.map((freq) => {
-        const section = active.filter((s) => s.freq === freq);
+        // Within a section, cards run soonest-next-charge first (the
+        // detector's nextExpected), so what's about to renew sits on
+        // top. The Ended area below keeps the detector's order.
+        const section = sortSubsByNextExpected(active.filter((s) => s.freq === freq));
         if (section.length === 0) return null;
         return (
           <section key={freq} className="mb-8">

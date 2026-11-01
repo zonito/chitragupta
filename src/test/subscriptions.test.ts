@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalMerchant,
   detectSubscriptions,
+  sortSubsByNextExpected,
   type SubCharge,
 } from "@/lib/subscriptions";
+import type { Sub } from "@/lib/data";
 
 const fmt = {
   dateLabel: (iso: string) => iso,
@@ -143,5 +145,49 @@ describe("detectSubscriptions", () => {
     expect(subs).toHaveLength(1);
     expect(subs[0]).toMatchObject({ amount: 10.1, freq: "Monthly", status: "Active" });
     expect(subs[0]!.note).toBe("£10.00 → £10.10");
+  });
+});
+
+describe("sortSubsByNextExpected", () => {
+  const sub = (name: string, nextExpected: string | null): Sub => ({
+    name,
+    amount: 10,
+    freq: "Monthly",
+    last: "5 Oct 2026",
+    card: "Revolut Main · Zonito",
+    owner: "zonito",
+    status: "Active",
+    charges: 3,
+    chargeIds: [],
+    nextExpected,
+    variants: [name],
+  });
+
+  it("orders soonest next charge first, by date, not name or amount", () => {
+    const sorted = sortSubsByNextExpected([
+      sub("Zebra Music", "2026-12-01"),
+      sub("Alpha Gym", "2026-11-03"),
+      sub("Mid Cloud", "2026-11-20"),
+    ]);
+    expect(sorted.map((s) => s.name)).toEqual([
+      "Alpha Gym",
+      "Mid Cloud",
+      "Zebra Music",
+    ]);
+  });
+
+  it("breaks equal dates by name, and sorts a missing expectation last", () => {
+    const sorted = sortSubsByNextExpected([
+      sub("No Date", null),
+      sub("Beta", "2026-11-10"),
+      sub("Alpha", "2026-11-10"),
+    ]);
+    expect(sorted.map((s) => s.name)).toEqual(["Alpha", "Beta", "No Date"]);
+  });
+
+  it("does not mutate the input order", () => {
+    const input = [sub("Later", "2026-12-01"), sub("Sooner", "2026-11-01")];
+    sortSubsByNextExpected(input);
+    expect(input.map((s) => s.name)).toEqual(["Later", "Sooner"]);
   });
 });

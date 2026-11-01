@@ -335,3 +335,25 @@ export function applySubscriptionOverrides(
   out.sort((a, b) => b.amount - a.amount);
   return out;
 }
+
+/**
+ * Presentation order within a cadence section of the Subscriptions
+ * page: soonest next charge first, by the detector's own nextExpected
+ * ISO date (ISO dates order chronologically as strings). Equal dates
+ * fall back to name so the order is total and stable; a sub with no
+ * future expectation — the detector never emits one for an Active
+ * sub, but overrides and hand-built subs can carry null — sorts last.
+ */
+export function compareSubsByNextExpected(a: Sub, b: Sub): number {
+  if (a.nextExpected && b.nextExpected && a.nextExpected !== b.nextExpected) {
+    return a.nextExpected < b.nextExpected ? -1 : 1;
+  }
+  if (a.nextExpected && !b.nextExpected) return -1;
+  if (!a.nextExpected && b.nextExpected) return 1;
+  return a.name.localeCompare(b.name);
+}
+
+/** A sorted copy; the detector's own order in the input is untouched. */
+export function sortSubsByNextExpected(subs: Sub[]): Sub[] {
+  return [...subs].sort(compareSubsByNextExpected);
+}

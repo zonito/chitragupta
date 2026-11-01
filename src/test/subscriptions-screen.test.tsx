@@ -194,3 +194,37 @@ describe("Subscriptions screen", () => {
     expect(screen.getByText("Page 2 of 2")).toBeTruthy();
   });
 });
+
+describe("Subscriptions screen section order", () => {
+  it("orders cards within each cadence section by soonest next charge", () => {
+    // Detector order is deliberately scrambled: within Monthly the
+    // soonest renewal (3 Nov) is listed last, and the two Yearly subs
+    // are likewise reversed. The page must present each section
+    // soonest-first, independently of the other sections.
+    hydrateData({
+      ...SAMPLE_SNAPSHOT,
+      subs: [
+        sub({ name: "Yearly Late", freq: "Yearly", amount: 120, charges: 2, nextExpected: "2027-09-01", variants: ["Yearly Late"] }),
+        sub({ name: "Monthly Late", amount: 15, charges: 6, nextExpected: "2026-11-28", variants: ["Monthly Late"] }),
+        sub({ name: "Monthly Mid", amount: 12, charges: 6, nextExpected: "2026-11-15", variants: ["Monthly Mid"] }),
+        sub({ name: "Yearly Soon", freq: "Yearly", amount: 95, charges: 3, nextExpected: "2027-03-14", variants: ["Yearly Soon"] }),
+        sub({ name: "Monthly Soon", amount: 9.99, charges: 14, nextExpected: "2026-11-03", variants: ["Monthly Soon"] }),
+      ],
+    });
+    render(
+      <PersonProvider>
+        <Subs />
+      </PersonProvider>,
+    );
+    const cardOrder = screen
+      .getAllByRole("button", { name: / transactions$/ })
+      .map((b) => b.getAttribute("aria-label")!.replace(/ transactions$/, ""));
+    expect(cardOrder).toEqual([
+      "Monthly Soon",
+      "Monthly Mid",
+      "Monthly Late",
+      "Yearly Soon",
+      "Yearly Late",
+    ]);
+  });
+});
